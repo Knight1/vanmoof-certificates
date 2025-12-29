@@ -7,6 +7,8 @@ import (
 	"os"
 	"runtime"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 func main() {
@@ -14,6 +16,8 @@ func main() {
 	cert := flag.String("cert", "", "Base64 encoded certificate string")
 	pubkey := flag.String("pubkey", "", "Base64 encoded public key string (optional)")
 	bikeid := flag.String("bikeid", "", "Bike ID to verify (optional)")
+	email := flag.String("email", "", "VanMoof email address (optional)")
+	password := flag.String("password", "", "VanMoof password (optional)")
 	debug := flag.Bool("debug", false, "Enable debug output")
 	flag.Parse()
 
@@ -24,18 +28,34 @@ func main() {
 	}
 
 	if *cert == "" {
-		// Ask for credentials and fetch certificate
-		reader := bufio.NewReader(os.Stdin)
+		// Get email from flag or prompt
+		emailInput := *email
+		if emailInput == "" {
+			reader := bufio.NewReader(os.Stdin)
+			fmt.Print("Enter VanMoof email: ")
+			var err error
+			emailInput, err = reader.ReadString('\n')
+			if err != nil {
+				fmt.Printf("Error reading email: %v\n", err)
+				return
+			}
+			emailInput = strings.TrimSpace(emailInput)
+		}
 
-		fmt.Print("Enter VanMoof email: ")
-		email, _ := reader.ReadString('\n')
-		email = strings.TrimSpace(email)
+		// Get password from flag or prompt
+		passwordInput := *password
+		if passwordInput == "" {
+			fmt.Print("Enter VanMoof password: ")
+			passwordBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+			if err != nil {
+				fmt.Printf("\nError reading password: %v\n", err)
+				return
+			}
+			fmt.Println()
+			passwordInput = string(passwordBytes)
+		}
 
-		fmt.Print("Enter VanMoof password: ")
-		password, _ := reader.ReadString('\n')
-		password = strings.TrimSpace(password)
-
-		if err := getCert(email, password, *debug); err != nil {
+		if err := getCert(emailInput, passwordInput, *debug); err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return
 		}
