@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
+	"os"
 	"runtime"
+	"strings"
 )
 
 func main() {
@@ -11,6 +14,7 @@ func main() {
 	cert := flag.String("cert", "", "Base64 encoded certificate string")
 	pubkey := flag.String("pubkey", "", "Base64 encoded public key string (optional)")
 	bikeid := flag.String("bikeid", "", "Bike ID to verify (optional)")
+	debug := flag.Bool("debug", false, "Enable debug output")
 	flag.Parse()
 
 	if *version {
@@ -20,8 +24,21 @@ func main() {
 	}
 
 	if *cert == "" {
-		fmt.Println("Error: -cert flag is required")
-		fmt.Println("Usage: vanmoof-certificates -cert <base64_cert> [-pubkey <base64_pubkey>] [-bikeid <bike_id>]")
+		// Ask for credentials and fetch certificate
+		reader := bufio.NewReader(os.Stdin)
+
+		fmt.Print("Enter VanMoof email: ")
+		email, _ := reader.ReadString('\n')
+		email = strings.TrimSpace(email)
+
+		fmt.Print("Enter VanMoof password: ")
+		password, _ := reader.ReadString('\n')
+		password = strings.TrimSpace(password)
+
+		if err := getCert(email, password, *debug); err != nil {
+			fmt.Printf("Error: %v\n", err)
+			return
+		}
 		return
 	}
 

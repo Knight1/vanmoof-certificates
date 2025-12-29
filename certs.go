@@ -12,6 +12,12 @@ import (
 
 func processCertificate(certStr, expectedPubKeyStr, bikeID string) {
 
+	// Check if certificate is empty
+	if certStr == "" {
+		fmt.Println("Error: Certificate string is empty")
+		return
+	}
+
 	// Decode the certificate
 	certData, err := base64.StdEncoding.DecodeString(certStr)
 	if err != nil {
@@ -20,6 +26,12 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string) {
 	}
 
 	fmt.Printf("Total Certificate Length: %d bytes\n", len(certData))
+
+	// Check if certificate has minimum length
+	if len(certData) < 134 {
+		fmt.Println("Error: Certificate is too short")
+		return
+	}
 
 	// --- Extract Components ---
 
