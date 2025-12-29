@@ -8,6 +8,9 @@ import (
 
 func main() {
 	version := flag.Bool("version", false, "Print version information")
+	cert := flag.String("cert", "", "Base64 encoded certificate string")
+	pubkey := flag.String("pubkey", "", "Base64 encoded public key string")
+	bikeid := flag.String("bikeid", "", "Bike ID to verify (optional)")
 	flag.Parse()
 
 	if *version {
@@ -16,5 +19,11 @@ func main() {
 		return
 	}
 
-	processCertificate()
+	if *cert == "" || *pubkey == "" {
+		fmt.Println("Error: both -cert and -pubkey flags are required")
+		fmt.Println("Usage: vanmoof-certificates -cert <base64_cert> -pubkey <base64_pubkey> [-bikeid <bike_id>]")
+		return
+	}
+
+	processCertificate(*cert, *pubkey, *bikeid)
 }
