@@ -15,9 +15,6 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string) {
 		return
 	}
 
-	// Decode the public key
-	pubKeyData, _ := base64.StdEncoding.DecodeString(expectedPubKeyStr)
-
 	fmt.Printf("Total Certificate Length: %d bytes\n", len(certData))
 
 	// --- 3. Extract Components ---
@@ -41,13 +38,21 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string) {
 		}
 	}
 
-	fmt.Println("\n--- Key Comparison ---")
-	// Note: The Public Key string has a leading 0x00 byte (prefix)
-	// We compare the last 32 bytes of your key to the embedded key
-	if bytes.Equal(embeddedPubKey, pubKeyData[len(pubKeyData)-32:]) {
-		fmt.Println("Success: Public Key matches the Certificate signature.")
-	} else {
-		fmt.Println("Warning: Key mismatch detected.")
+	if expectedPubKeyStr != "" {
+		fmt.Println("\n--- Key Comparison ---")
+		// Decode the provided public key
+		pubKeyData, err := base64.StdEncoding.DecodeString(expectedPubKeyStr)
+		if err != nil {
+			fmt.Println("Error decoding public key:", err)
+			return
+		}
+		// Note: The Public Key string has a leading 0x00 byte (prefix)
+		// We compare the last 32 bytes of your key to the embedded key
+		if bytes.Equal(embeddedPubKey, pubKeyData[len(pubKeyData)-32:]) {
+			fmt.Println("Success: Public Key matches the Certificate signature.")
+		} else {
+			fmt.Println("Warning: Key mismatch detected.")
+		}
 	}
 
 	// --- 5. Accessing the 'Unaccounted For' Bytes ---
