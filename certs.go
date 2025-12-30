@@ -3,11 +3,9 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/binary"
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 )
 
 func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
@@ -75,39 +73,6 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
 	fmt.Printf("Access Level: %s\n", accessLevel)
 
 	// --- Parse Certificate Fields ---
-
-	// Role & Versioning (Bytes 64-67)
-	if len(certData) >= 67 {
-		roleVersionBytes := certData[64:68]
-		role := roleVersionBytes[0]
-		roleType := "Unknown"
-		if role == 0x01 {
-			roleType = "Owner Certificate"
-		} else if role == 0x02 {
-			roleType = "Guest Certificate"
-		}
-		fmt.Printf("\n--- Certificate Fields ---\n")
-		fmt.Printf("Role & Versioning (Bytes 64-67): %x\n", roleVersionBytes)
-		fmt.Printf("  Role: %s (0x%02x)\n", roleType, role)
-	}
-
-	// Expiration Date (Bytes 100-107)
-	if len(certData) >= 108 {
-		expiryBytes := certData[100:108]
-		timestamp := int64(binary.BigEndian.Uint64(expiryBytes))
-		fmt.Printf("Expiration Date (Bytes 100-107): %x\n", expiryBytes)
-		fmt.Printf("  Timestamp: %d\n", timestamp)
-	}
-
-	// Permission Bits (Bytes 112-115)
-	if len(certData) >= 116 {
-		permissionBytes := certData[112:116]
-		permissions := binary.BigEndian.Uint32(permissionBytes)
-		fmt.Printf("Permission Bits (Bytes 112-115): %x\n", permissionBytes)
-		fmt.Printf("  Unlock Permission (Bit 0): %v\n", (permissions&0x01) != 0)
-		fmt.Printf("  Alarm Settings Permission (Bit 1): %v\n", (permissions&0x02) != 0)
-		fmt.Printf("  Firmware Update Permission (Bit 2): %v\n", (permissions&0x04) != 0)
-	}
 
 	// --- Verification Logic ---
 
