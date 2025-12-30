@@ -63,6 +63,8 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
 	fmt.Printf("Signature (Base64): %s\n", signatureBase64)
 	if debug {
 		fmt.Printf("Signature (hex): %x\n", signature)
+		fmt.Printf("CBOR Payload length: %d bytes\n", len(cborPayload))
+		fmt.Printf("CBOR Payload (hex): %x\n", cborPayload)
 	}
 
 	// Parse CBOR payload - first try as a raw map to see all fields
