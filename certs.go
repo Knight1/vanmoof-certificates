@@ -61,6 +61,20 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
 
 	// --- Parse Payload Fields ---
 
+	// Extract Bike API ID from CBOR structure
+	// Pattern: 0x61 'i' followed by 0x1a (uint32) and 4 bytes
+	apiIDPattern := []byte{0x61, 0x69, 0x1a} // text string "i" followed by uint32 marker
+	apiIDIdx := bytes.Index(certData, apiIDPattern)
+	var apiID uint32
+	if apiIDIdx >= 0 && apiIDIdx+7 <= len(certData) {
+		// Read 4 bytes as big-endian uint32
+		apiID = uint32(certData[apiIDIdx+3])<<24 |
+			uint32(certData[apiIDIdx+4])<<16 |
+			uint32(certData[apiIDIdx+5])<<8 |
+			uint32(certData[apiIDIdx+6])
+		fmt.Printf("Bike API ID: %d\n", apiID)
+	}
+
 	// Extract AFM (Authorized Frame Module)
 	afmIdx := bytes.Index(payload, []byte("afm"))
 	if afmIdx >= 0 && afmIdx+6 <= len(payload) {
@@ -87,11 +101,27 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
 
 	if bikeID != "" {
 		fmt.Println("\n--- Bike ID Verification ---")
-		// Search for the Bike ID in the payload
+		// Try to match as frame number (string)
 		if bytes.Contains(payload, []byte(bikeID)) {
-			fmt.Println("✓ Bike ID Verified:", bikeID)
+			fmt.Println("✓ Bike ID Verified (Frame Number):", bikeID)
 		} else {
-			fmt.Println("✗ Bike ID NOT found:", bikeID)
+			// Try to match as API ID (numeric)
+			// Check if bikeID is a number and matches the API ID
+			var matched bool
+			if apiID > 0 {
+				if bikeIDNum := bikeID; bikeIDNum != "" {
+					// Try parsing as uint32
+					var parsedID uint32
+					fmt.Sscanf(bikeIDNum, "%d", &parsedID)
+					if parsedID == apiID {
+						fmt.Printf("✓ Bike ID Verified (API ID): %d\n", apiID)
+						matched = true
+					}
+				}
+			}
+			if !matched {
+				fmt.Printf("✗ Bike ID NOT found: %s (Frame not in payload, API ID: %d)\n", bikeID, apiID)
+			}
 		}
 	}
 
