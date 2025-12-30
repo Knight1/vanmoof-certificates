@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
-	"regexp"
 	"strings"
 )
 
@@ -105,28 +104,41 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
 }
 
 // parseAccessLevel determines the access level from the certificate data
+// The certificate is CBOR-encoded starting at byte 64 with a map structure
+// containing a 'r' (role) field that indicates the access level
 func parseAccessLevel(certData []byte) string {
-	certStr := string(certData)
-
-	// Look for access profile markers
-	re := regexp.MustCompile(`ap[A-Za-z0-9]`)
-	if matches := re.FindString(certStr); matches != "" {
-		// Interpret the access marker
-		switch {
-		case strings.Contains(matches, "W"):
-			return "Owner/Admin (Full Control - Unlock, Settings, Firmware)"
-		case strings.Contains(matches, "R"):
-			return "Guest (Read-Only Access)"
-		case strings.Contains(matches, "X"):
-			return "Extended Owner (Full Control + Extended Permissions)"
-		case strings.Contains(matches, "apS"):
-			return "Service Level Access"
-		default:
-			return fmt.Sprintf("Custom Access Profile: %s (Full Control)", matches)
-		}
+	// The CBOR map starts at byte 64
+	// Skip the first 64 bytes (signature/header)
+	if len(certData) < 72 {
+		return "Unknown (Certificate too short)"
 	}
 
-	// If no explicit access marker found, check permission bits
-	// Based on the permission bits analysis
-	return "Owner (Based on Permission Bits)"
+	// Search for the role field: 0x61 'r' followed by the role value
+	// Pattern: 61 72 <value>
+	rolePattern := []byte{0x61, 0x72} // text string "r"
+
+	idx := bytes.Index(certData, rolePattern)
+	if idx == -1 || idx+3 > len(certData) {
+		return "Unknown (Role field not found)"
+	}
+
+	// The byte after 'r' contains the role value
+	roleValue := certData[idx+2]
+
+	// Interpret the role value
+	// These values are based on reverse engineering the CBOR structure
+	switch roleValue {
+	case 0x00:
+		return "Guest (Read-Only Access)"
+	case 0x01:
+		return "Limited Access"
+	case 0x03:
+		return "Owner (Standard Access)"
+	case 0x07:
+		return "Owner (Full Control)"
+	case 0x0F:
+		return "Service/Admin (Extended Permissions)"
+	default:
+		return fmt.Sprintf("Unknown Role (0x%02X)", roleValue)
+	}
 }
