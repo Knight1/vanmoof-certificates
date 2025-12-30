@@ -48,19 +48,6 @@ type CertificateResponse struct {
 }
 
 func getCert(email, password string, debug bool) error {
-	// Generate Ed25519 key pair
-	pubKey, privKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return fmt.Errorf("failed to generate key pair: %w", err)
-	}
-
-	privKeyB64 := base64.StdEncoding.EncodeToString(privKey)
-	pubKeyB64 := base64.StdEncoding.EncodeToString(pubKey)
-
-	fmt.Printf("Privkey = %s\n", privKeyB64)
-	fmt.Printf("Pubkey = %s\n", pubKeyB64)
-	fmt.Println()
-
 	if debug {
 		fmt.Println("[DEBUG] Starting authentication...")
 	}
@@ -95,44 +82,76 @@ func getCert(email, password string, debug bool) error {
 		fmt.Printf("[DEBUG] Retrieved %d bikes\n", len(bikes))
 	}
 
-	// Step 4: Process each bike and create certificate
+	// Filter for SA5 bikes only
+	var sa5Bikes []BikeData
 	for _, bike := range bikes {
-		fmt.Printf("Bike %s\n", bike.Name)
+		if bike.BleProfile == "ELECTRIFIED_2022" {
+			sa5Bikes = append(sa5Bikes, bike)
+		}
+	}
+
+	if len(sa5Bikes) == 0 {
+		fmt.Println("No SA5 bikes found")
+		return nil
+	}
+
+	// Generate Ed25519 key pair only when SA5 bikes are found
+	privKeyB64, pubKeyB64, err := generateED25519()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Privkey = %s\n", privKeyB64)
+	fmt.Printf("Pubkey = %s\n", pubKeyB64)
+	fmt.Println()
+
+	// Step 4: Process each SA5 bike and create certificate
+	for _, bike := range sa5Bikes {
 		fmt.Printf("Bike ID: %d\n", bike.BikeID)
 		fmt.Printf("Frame number: %s\n", bike.FrameNumber)
-		fmt.Printf("Frame serial: %s\n", bike.FrameSerial)
+		fmt.Println("Bike is an SA5")
 
 		if debug {
-			fmt.Printf("[DEBUG] BleProfile: %s, MainEcuSerial: %s\n", bike.BleProfile, bike.MainEcuSerial)
+			fmt.Printf("[DEBUG] Creating certificate for bike ID %d\n", bike.BikeID)
 		}
 
-		if bike.BleProfile == "ELECTRIFIED_2022" {
-			fmt.Println("Bike is an SA5")
-			fmt.Printf("ECU Serial: %s\n", bike.MainEcuSerial)
+		certResp, err := createCertificate(bike.FrameNumber, pubKeyB64, appToken, debug)
+		if err != nil {
+			fmt.Printf("Failed to create certificate: %v\n", err)
+			continue
+		}
 
-			if debug {
-				fmt.Printf("[DEBUG] Creating certificate for bike frame number %s\n", bike.FrameNumber)
-			}
-
-			certResp, err := createCertificate(bike.FrameNumber, pubKeyB64, appToken, debug)
-			if err != nil {
-				fmt.Printf("Failed to create certificate: %v\n", err)
+		// Check if response contains an error
+		var respData map[string]interface{}
+		if err := json.Unmarshal([]byte(certResp), &respData); err == nil {
+			if _, hasErr := respData["err"]; hasErr {
+				fmt.Printf("Certificate error: %v\n", certResp)
 				continue
 			}
-
-			fmt.Println("Certificate below:")
-			fmt.Println("-----------")
-			fmt.Println(certResp)
-			fmt.Println("-----------")
-		} else {
-			fmt.Println("Not an SA5.")
 		}
+
+		fmt.Println("Certificate below:")
+		fmt.Println("-----------")
+		fmt.Println(certResp)
+		fmt.Println("-----------")
 	}
 
 	fmt.Println()
 	fmt.Println()
 
 	return nil
+}
+
+func generateED25519() (string, string, error) {
+	pubKey, privKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate key pair: %w", err)
+	}
+
+	privKeyB64 := base64.StdEncoding.EncodeToString(privKey)
+	pubKeyB64 := base64.StdEncoding.EncodeToString(pubKey)
+
+	return privKeyB64, pubKeyB64, nil
 }
 
 func min(a, b int) int {
@@ -142,25 +161,30 @@ func min(a, b int) int {
 	return b
 }
 
-func authenticate(email, password string, debug bool) (string, error) {
+func doHTTPRequest(method, url string, body io.Reader, headers map[string]string, debug bool) ([]byte, error) {
 	if debug {
-		fmt.Println("[DEBUG] POST https://my.vanmoof.com/api/v8/authenticate")
+		fmt.Printf("[DEBUG] %s %s\n", method, url)
+		if body != nil {
+			if buf, ok := body.(*bytes.Buffer); ok {
+				fmt.Printf("[DEBUG] Request body: %s\n", buf.String())
+			}
+		}
 	}
 
 	client := &http.Client{}
-	req, err := http.NewRequest("POST", "https://my.vanmoof.com/api/v8/authenticate", nil)
+	req, err := http.NewRequest(method, url, body)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	basicAuth := base64.StdEncoding.EncodeToString([]byte(email + ":" + password))
-	req.Header.Set("Authorization", "Basic "+basicAuth)
-	req.Header.Set("Api-Key", ApiKey)
-	req.Header.Set("User-Agent", UserAgent)
+	// Set headers
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -168,13 +192,38 @@ func authenticate(email, password string, debug bool) (string, error) {
 		fmt.Printf("[DEBUG] Response status: %d\n", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if debug {
-		fmt.Printf("[DEBUG] Response body: %s\n", string(body))
+		if len(respBody) > 200 {
+			fmt.Printf("[DEBUG] Response body length: %d bytes\n", len(respBody))
+		} else {
+			fmt.Printf("[DEBUG] Response body: %s\n", string(respBody))
+		}
+	}
+
+	// Check for HTTP errors
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return respBody, nil
+}
+
+func authenticate(email, password string, debug bool) (string, error) {
+	basicAuth := base64.StdEncoding.EncodeToString([]byte(email + ":" + password))
+	headers := map[string]string{
+		"Authorization": "Basic " + basicAuth,
+		"Api-Key":       ApiKey,
+		"User-Agent":    UserAgent,
+	}
+
+	body, err := doHTTPRequest("POST", "https://my.vanmoof.com/api/v8/authenticate", nil, headers, debug)
+	if err != nil {
+		return "", err
 	}
 
 	var authResp AuthResponse
@@ -186,37 +235,15 @@ func authenticate(email, password string, debug bool) (string, error) {
 }
 
 func getApplicationToken(authToken string, debug bool) (string, error) {
-	if debug {
-		fmt.Println("[DEBUG] GET https://api.vanmoof-api.com/v8/getApplicationToken")
+	headers := map[string]string{
+		"Authorization": "Bearer " + authToken,
+		"Api-Key":       ApiKey,
+		"User-Agent":    UserAgent,
 	}
 
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", "https://api.vanmoof-api.com/v8/getApplicationToken", nil)
+	body, err := doHTTPRequest("GET", "https://api.vanmoof-api.com/v8/getApplicationToken", nil, headers, debug)
 	if err != nil {
 		return "", err
-	}
-
-	req.Header.Set("Authorization", "Bearer "+authToken)
-	req.Header.Set("Api-Key", ApiKey)
-	req.Header.Set("User-Agent", UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if debug {
-		fmt.Printf("[DEBUG] Response status: %d\n", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	if debug {
-		fmt.Printf("[DEBUG] Response body: %s\n", string(body))
 	}
 
 	var appTokenResp AppTokenResponse
@@ -228,37 +255,15 @@ func getApplicationToken(authToken string, debug bool) (string, error) {
 }
 
 func getCustomerData(authToken string, debug bool) ([]BikeData, error) {
-	if debug {
-		fmt.Println("[DEBUG] GET https://my.vanmoof.com/api/v8/getCustomerData?includeBikeDetails")
+	headers := map[string]string{
+		"Authorization": "Bearer " + authToken,
+		"Api-Key":       ApiKey,
+		"User-Agent":    UserAgent,
 	}
 
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", "https://my.vanmoof.com/api/v8/getCustomerData?includeBikeDetails", nil)
+	body, err := doHTTPRequest("GET", "https://my.vanmoof.com/api/v8/getCustomerData?includeBikeDetails", nil, headers, debug)
 	if err != nil {
 		return nil, err
-	}
-
-	req.Header.Set("Authorization", "Bearer "+authToken)
-	req.Header.Set("Api-Key", ApiKey)
-	req.Header.Set("User-Agent", UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if debug {
-		fmt.Printf("[DEBUG] Response status: %d\n", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if debug {
-		fmt.Printf("[DEBUG] Response body length: %d bytes\n", len(body))
 	}
 
 	var customerData CustomerData
@@ -270,12 +275,6 @@ func getCustomerData(authToken string, debug bool) ([]BikeData, error) {
 }
 
 func createCertificate(bikeID, pubKey, appToken string, debug bool) (string, error) {
-	if debug {
-		fmt.Printf("[DEBUG] POST https://bikeapi.production.vanmoof.cloud/bikes/%s/create_certificate\n", bikeID)
-	}
-
-	client := &http.Client{}
-
 	certReq := CertificateRequest{
 		PublicKey: pubKey,
 	}
@@ -285,37 +284,16 @@ func createCertificate(bikeID, pubKey, appToken string, debug bool) (string, err
 		return "", err
 	}
 
-	if debug {
-		fmt.Printf("[DEBUG] Request body: %s\n", string(reqBody))
+	headers := map[string]string{
+		"Authorization": "Bearer " + appToken,
+		"User-Agent":    UserAgent,
+		"Content-Type":  "application/json",
 	}
 
 	url := fmt.Sprintf("https://bikeapi.production.vanmoof.cloud/bikes/%s/create_certificate", bikeID)
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
+	body, err := doHTTPRequest("POST", url, bytes.NewBuffer(reqBody), headers, debug)
 	if err != nil {
 		return "", err
-	}
-
-	req.Header.Set("Authorization", "Bearer "+appToken)
-	req.Header.Set("User-Agent", UserAgent)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if debug {
-		fmt.Printf("[DEBUG] Response status: %d\n", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	if debug {
-		fmt.Printf("[DEBUG] Response body: %s\n", string(body))
 	}
 
 	return string(body), nil
