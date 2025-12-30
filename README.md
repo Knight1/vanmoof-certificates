@@ -115,7 +115,7 @@ AFM (Authorized Frame Module): ✂️
 | `-email` | VanMoof email address | Prompt if not provided |
 | `-password` | VanMoof password | Prompt if not provided |
 | `-bikes` | Bikes to process: 'all', IDs (comma-separated), or 'ask' | `all` |
-| `-debug` | Enable debug output | \`false\` |
+| `-debug` | Enable debug output | `false` |
 | `-cert` | Base64 encoded certificate to parse | - |
 | `-pubkey` | Base64 encoded public key (optional) | - |
 | `-bikeid` | Bike ID for verification (optional) | - |
@@ -239,4 +239,4 @@ The payload uses CBOR (Concise Binary Object Representation, RFC 8949) encoding:
 - It seems that there is no revocation nor public logging. If someone has access to the VanMoof Account with your bike he can generate Certificates without you noticing and even if, they are irrevocable. So the only way to secure the bike would be to lock it in the Garage or Basement until 7 days are passed.
 - It is currently not known how the bike knows the time after a power loss. This would be either via GSM, GPS or the Phone. What happens if a jammer is in place or if the GPS Time was spoofed is currently unknown. In the Case where you can spoof an older time you could in theory unlock the bike with an older Certificate if the bike accepts the new time as the "correct time".
 - If you are 7 days without Internet, you can no longer unlock your bike with your Phone. Only via the Backup Code. 
-- What happens after 10 Years? Since VanMoof reverted the 10 Year Certificate Lifetime it is currently not possible to control the bike (besides the backup Code) without talking to the  VanMoof API with the key to issue Certificates.
+- What happens after 10 Years? Since VanMoof reverted the 10 Year Certificate Lifetime it is currently not possible to control the bike (besides the backup Code) without talking to the  VanMoof API with the key to issue Certificates. Or implement a logic where you have to do some 2FA if you want a Certificate with more then 7 Days.
