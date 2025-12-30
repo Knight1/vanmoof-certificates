@@ -181,6 +181,15 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 		// Try to match as frame number (string)
 		frameIDStr := string(frameID)
 		bikeIDStr := string(bikeIDBytes)
+
+		// Validate the provided bike ID format if it looks like a frame number
+		if _, err := fmt.Sscanf(bikeID, "%d", new(uint32)); err != nil {
+			// Not a number, so should be a frame number - validate format
+			if !validateFrameNumber(bikeID) {
+				fmt.Printf("⚠ Warning: Bike ID '%s' has invalid frame number format\n", bikeID)
+			}
+		}
+
 		if frameIDStr == bikeID || bikeIDStr == bikeID {
 			fmt.Println("✓ Bike ID Verified (Frame Number):", bikeID)
 		} else {
