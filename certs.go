@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -65,7 +67,16 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 		fmt.Printf("Signature (hex): %x\n", signature)
 		fmt.Printf("CBOR Payload length: %d bytes\n", len(cborPayload))
 		fmt.Printf("CBOR Payload (hex): %x\n", cborPayload)
+
+		// Parse signature structure
+		fmt.Println("\n[DEBUG] Signature Analysis:")
+		fmt.Printf("  Signature is %d bytes (Ed25519 signature)\n", len(signature))
+		fmt.Printf("  R component (first 32 bytes): %x\n", signature[:32])
+		fmt.Printf("  S component (last 32 bytes):  %x\n", signature[32:])
 	}
+
+	// Try to validate signature if VanMoof CA public key is available
+	validateCertificateSignature(signature, cborPayload, debug)
 
 	// Parse CBOR payload - first try as a raw map to see all fields
 	var rawMap map[interface{}]interface{}
@@ -217,5 +228,50 @@ func getRoleDescription(role uint8) string {
 		return "Service/Admin (Extended Permissions)"
 	default:
 		return fmt.Sprintf("Unknown Role (0x%02X)", role)
+	}
+}
+
+// validateCertificateSignature attempts to validate the Ed25519 signature
+func validateCertificateSignature(signature, payload []byte, debug bool) {
+	// Known VanMoof CA public keys = none
+
+	knownCAKeys := []string{
+		// Add known VanMoof CA public keys here when discovered
+		// Format: hex-encoded 32-byte Ed25519 public key
+	}
+
+	if !debug {
+		return // Only show in debug mode
+	}
+
+	fmt.Println("\n[DEBUG] Signature Validation:")
+
+	if len(knownCAKeys) == 0 {
+		fmt.Println("  ⚠ No VanMoof CA public keys available for validation")
+		fmt.Println("  The signature appears to be a valid Ed25519 signature (64 bytes)")
+		fmt.Println("  To validate, we would need VanMoof's Certificate Authority public key")
+		return
+	}
+
+	// Try each known CA public key
+	validated := false
+	for i, keyHex := range knownCAKeys {
+		pubKeyBytes, err := hex.DecodeString(keyHex)
+		if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
+			fmt.Printf("  ✗ CA key %d: Invalid format\n", i+1)
+			continue
+		}
+
+		pubKey := ed25519.PublicKey(pubKeyBytes)
+		if ed25519.Verify(pubKey, payload, signature) {
+			fmt.Printf("  ✓ Signature VALID with CA key %d\n", i+1)
+			fmt.Printf("    CA Public Key: %x\n", pubKeyBytes)
+			validated = true
+			break
+		}
+	}
+
+	if !validated && len(knownCAKeys) > 0 {
+		fmt.Println("  ✗ Signature validation failed with all known CA keys")
 	}
 }

@@ -57,11 +57,11 @@ func getApplicationToken(authToken string, debug bool) (string, error) {
 
 func validateAndShowJWT(tokenString string) {
 	fmt.Println("\n[DEBUG] JWT Token Analysis:")
-	
+
 	// Parse without validation first to inspect the token
 	parser := jwt.NewParser(jwt.WithoutClaimsValidation())
 	token, _, err := parser.ParseUnverified(tokenString, jwt.MapClaims{})
-	
+
 	if err != nil {
 		fmt.Printf("[DEBUG] Failed to parse JWT: %v\n", err)
 		return
@@ -84,7 +84,7 @@ func validateAndShowJWT(tokenString string) {
 	if len(parts) == 3 {
 		fmt.Printf("[DEBUG] JWT Signature (base64): %s...\n", parts[2][:min(40, len(parts[2]))])
 	}
-	
+
 	fmt.Println()
 }
 
