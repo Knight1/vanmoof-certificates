@@ -131,25 +131,8 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 	}
 
 	// Display parsed fields
-	fmt.Printf("Bike API ID: %d", apiID)
-
-	// Check if API ID matches any bike from API
-	apiIDValid := false
-	if len(bikes) > 0 {
-		for _, bike := range bikes {
-			if bike.BikeID == int(apiID) {
-				apiIDValid = true
-				break
-			}
-		}
-		if apiIDValid {
-			fmt.Printf(" ✓ Matches API bike\n")
-		} else {
-			fmt.Printf(" ⚠ Not found in API bikes\n")
-		}
-	} else {
-		fmt.Println()
-	}
+	// Note: The 'i' field changes with each certificate and is not the bike's API ID
+	fmt.Printf("Certificate ID: %d\n", apiID)
 
 	// Display and validate Frame Module serial
 	frameIDStr := string(frameID)
@@ -232,6 +215,41 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 	embeddedPubKeyBase64 := base64.StdEncoding.EncodeToString(publicKey)
 	fmt.Printf("Embedded Public Key (Base64): %s\n", embeddedPubKeyBase64)
 
+	// --- Certificate Validation Summary ---
+	if len(bikes) > 0 {
+		fmt.Println("\n--- Certificate Validation Summary ---")
+		
+		// Check if certificate matches any bike from API based on frame/bike serials
+		var matchedBike *BikeData
+		for i, bike := range bikes {
+			// Match by frame number or serial
+			if (frameIDStr != "" && (bike.FrameNumber == frameIDStr || bike.FrameSerial == frameIDStr)) ||
+			   (bikeIDStr != "" && (bike.FrameNumber == bikeIDStr || bike.FrameSerial == bikeIDStr || bike.MainEcuSerial == bikeIDStr)) {
+				matchedBike = &bikes[i]
+				break
+			}
+		}
+		
+		if matchedBike != nil {
+			fmt.Printf("✓ Certificate is VALID for your bike\n")
+			fmt.Printf("  Matched Bike ID: %d\n", matchedBike.BikeID)
+			fmt.Printf("  Bike Name: %s\n", matchedBike.Name)
+			fmt.Printf("  Frame Number: %s\n", matchedBike.FrameNumber)
+		} else {
+			fmt.Printf("✗ Certificate does NOT match any of your bikes\n")
+			fmt.Printf("  Certificate AFM: %s\n", frameIDStr)
+			fmt.Printf("  Certificate ABM: %s\n", bikeIDStr)
+			fmt.Printf("  Your bikes: ")
+			for i, bike := range bikes {
+				if i > 0 {
+					fmt.Printf(", ")
+				}
+				fmt.Printf("%s (ID: %d)", bike.FrameNumber, bike.BikeID)
+			}
+			fmt.Println()
+		}
+	}
+
 	// --- Parse Certificate Fields ---
 
 	// --- Verification Logic ---
@@ -253,16 +271,7 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 		if frameIDStr == bikeID || bikeIDStr == bikeID {
 			fmt.Println("✓ Bike ID Verified (Frame Number):", bikeID)
 		} else {
-			// Try to match as API ID (numeric)
-			var matched bool
-			var parsedID uint32
-			if _, err := fmt.Sscanf(bikeID, "%d", &parsedID); err == nil && parsedID == apiID {
-				fmt.Printf("✓ Bike ID Verified (API ID): %d\n", apiID)
-				matched = true
-			}
-			if !matched {
-				fmt.Printf("✗ Bike ID NOT found: %s (Frame: %s, API ID: %d)\n", bikeID, bikeIDStr, apiID)
-			}
+			fmt.Printf("✗ Bike ID NOT found: %s (Certificate Frame: %s, Bike: %s)\n", bikeID, frameIDStr, bikeIDStr)
 		}
 	}
 
@@ -400,11 +409,7 @@ func validateUUID(uuid []byte) bool {
 
 	// Check variant field (byte 8, high 2 bits should be 10)
 	variant := uuid[8] >> 6
-	if variant != 0b10 {
-		return false
-	}
-
-	return true
+	return variant == 0b10
 }
 
 // validateFrameNumber validates a frame number against a pattern

@@ -151,10 +151,10 @@ Starting at byte 64, the certificate contains a CBOR-encoded map with the follow
 
 | Key | Type | Description | Example |
 |-----|------|-------------|---------|
-| `i` | uint32 | Bike API ID from VanMoof's system | `1337` |
-| `f` | string | Frame Module serial number | `"SVTBKLdddddLL"` |
-| `b` | string | Bike Module serial number | `"SVTBKLdddddLL"` |
-| `e` | uint32 | Certificate expiry (Unix timestamp) | `1767668558` |
+| `i` | uint32 | Certificate ID | `1337` |
+| `f` | string | Frame Module serial number (AFM - Authorized Frame Module) | `"SVTBKLdddddLL"` |
+| `b` | string | Bike Module serial number (ABM - Authorized Bike Module) | `"SVTBKLdddddLL"` |
+| `e` | uint32 | Certificate expiry (Unix timestamp) | `1767668550` |
 | `r` | uint8 | Role/Access level (0-15) | `7` |
 | `u` | bytes[16] | User UUID (without hyphens) | `uuid3` |
 | `p` | bytes[32] | User's Ed25519 public key | 32-byte public key |
@@ -175,7 +175,7 @@ The `r` (role) field determines what permissions the certificate grants:
 
 The certificate cryptographically binds together:
 
-1. **Specific Bike**: Via API ID (`i`) and frame/bike serials (`f`, `b`)
+1. **Specific Bike**: Via frame/bike module serials (`f`, `b`) - the `i` field is a certificate ID that varies per certificate
 2. **Specific User**: Via user UUID (`u`)
 3. **Specific Public Key**: Via user's Ed25519 public key (`p`)
 4. **Access Level**: Via role field (`r`)
@@ -183,7 +183,7 @@ The certificate cryptographically binds together:
 
 When a bike validates a certificate, it verifies:
 - The Ed25519 signature is valid (signed by VanMoof CA)
-- The bike ID matches this bike
+- The frame/bike module serials match this bike
 - The certificate hasn't expired
 - The user's public key matches the one in the certificate
 
@@ -191,12 +191,13 @@ When a bike validates a certificate, it verifies:
 
 Decoded structure:
 - **Signature**: `...` (64 bytes)
-- **Bike API ID**: `1337`
-- **Frame/Bike Serial**: `SVTBKLdddddLL`
+- **Certificate ID**: `1337`
+- **Frame Module Serial (AFM)**: `SVTBKLdddddLL`
+- **Bike Module Serial (ABM)**: `SVTBKLdddddLL`
 - **Expiry**: `1767668550` (January 6, 2026 04:02:38 CET)
 - **Role**: `7` (Owner - Full Control)
-- **User UUID**: `11111111-1111-3111-1111-111111111111`
-- **Public Key**: `KIQtqMxZ9Vdj3yLfNGNHlUB0WN9gLTdX/fwpiTfiUMs=`
+- **User UUID**: `1111111-1111-3111-1111-111111111111` (UUIDv3)
+- **Public Key**: `KIQtqMxZ9Vdj3YLfNgNHjUB4WN4gLtDX/FwpiyFiUMs=`
 
 ### CBOR Encoding Details
 
@@ -205,15 +206,15 @@ The payload uses CBOR (Concise Binary Object Representation, RFC 8949) encoding:
 ```
 0xa7                    # Map with 7 entries
   0x61 0x69             # Text string "i"
-  0x1a 0x00 0x00 0x05 0x39  # uint32: 1337
+  0x1a 0x00 0x02 0xa7 0x66  # uint32: 1337 (Certificate ID)
   
   0x61 0x66             # Text string "f" 
   0x6d                  # Text string, 13 bytes
-  "SVTBKLdddddLL"       # Frame serial
+  "SVTBKLdddddLL"       # Frame Module serial (AFM)
   
   0x61 0x62             # Text string "b"
   0x6d                  # Text string, 13 bytes  
-  "SVTBKLdddddLL"       # Bike serial
+  "SVTBKLdddddLL"       # Bike Module serial (ABM)
   
   0x61 0x65             # Text string "e"
   0x1a 0x69 0x5c 0x7b 0x46  # uint32: 1767668550
