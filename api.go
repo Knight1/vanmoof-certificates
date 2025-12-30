@@ -144,23 +144,15 @@ func getCert(email, password, bikeFilter string, debug bool) error {
 			}
 		}
 
-		fmt.Println("Certificate below:")
-		fmt.Println("-----------")
+		fmt.Println("Certificate:")
 		fmt.Println(certResp)
-		fmt.Println("-----------")
-		fmt.Println()
 
 		// Parse the certificate
 		if cert, ok := respData["certificate"].(string); ok {
 			fmt.Println("Parsing certificate...")
 			processCertificate(cert, pubKeyB64, fmt.Sprintf("%d", bike.BikeID))
 		}
-		fmt.Println()
 	}
-
-	fmt.Println()
-	fmt.Println()
-
 	return nil
 }
 
@@ -230,13 +222,6 @@ func selectBikes(bikes []BikeData, filter string) ([]BikeData, error) {
 	}
 
 	return selected, nil
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func doHTTPRequest(method, url string, body io.Reader, headers map[string]string, debug bool) ([]byte, error) {
