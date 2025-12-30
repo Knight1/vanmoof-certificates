@@ -35,6 +35,9 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
 
 	// --- Extract Components ---
 
+	// The Signature (First 64 bytes)
+	signature := certData[0:64]
+
 	// The Payload (The middle section containing Serial and Expiry)
 	// This starts at byte 64
 	payload := certData[64:134]
@@ -44,9 +47,16 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
 
 	// --- Display Extracted Information ---
 
+	// Display signature
+	signatureBase64 := base64.StdEncoding.EncodeToString(signature)
+	fmt.Printf("\n--- Extracted from Certificate ---\n")
+	fmt.Printf("Signature (Base64): %s\n", signatureBase64)
+	if debug {
+		fmt.Printf("Signature (hex): %x\n", signature)
+	}
+
 	// Display embedded public key
 	embeddedPubKeyBase64 := base64.StdEncoding.EncodeToString(embeddedPubKey)
-	fmt.Printf("\n--- Extracted from Certificate ---\n")
 	fmt.Printf("Embedded Public Key (Base64): %s\n", embeddedPubKeyBase64)
 
 	// --- Parse Payload Fields ---
