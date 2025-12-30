@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
@@ -131,8 +132,24 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 
 	// Display parsed fields
 	fmt.Printf("Bike API ID: %d\n", apiID)
-	fmt.Printf("AFM (Authorized Frame Module): %s\n", string(frameID))
-	fmt.Printf("ABM (Authorized Bike Module): %s\n", string(bikeIDBytes))
+
+	// Display and validate Frame Module serial
+	frameIDStr := string(frameID)
+	fmt.Printf("AFM (Authorized Frame Module): %s", frameIDStr)
+	if validateFrameNumber(frameIDStr) {
+		fmt.Printf(" ✓ Valid\n")
+	} else if frameIDStr != "" {
+		fmt.Printf(" ✗ Invalid format\n")
+	}
+
+	// Display and validate Bike Module serial
+	bikeIDStr := string(bikeIDBytes)
+	fmt.Printf("ABM (Authorized Bike Module): %s", bikeIDStr)
+	if validateFrameNumber(bikeIDStr) {
+		fmt.Printf(" ✓ Valid\n")
+	} else if bikeIDStr != "" {
+		fmt.Printf(" ✗ Invalid format\n")
+	}
 
 	// Convert and display expiry timestamp
 	expiryTime := time.Unix(int64(expiry), 0)
@@ -319,4 +336,23 @@ func validateUUID(uuid []byte) bool {
 	}
 
 	return true
+}
+
+// validateFrameNumber validates a frame number against a pattern
+func validateFrameNumber(frameNumber string) bool {
+	if frameNumber == "" {
+		return false
+	}
+
+	// Check against pattern
+	matched, err := regexp.MatchString(FrameNumberPattern, frameNumber)
+	if err != nil {
+		return false
+	}
+
+	if matched {
+		return true
+	}
+
+	return false
 }

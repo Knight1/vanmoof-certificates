@@ -92,7 +92,7 @@ Privkey = ✂️
 Pubkey = Yd2bYMB3+vs4cCnDtPbcaM164KIl2zs05AK2jt/K6Gs=
 
 Bike ID: 1337
-Frame number: ^[A-Z]{3}[A-Z]{3}\d{5}[A-Z]{2}$
+Frame number: ^[A-Z]{6}\d{5}[A-Z]{2}$
 Bike is an SA5
 Certificate:
 -----------
