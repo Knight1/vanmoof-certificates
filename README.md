@@ -152,8 +152,8 @@ Starting at byte 64, the certificate contains a CBOR-encoded map with the follow
 | Key | Type | Description | Example |
 |-----|------|-------------|---------|
 | `i` | uint32 | Bike API ID from VanMoof's system | `1337` |
-| `f` | string | Frame Module serial number | `"SVTBKLdddddXX"` |
-| `b` | string | Bike Module serial number | `"SVTBKLdddddXX"` |
+| `f` | string | Frame Module serial number | `"SVTBKLdddddLL"` |
+| `b` | string | Bike Module serial number | `"SVTBKLdddddLL"` |
 | `e` | uint32 | Certificate expiry (Unix timestamp) | `1767668558` |
 | `r` | uint8 | Role/Access level (0-15) | `7` |
 | `u` | bytes[16] | User UUID (without hyphens) | `uuid3` |
@@ -192,7 +192,7 @@ When a bike validates a certificate, it verifies:
 Decoded structure:
 - **Signature**: `...` (64 bytes)
 - **Bike API ID**: `1337`
-- **Frame/Bike Serial**: `SVTBKLddddddLL`
+- **Frame/Bike Serial**: `SVTBKLdddddLL`
 - **Expiry**: `1767668550` (January 6, 2026 04:02:38 CET)
 - **Role**: `7` (Owner - Full Control)
 - **User UUID**: `11111111-1111-3111-1111-111111111111`
@@ -205,18 +205,18 @@ The payload uses CBOR (Concise Binary Object Representation, RFC 8949) encoding:
 ```
 0xa7                    # Map with 7 entries
   0x61 0x69             # Text string "i"
-  0x1a 0x00 0x02 0xa7 0x56  # uint32: 173910
+  0x1a 0x00 0x00 0x05 0x39  # uint32: 1337
   
   0x61 0x66             # Text string "f" 
   0x6d                  # Text string, 13 bytes
-  "SVTBKL00063OA"       # Frame serial
+  "SVTBKLdddddLL"       # Frame serial
   
   0x61 0x62             # Text string "b"
   0x6d                  # Text string, 13 bytes  
-  "SVTBKL00063OA"       # Bike serial
+  "SVTBKLdddddLL"       # Bike serial
   
   0x61 0x65             # Text string "e"
-  0x1a 0x69 0x5c 0x7b 0x4e  # uint32: 1767668558
+  0x1a 0x69 0x5c 0x7b 0x4e  # uint32: 1767668550
   
   0x61 0x72             # Text string "r"
   0x07                  # uint: 7
