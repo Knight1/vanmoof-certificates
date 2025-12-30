@@ -4,8 +4,22 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
-	"strings"
+	"time"
+
+	"github.com/fxamacker/cbor/v2"
 )
+
+// CertificatePayload represents the CBOR-encoded certificate structure
+type CertificatePayload struct {
+	ID        uint32                 `cbor:"i"`  // Bike API ID
+	FrameID   []byte                 `cbor:"fm"` // Frame module serial (byte string)
+	BikeID    []byte                 `cbor:"bm"` // Bike module serial (byte string)
+	Expiry    uint32                 `cbor:"e"`  // Expiry timestamp
+	Role      uint8                  `cbor:"r"`  // Access level/role
+	UserID    []byte                 `cbor:"u"`  // User ID (16 bytes)
+	PublicKey []byte                 `cbor:"p"`  // Public key (32 bytes)
+	Extra     map[string]interface{} `cbor:",inline"`
+}
 
 func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
 
@@ -38,12 +52,8 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
 	// The Signature (First 64 bytes)
 	signature := certData[0:64]
 
-	// The Payload (The middle section containing Serial and Expiry)
-	// This starts at byte 64
-	payload := certData[64:134]
-
-	// The Public Key embedded in the certificate (Last 32 bytes)
-	embeddedPubKey := certData[len(certData)-32:]
+	// The CBOR Payload starts at byte 64
+	cborPayload := certData[64:]
 
 	// --- Display Extracted Information ---
 
@@ -55,45 +65,76 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
 		fmt.Printf("Signature (hex): %x\n", signature)
 	}
 
-	// Display embedded public key
-	embeddedPubKeyBase64 := base64.StdEncoding.EncodeToString(embeddedPubKey)
-	fmt.Printf("Embedded Public Key (Base64): %s\n", embeddedPubKeyBase64)
+	// Parse CBOR payload - first try as a raw map to see all fields
+	var rawMap map[interface{}]interface{}
+	err = cbor.Unmarshal(cborPayload, &rawMap)
+	if err != nil {
+		fmt.Println("Error parsing CBOR payload:", err)
+		return
+	}
 
-	// --- Parse Payload Fields ---
+	if debug {
+		fmt.Printf("Debug - Raw CBOR map: %+v\n", rawMap)
+	}
 
-	// Extract Bike API ID from CBOR structure
-	// Pattern: 0x61 'i' followed by 0x1a (uint32) and 4 bytes
-	apiIDPattern := []byte{0x61, 0x69, 0x1a} // text string "i" followed by uint32 marker
-	apiIDIdx := bytes.Index(certData, apiIDPattern)
+	// Extract fields from raw map
 	var apiID uint32
-	if apiIDIdx >= 0 && apiIDIdx+7 <= len(certData) {
-		// Read 4 bytes as big-endian uint32
-		apiID = uint32(certData[apiIDIdx+3])<<24 |
-			uint32(certData[apiIDIdx+4])<<16 |
-			uint32(certData[apiIDIdx+5])<<8 |
-			uint32(certData[apiIDIdx+6])
-		fmt.Printf("Bike API ID: %d\n", apiID)
+	var frameID, bikeIDBytes, userID, publicKey []byte
+	var expiry uint32
+	var role uint8
+
+	for key, value := range rawMap {
+		keyStr, ok := key.(string)
+		if !ok {
+			continue
+		}
+		switch keyStr {
+		case "i":
+			if v, ok := value.(uint64); ok {
+				apiID = uint32(v)
+			}
+		case "f": // Frame ID (was "fm")
+			if v, ok := value.(string); ok {
+				frameID = []byte(v)
+			}
+		case "b": // Bike ID (was "bm")
+			if v, ok := value.(string); ok {
+				bikeIDBytes = []byte(v)
+			}
+		case "e":
+			if v, ok := value.(uint64); ok {
+				expiry = uint32(v)
+			}
+		case "r":
+			if v, ok := value.(uint64); ok {
+				role = uint8(v)
+			}
+		case "u":
+			userID, _ = value.([]byte)
+		case "p":
+			publicKey, _ = value.([]byte)
+		}
 	}
 
-	// Extract AFM (Authorized Frame Module)
-	afmIdx := bytes.Index(payload, []byte("afm"))
-	if afmIdx >= 0 && afmIdx+6 <= len(payload) {
-		afmValue := string(payload[afmIdx+3 : afmIdx+16])
-		afmValue = strings.TrimRight(afmValue, "\x00")
-		fmt.Printf("AFM (Authorized Frame Module): %s\n", afmValue)
-	}
+	// Display parsed fields
+	fmt.Printf("Bike API ID: %d\n", apiID)
+	fmt.Printf("AFM (Authorized Frame Module): %s\n", string(frameID))
+	fmt.Printf("ABM (Authorized Bike Module): %s\n", string(bikeIDBytes))
 
-	// Extract ABM (Authorized Bike Module)
-	abmIdx := bytes.Index(payload, []byte("abm"))
-	if abmIdx >= 0 && abmIdx+6 <= len(payload) {
-		abmValue := string(payload[abmIdx+3 : abmIdx+16])
-		abmValue = strings.TrimRight(abmValue, "\x00")
-		fmt.Printf("ABM (Authorized Bike Module): %s\n", abmValue)
-	}
+	// Convert and display expiry timestamp
+	expiryTime := time.Unix(int64(expiry), 0)
+	fmt.Printf("Certificate Expiry: %s (Unix: %d)\n", expiryTime.Format("2006-01-02 15:04:05 MST"), expiry)
 
-	// Extract Access Level from full certificate data
-	accessLevel := parseAccessLevel(certData)
+	// Display access level
+	accessLevel := getRoleDescription(role)
 	fmt.Printf("Access Level: %s\n", accessLevel)
+
+	// Display user ID
+	fmt.Printf("User ID: %x\n", userID)
+
+	// Display embedded public key
+	embeddedPubKeyBase64 := base64.StdEncoding.EncodeToString(publicKey)
+	fmt.Printf("Embedded Public Key (Base64): %s\n", embeddedPubKeyBase64)
 
 	// --- Parse Certificate Fields ---
 
@@ -102,25 +143,20 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
 	if bikeID != "" {
 		fmt.Println("\n--- Bike ID Verification ---")
 		// Try to match as frame number (string)
-		if bytes.Contains(payload, []byte(bikeID)) {
+		frameIDStr := string(frameID)
+		bikeIDStr := string(bikeIDBytes)
+		if frameIDStr == bikeID || bikeIDStr == bikeID {
 			fmt.Println("✓ Bike ID Verified (Frame Number):", bikeID)
 		} else {
 			// Try to match as API ID (numeric)
-			// Check if bikeID is a number and matches the API ID
 			var matched bool
-			if apiID > 0 {
-				if bikeIDNum := bikeID; bikeIDNum != "" {
-					// Try parsing as uint32
-					var parsedID uint32
-					fmt.Sscanf(bikeIDNum, "%d", &parsedID)
-					if parsedID == apiID {
-						fmt.Printf("✓ Bike ID Verified (API ID): %d\n", apiID)
-						matched = true
-					}
-				}
+			var parsedID uint32
+			if _, err := fmt.Sscanf(bikeID, "%d", &parsedID); err == nil && parsedID == apiID {
+				fmt.Printf("✓ Bike ID Verified (API ID): %d\n", apiID)
+				matched = true
 			}
 			if !matched {
-				fmt.Printf("✗ Bike ID NOT found: %s (Frame not in payload, API ID: %d)\n", bikeID, apiID)
+				fmt.Printf("✗ Bike ID NOT found: %s (Frame: %s, API ID: %d)\n", bikeID, bikeIDStr, apiID)
 			}
 		}
 	}
@@ -135,7 +171,7 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
 		}
 		// Note: The Public Key string has a leading 0x00 byte (prefix)
 		// We compare the last 32 bytes of your key to the embedded key
-		if bytes.Equal(embeddedPubKey, pubKeyData[len(pubKeyData)-32:]) {
+		if bytes.Equal(publicKey, pubKeyData[len(pubKeyData)-32:]) {
 			fmt.Println("✓ Success: Public Key matches the Certificate signature.")
 		} else {
 			fmt.Println("✗ Warning: Key mismatch detected.")
@@ -143,31 +179,9 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
 	}
 }
 
-// parseAccessLevel determines the access level from the certificate data
-// The certificate is CBOR-encoded starting at byte 64 with a map structure
-// containing a 'r' (role) field that indicates the access level
-func parseAccessLevel(certData []byte) string {
-	// The CBOR map starts at byte 64
-	// Skip the first 64 bytes (signature/header)
-	if len(certData) < 72 {
-		return "Unknown (Certificate too short)"
-	}
-
-	// Search for the role field: 0x61 'r' followed by the role value
-	// Pattern: 61 72 <value>
-	rolePattern := []byte{0x61, 0x72} // text string "r"
-
-	idx := bytes.Index(certData, rolePattern)
-	if idx == -1 || idx+3 > len(certData) {
-		return "Unknown (Role field not found)"
-	}
-
-	// The byte after 'r' contains the role value
-	roleValue := certData[idx+2]
-
-	// Interpret the role value
-	// These values are based on reverse engineering the CBOR structure
-	switch roleValue {
+// getRoleDescription returns a human-readable description of the role value
+func getRoleDescription(role uint8) string {
+	switch role {
 	case 0x00:
 		return "Guest (Read-Only Access)"
 	case 0x01:
@@ -179,6 +193,6 @@ func parseAccessLevel(certData []byte) string {
 	case 0x0F:
 		return "Service/Admin (Extended Permissions)"
 	default:
-		return fmt.Sprintf("Unknown Role (0x%02X)", roleValue)
+		return fmt.Sprintf("Unknown Role (0x%02X)", role)
 	}
 }
