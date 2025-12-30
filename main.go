@@ -18,6 +18,7 @@ func main() {
 	bikeid := flag.String("bikeid", "", "Bike ID to verify (optional)")
 	email := flag.String("email", "", "VanMoof email address (optional)")
 	password := flag.String("password", "", "VanMoof password (optional)")
+	bikes := flag.String("bikes", "all", "Bikes to fetch certificates for: 'all', bike IDs (comma-separated), or 'ask' to be prompted")
 	debug := flag.Bool("debug", false, "Enable debug output")
 	flag.Parse()
 
@@ -55,7 +56,7 @@ func main() {
 			passwordInput = string(passwordBytes)
 		}
 
-		if err := getCert(emailInput, passwordInput, *debug); err != nil {
+		if err := getCert(emailInput, passwordInput, *bikes, *debug); err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return
 		}
