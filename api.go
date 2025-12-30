@@ -148,6 +148,14 @@ func getCert(email, password, bikeFilter string, debug bool) error {
 		fmt.Println("-----------")
 		fmt.Println(certResp)
 		fmt.Println("-----------")
+		fmt.Println()
+
+		// Parse the certificate
+		if cert, ok := respData["certificate"].(string); ok {
+			fmt.Println("Parsing certificate...")
+			processCertificate(cert, pubKeyB64, fmt.Sprintf("%d", bike.BikeID))
+		}
+		fmt.Println()
 	}
 
 	fmt.Println()
@@ -196,10 +204,10 @@ func selectBikes(bikes []BikeData, filter string) ([]BikeData, error) {
 	// Parse comma-separated bike IDs or indices
 	var selected []BikeData
 	parts := strings.Split(filter, ",")
-	
+
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
-		
+
 		// Try to parse as index (1-based)
 		var idx int
 		if _, err := fmt.Sscanf(part, "%d", &idx); err == nil {
