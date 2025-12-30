@@ -91,6 +91,20 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 		fmt.Printf("Debug - Raw CBOR map: %+v\n", rawMap)
 	}
 
+	// --- Validate Certificate Structure ---
+	fmt.Println("\n--- Certificate Validation ---")
+	validationErrors := 0
+	validationWarnings := 0
+
+	// Check for required CBOR fields
+	requiredFields := []string{"i", "f", "b", "e", "r", "u", "p"}
+	for _, field := range requiredFields {
+		if _, exists := rawMap[field]; !exists {
+			fmt.Printf("✗ Missing required field: '%s'\n", field)
+			validationErrors++
+		}
+	}
+
 	// Extract fields from raw map
 	var apiID uint32
 	var frameID, bikeIDBytes, userID, publicKey []byte
@@ -106,27 +120,124 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 		case "i":
 			if v, ok := value.(uint64); ok {
 				apiID = uint32(v)
+			} else {
+				fmt.Printf("✗ Field 'i' has incorrect type (expected uint)\n")
+				validationErrors++
 			}
 		case "f": // Frame ID (was "fm")
 			if v, ok := value.(string); ok {
 				frameID = []byte(v)
+			} else {
+				fmt.Printf("✗ Field 'f' has incorrect type (expected string)\n")
+				validationErrors++
 			}
 		case "b": // Bike ID (was "bm")
 			if v, ok := value.(string); ok {
 				bikeIDBytes = []byte(v)
+			} else {
+				fmt.Printf("✗ Field 'b' has incorrect type (expected string)\n")
+				validationErrors++
 			}
 		case "e":
 			if v, ok := value.(uint64); ok {
 				expiry = uint32(v)
+			} else {
+				fmt.Printf("✗ Field 'e' has incorrect type (expected uint)\n")
+				validationErrors++
 			}
 		case "r":
 			if v, ok := value.(uint64); ok {
 				role = uint8(v)
+			} else {
+				fmt.Printf("✗ Field 'r' has incorrect type (expected uint)\n")
+				validationErrors++
 			}
 		case "u":
-			userID, _ = value.([]byte)
+			userID, ok = value.([]byte)
+			if !ok {
+				fmt.Printf("✗ Field 'u' has incorrect type (expected bytes)\n")
+				validationErrors++
+			} else if len(userID) != 16 {
+				fmt.Printf("✗ Field 'u' has incorrect length (expected 16 bytes, got %d)\n", len(userID))
+				validationErrors++
+			}
 		case "p":
-			publicKey, _ = value.([]byte)
+			publicKey, ok = value.([]byte)
+			if !ok {
+				fmt.Printf("✗ Field 'p' has incorrect type (expected bytes)\n")
+				validationErrors++
+			} else if len(publicKey) != 32 {
+				fmt.Printf("✗ Field 'p' has incorrect length (expected 32 bytes, got %d)\n", len(publicKey))
+				validationErrors++
+			}
+		default:
+			if debug {
+				fmt.Printf("[DEBUG] Unknown field in certificate: '%s'\n", keyStr)
+			}
+		}
+	}
+
+	// Validate field contents
+	if len(frameID) == 0 {
+		fmt.Printf("✗ Frame ID (f) is empty\n")
+		validationErrors++
+	} else if !validateFrameNumber(string(frameID)) {
+		fmt.Printf("⚠ Frame ID (f) has invalid format: %s\n", string(frameID))
+		validationWarnings++
+	}
+
+	if len(bikeIDBytes) == 0 {
+		fmt.Printf("✗ Bike ID (b) is empty\n")
+		validationErrors++
+	} else if !validateFrameNumber(string(bikeIDBytes)) {
+		fmt.Printf("⚠ Bike ID (b) has invalid format: %s\n", string(bikeIDBytes))
+		validationWarnings++
+	}
+
+	// Validate expiry
+	now := time.Now().Unix()
+	if expiry == 0 {
+		fmt.Printf("✗ Expiry timestamp is zero\n")
+		validationErrors++
+	} else if int64(expiry) < now {
+		fmt.Printf("✗ Certificate has EXPIRED (expired %s ago)\n", time.Since(time.Unix(int64(expiry), 0)).Round(time.Second))
+		validationErrors++
+	} else if int64(expiry) > now+365*24*60*60 {
+		fmt.Printf("⚠ Certificate expiry is suspiciously far in the future (%.1f days)\n", float64(int64(expiry)-now)/86400)
+		validationWarnings++
+	}
+
+	// Validate role
+	validRoles := []uint8{0x00, 0x01, 0x03, 0x07, 0x0F}
+	roleValid := false
+	for _, validRole := range validRoles {
+		if role == validRole {
+			roleValid = true
+			break
+		}
+	}
+	if !roleValid {
+		fmt.Printf("⚠ Unknown role value: 0x%02X\n", role)
+		validationWarnings++
+	}
+
+	// Validate UUID
+	if len(userID) == 16 {
+		if !validateUUID(userID) {
+			fmt.Printf("⚠ User UUID has invalid version or variant\n")
+			validationWarnings++
+		}
+	}
+
+	// Display validation summary
+	if validationErrors == 0 && validationWarnings == 0 {
+		fmt.Printf("✓ Certificate structure is valid\n")
+	} else {
+		if validationErrors > 0 {
+			fmt.Printf("✗ Certificate has %d error(s)\n", validationErrors)
+		}
+		if validationWarnings > 0 {
+			fmt.Printf("⚠ Certificate has %d warning(s)\n", validationWarnings)
 		}
 	}
 
@@ -218,18 +329,18 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 	// --- Certificate Validation Summary ---
 	if len(bikes) > 0 {
 		fmt.Println("\n--- Certificate Validation Summary ---")
-		
+
 		// Check if certificate matches any bike from API based on frame/bike serials
 		var matchedBike *BikeData
 		for i, bike := range bikes {
 			// Match by frame number or serial
 			if (frameIDStr != "" && (bike.FrameNumber == frameIDStr || bike.FrameSerial == frameIDStr)) ||
-			   (bikeIDStr != "" && (bike.FrameNumber == bikeIDStr || bike.FrameSerial == bikeIDStr || bike.MainEcuSerial == bikeIDStr)) {
+				(bikeIDStr != "" && (bike.FrameNumber == bikeIDStr || bike.FrameSerial == bikeIDStr || bike.MainEcuSerial == bikeIDStr)) {
 				matchedBike = &bikes[i]
 				break
 			}
 		}
-		
+
 		if matchedBike != nil {
 			fmt.Printf("✓ Certificate is VALID for your bike\n")
 			fmt.Printf("  Matched Bike ID: %d\n", matchedBike.BikeID)
@@ -260,18 +371,62 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 		frameIDStr := string(frameID)
 		bikeIDStr := string(bikeIDBytes)
 
-		// Validate the provided bike ID format if it looks like a frame number
-		if _, err := fmt.Sscanf(bikeID, "%d", new(uint32)); err != nil {
+		// Check if bikeID is numeric (API bike ID) or string (frame number)
+		var parsedNumericID uint32
+		isNumeric := false
+		if _, err := fmt.Sscanf(bikeID, "%d", &parsedNumericID); err == nil {
+			isNumeric = true
+		} else {
 			// Not a number, so should be a frame number - validate format
 			if !validateFrameNumber(bikeID) {
 				fmt.Printf("⚠ Warning: Bike ID '%s' has invalid frame number format\n", bikeID)
 			}
 		}
 
-		if frameIDStr == bikeID || bikeIDStr == bikeID {
-			fmt.Println("✓ Bike ID Verified (Frame Number):", bikeID)
+		// If we have bikes from API and a numeric ID was provided, check against API bikes
+		var matchedBike *BikeData
+		if isNumeric && len(bikes) > 0 {
+			for i, bike := range bikes {
+				if bike.BikeID == int(parsedNumericID) {
+					matchedBike = &bikes[i]
+					break
+				}
+			}
+
+			if matchedBike != nil {
+				// Found bike in API, now verify certificate matches this bike
+				if (frameIDStr == matchedBike.FrameNumber || frameIDStr == matchedBike.FrameSerial) &&
+					(bikeIDStr == matchedBike.FrameNumber || bikeIDStr == matchedBike.FrameSerial || bikeIDStr == matchedBike.MainEcuSerial) {
+					fmt.Printf("✓ Bike ID Verified: %d (%s)\n", matchedBike.BikeID, matchedBike.FrameNumber)
+					fmt.Printf("  Certificate matches bike from your account\n")
+				} else {
+					fmt.Printf("✗ Bike ID mismatch\n")
+					fmt.Printf("  API Bike %d has frame: %s\n", matchedBike.BikeID, matchedBike.FrameNumber)
+					fmt.Printf("  Certificate has AFM: %s, ABM: %s\n", frameIDStr, bikeIDStr)
+				}
+			} else {
+				fmt.Printf("✗ Bike ID %d not found in your account\n", parsedNumericID)
+				if len(bikes) > 0 {
+					fmt.Printf("  Your bike IDs: ")
+					for i, bike := range bikes {
+						if i > 0 {
+							fmt.Printf(", ")
+						}
+						fmt.Printf("%d", bike.BikeID)
+					}
+					fmt.Println()
+				}
+			}
+		} else if !isNumeric {
+			// Frame number provided, match directly against certificate
+			if frameIDStr == bikeID || bikeIDStr == bikeID {
+				fmt.Println("✓ Bike ID Verified (Frame Number):", bikeID)
+			} else {
+				fmt.Printf("✗ Bike ID NOT found: %s (Certificate Frame: %s, Bike: %s)\n", bikeID, frameIDStr, bikeIDStr)
+			}
 		} else {
-			fmt.Printf("✗ Bike ID NOT found: %s (Certificate Frame: %s, Bike: %s)\n", bikeID, frameIDStr, bikeIDStr)
+			// Numeric ID but no bikes to verify against
+			fmt.Printf("⚠ Cannot verify numeric bike ID %d (no API bikes available)\n", parsedNumericID)
 		}
 	}
 
