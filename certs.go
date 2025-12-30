@@ -95,10 +95,8 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
 	if len(certData) >= 108 {
 		expiryBytes := certData[100:108]
 		timestamp := int64(binary.BigEndian.Uint64(expiryBytes))
-		expiryTime := time.Unix(timestamp, 0).UTC()
 		fmt.Printf("Expiration Date (Bytes 100-107): %x\n", expiryBytes)
 		fmt.Printf("  Timestamp: %d\n", timestamp)
-		fmt.Printf("  Expiry Date: %s\n", expiryTime.Format("2006-01-02 15:04:05 UTC"))
 	}
 
 	// Permission Bits (Bytes 112-115)
