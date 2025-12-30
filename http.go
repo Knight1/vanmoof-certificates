@@ -44,11 +44,8 @@ func doHTTPRequest(method, url string, body io.Reader, headers map[string]string
 	}
 
 	if debug {
-		if len(respBody) > 200 {
-			fmt.Printf("[DEBUG] Response body length: %d bytes\n", len(respBody))
-		} else {
-			fmt.Printf("[DEBUG] Response body: %s\n", string(respBody))
-		}
+		fmt.Printf("[DEBUG] Response body length: %d bytes\n", len(respBody))
+		fmt.Printf("[DEBUG] Response body: %s\n", string(respBody))
 	}
 
 	// Check for HTTP errors
