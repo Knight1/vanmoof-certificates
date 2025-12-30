@@ -142,8 +142,14 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 	accessLevel := getRoleDescription(role)
 	fmt.Printf("Access Level: %s\n", accessLevel)
 
-	// Display user ID
-	fmt.Printf("User ID: %x\n", userID)
+	// Display and validate user ID
+	userUUIDStr := formatUUID(userID)
+	fmt.Printf("User ID: %s", userUUIDStr)
+	if validateUUID(userID) {
+		fmt.Printf(" ✓ Valid UUID v%d\n", getUUIDVersion(userID))
+	} else {
+		fmt.Printf(" ✗ Invalid UUID\n")
+	}
 
 	// Display embedded public key
 	embeddedPubKeyBase64 := base64.StdEncoding.EncodeToString(publicKey)
@@ -274,4 +280,43 @@ func validateCertificateSignature(signature, payload []byte, debug bool) {
 	if !validated && len(knownCAKeys) > 0 {
 		fmt.Println("  ✗ Signature validation failed with all known CA keys")
 	}
+}
+
+// formatUUID formats a 16-byte UUID into standard hyphenated format
+func formatUUID(uuid []byte) string {
+	if len(uuid) != 16 {
+		return fmt.Sprintf("%x", uuid)
+	}
+	return fmt.Sprintf("%x-%x-%x-%x-%x",
+		uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:16])
+}
+
+// getUUIDVersion extracts the version number from a UUID
+func getUUIDVersion(uuid []byte) int {
+	if len(uuid) != 16 {
+		return 0
+	}
+	// Version is in the high nibble of byte 6
+	return int(uuid[6] >> 4)
+}
+
+// validateUUID validates that the byte array is a valid UUID
+func validateUUID(uuid []byte) bool {
+	if len(uuid) != 16 {
+		return false
+	}
+
+	// Check version field (byte 6, high nibble should be 1-5)
+	version := uuid[6] >> 4
+	if version < 1 || version > 5 {
+		return false
+	}
+
+	// Check variant field (byte 8, high 2 bits should be 10)
+	variant := uuid[8] >> 6
+	if variant != 0b10 {
+		return false
+	}
+
+	return true
 }
