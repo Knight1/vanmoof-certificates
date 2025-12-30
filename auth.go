@@ -46,7 +46,7 @@ func getApplicationToken(authToken string, debug bool) (string, error) {
 	return appTokenResp.Token, nil
 }
 
-func getCustomerData(authToken string, debug bool) ([]BikeData, error) {
+func getCustomerData(authToken string, debug bool) (string, []BikeData, error) {
 	headers := map[string]string{
 		"Authorization": "Bearer " + authToken,
 		"Api-Key":       ApiKey,
@@ -55,13 +55,13 @@ func getCustomerData(authToken string, debug bool) ([]BikeData, error) {
 
 	body, err := doHTTPRequest("GET", "https://my.vanmoof.com/api/v8/getCustomerData?includeBikeDetails", nil, headers, debug)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
 	var customerData CustomerData
 	if err := json.Unmarshal(body, &customerData); err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
-	return customerData.Data.Bikes, nil
+	return customerData.Data.UUID, customerData.Data.Bikes, nil
 }

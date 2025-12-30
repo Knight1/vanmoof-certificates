@@ -20,6 +20,7 @@ type BikeData struct {
 
 type CustomerData struct {
 	Data struct {
+		UUID  string     `json:"uuid"`
 		Bikes []BikeData `json:"bikes"`
 	} `json:"data"`
 }

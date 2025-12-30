@@ -21,7 +21,7 @@ type CertificatePayload struct {
 	Extra     map[string]interface{} `cbor:",inline"`
 }
 
-func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
+func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID string, debug bool) {
 
 	// Check if certificate is empty
 	if certStr == "" {
@@ -177,6 +177,27 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
 			fmt.Println("✓ Success: Public Key matches the Certificate signature.")
 		} else {
 			fmt.Println("✗ Warning: Key mismatch detected.")
+		}
+	}
+
+	if expectedUserID != "" {
+		fmt.Println("\n--- User ID Verification ---")
+		// Convert certificate user ID from bytes to UUID format
+		certUserID := fmt.Sprintf("%x", userID)
+		// Remove hyphens from expected UUID for comparison
+		expectedUserIDClean := ""
+		for _, c := range expectedUserID {
+			if c != '-' {
+				expectedUserIDClean += string(c)
+			}
+		}
+
+		if certUserID == expectedUserIDClean {
+			fmt.Printf("✓ User ID Verified: %s\n", expectedUserID)
+		} else {
+			fmt.Printf("✗ User ID mismatch\n")
+			fmt.Printf("  Expected: %s\n", expectedUserID)
+			fmt.Printf("  Certificate: %s\n", certUserID)
 		}
 	}
 }

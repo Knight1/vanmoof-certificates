@@ -31,9 +31,13 @@ func getCert(email, password, bikeFilter string, debug bool) error {
 	}
 
 	// Step 3: Get customer data (bikes)
-	bikes, err := getCustomerData(authToken, debug)
+	customerUUID, bikes, err := getCustomerData(authToken, debug)
 	if err != nil {
 		return fmt.Errorf("failed to get customer data: %w", err)
+	}
+
+	if debug {
+		fmt.Printf("[DEBUG] Customer UUID: %s\n", customerUUID)
 	}
 
 	if debug {
@@ -105,7 +109,7 @@ func getCert(email, password, bikeFilter string, debug bool) error {
 		// Parse the certificate
 		if cert, ok := respData["certificate"].(string); ok {
 			fmt.Println("Parsing certificate...")
-			processCertificate(cert, pubKeyB64, fmt.Sprintf("%d", bike.BikeID), debug)
+			processCertificate(cert, pubKeyB64, fmt.Sprintf("%d", bike.BikeID), customerUUID, debug)
 		}
 	}
 	return nil
