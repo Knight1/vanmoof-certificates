@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func processCertificate(certStr, expectedPubKeyStr, bikeID string) {
+func processCertificate(certStr, expectedPubKeyStr, bikeID string, debug bool) {
 
 	// Check if certificate is empty
 	if certStr == "" {
@@ -26,6 +26,9 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID string) {
 	}
 
 	fmt.Printf("Total Certificate Length: %d bytes\n", len(certData))
+	if debug {
+		fmt.Printf("Decoded Certificate (hex): %x\n", certData)
+	}
 
 	// Check if certificate has minimum length
 	if len(certData) < 134 {

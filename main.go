@@ -63,5 +63,5 @@ func main() {
 		return
 	}
 
-	processCertificate(*cert, *pubkey, *bikeid)
+	processCertificate(*cert, *pubkey, *bikeid, *debug)
 }
