@@ -17,9 +17,9 @@ PRs welcome!
 
 ## Installation
 
-\`\`\`bash
+```console
 go build
-\`\`\`
+```
 
 ## Usage
 
@@ -27,9 +27,9 @@ go build
 
 Run without any flags to be prompted for credentials:
 
-\`\`\`bash
+```console
 ./vanmoof-certificates
-\`\`\`
+```
 
 This will:
 1. Prompt for your VanMoof email
@@ -40,26 +40,26 @@ This will:
 
 Provide credentials via flags:
 
-\`\`\`bash
+```console
 ./vanmoof-certificates -email user@example.com -password yourpassword
-\`\`\`
+```
 
 ### Select Specific Bikes
 
 **Process all bikes (default):**
-\`\`\`bash
+```console
 ./vanmoof-certificates -email user@example.com -password yourpassword -bikes all
-\`\`\`
+```
 
 **Process specific bikes by ID:**
-\`\`\`bash
+```console
 ./vanmoof-certificates -email user@example.com -password yourpassword -bikes 176393,138884
-\`\`\`
+```
 
 **Interactive bike selection:**
-\`\`\`bash
+```console
 ./vanmoof-certificates -email user@example.com -password yourpassword -bikes ask
-\`\`\`
+```
 
 This will display your SA5 bikes and prompt you to select which ones to process.
 
@@ -67,27 +67,27 @@ This will display your SA5 bikes and prompt you to select which ones to process.
 
 Enable debug output to see detailed API requests and responses:
 
-\`\`\`bash
+```console
 ./vanmoof-certificates -email user@example.com -debug
-\`\`\`
+```
 
 ### Parse Existing Certificate
 
 Parse a certificate without fetching from API:
 
-\`\`\`bash
+```console
 ./vanmoof-certificates -cert "BASE64_CERTIFICATE_STRING"
-\`\`\`
+```
 
 With optional public key verification:
 
-\`\`\`bash
+```console
 ./vanmoof-certificates -cert "BASE64_CERT" -pubkey "BASE64_PUBKEY" -bikeid "BIKE_ID"
-\`\`\`
+```
 
 ## Example Output
 
-\`\`\`
+```
 Privkey = ✂️
 Pubkey = Yd2bYMB3+vs4cCnDtPbcaM164KIl2zs05AK2jt/K6Gs=
 
@@ -106,20 +106,20 @@ Total Certificate Length: 166 bytes
 Embedded Public Key (Base64): Yd2bYMB3+vs4cCnDtPbcaM164KIl2zs05AK2jt/K6Gs=
 AFM (Authorized Frame Module): ✂️
 ...
-\`\`\`
+```
 
 ## Flags
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| \`-email\` | VanMoof email address | Prompt if not provided |
-| \`-password\` | VanMoof password | Prompt if not provided |
-| \`-bikes\` | Bikes to process: 'all', IDs (comma-separated), or 'ask' | \`all\` |
-| \`-debug\` | Enable debug output | \`false\` |
-| \`-cert\` | Base64 encoded certificate to parse | - |
-| \`-pubkey\` | Base64 encoded public key (optional) | - |
-| \`-bikeid\` | Bike ID for verification (optional) | - |
-| \`-version\` | Print version information | - |
+| `-email` | VanMoof email address | Prompt if not provided |
+| `-password` | VanMoof password | Prompt if not provided |
+| `-bikes` | Bikes to process: 'all', IDs (comma-separated), or 'ask' | `all` |
+| `-debug` | Enable debug output | \`false\` |
+| `-cert` | Base64 encoded certificate to parse | - |
+| `-pubkey` | Base64 encoded public key (optional) | - |
+| `-bikeid` | Bike ID for verification (optional) | - |
+| `-version` | Print version information | - |
 
 ## Requirements
 
