@@ -109,7 +109,7 @@ func getCert(email, password, bikeFilter string, debug bool) error {
 		// Parse the certificate
 		if cert, ok := respData["certificate"].(string); ok {
 			fmt.Println("Parsing certificate...")
-			processCertificate(cert, pubKeyB64, fmt.Sprintf("%d", bike.BikeID), customerUUID, debug)
+			processCertificate(cert, pubKeyB64, fmt.Sprintf("%d", bike.BikeID), customerUUID, bikes, debug)
 		}
 	}
 	return nil

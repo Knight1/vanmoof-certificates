@@ -216,14 +216,14 @@ The payload uses CBOR (Concise Binary Object Representation, RFC 8949) encoding:
   "SVTBKLdddddLL"       # Bike serial
   
   0x61 0x65             # Text string "e"
-  0x1a 0x69 0x5c 0x7b 0x4e  # uint32: 1767668550
+  0x1a 0x69 0x5c 0x7b 0x46  # uint32: 1767668550
   
   0x61 0x72             # Text string "r"
   0x07                  # uint: 7
   
   0x61 0x75             # Text string "u"
   0x50                  # Byte string, 16 bytes
-  [16 bytes: user UUID]
+  [16 bytes: user UUIDv3]
   
   0x61 0x70             # Text string "p"
   0x58 0x20             # Byte string, 32 bytes

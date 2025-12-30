@@ -24,7 +24,7 @@ type CertificatePayload struct {
 	Extra     map[string]interface{} `cbor:",inline"`
 }
 
-func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID string, debug bool) {
+func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID string, bikes []BikeData, debug bool) {
 
 	// Check if certificate is empty
 	if certStr == "" {
@@ -131,24 +131,84 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 	}
 
 	// Display parsed fields
-	fmt.Printf("Bike API ID: %d\n", apiID)
+	fmt.Printf("Bike API ID: %d", apiID)
+
+	// Check if API ID matches any bike from API
+	apiIDValid := false
+	if len(bikes) > 0 {
+		for _, bike := range bikes {
+			if bike.BikeID == int(apiID) {
+				apiIDValid = true
+				break
+			}
+		}
+		if apiIDValid {
+			fmt.Printf(" ✓ Matches API bike\n")
+		} else {
+			fmt.Printf(" ⚠ Not found in API bikes\n")
+		}
+	} else {
+		fmt.Println()
+	}
 
 	// Display and validate Frame Module serial
 	frameIDStr := string(frameID)
 	fmt.Printf("AFM (Authorized Frame Module): %s", frameIDStr)
-	if validateFrameNumber(frameIDStr) {
-		fmt.Printf(" ✓ Valid\n")
-	} else if frameIDStr != "" {
-		fmt.Printf(" ✗ Invalid format\n")
+
+	// Check if frame module serial matches API bikes
+	frameModuleValid := false
+	if frameIDStr != "" {
+		if validateFrameNumber(frameIDStr) {
+			if len(bikes) > 0 {
+				for _, bike := range bikes {
+					if bike.FrameNumber == frameIDStr || bike.FrameSerial == frameIDStr {
+						frameModuleValid = true
+						break
+					}
+				}
+				if frameModuleValid {
+					fmt.Printf(" ✓ Valid (matches API bike)\n")
+				} else {
+					fmt.Printf(" ✓ Valid format, ⚠ not found in API bikes\n")
+				}
+			} else {
+				fmt.Printf(" ✓ Valid format\n")
+			}
+		} else {
+			fmt.Printf(" ✗ Invalid format\n")
+		}
+	} else {
+		fmt.Println()
 	}
 
 	// Display and validate Bike Module serial
 	bikeIDStr := string(bikeIDBytes)
 	fmt.Printf("ABM (Authorized Bike Module): %s", bikeIDStr)
-	if validateFrameNumber(bikeIDStr) {
-		fmt.Printf(" ✓ Valid\n")
-	} else if bikeIDStr != "" {
-		fmt.Printf(" ✗ Invalid format\n")
+
+	// Check if bike module serial matches API bikes
+	bikeModuleValid := false
+	if bikeIDStr != "" {
+		if validateFrameNumber(bikeIDStr) {
+			if len(bikes) > 0 {
+				for _, bike := range bikes {
+					if bike.FrameNumber == bikeIDStr || bike.FrameSerial == bikeIDStr || bike.MainEcuSerial == bikeIDStr {
+						bikeModuleValid = true
+						break
+					}
+				}
+				if bikeModuleValid {
+					fmt.Printf(" ✓ Valid (matches API bike)\n")
+				} else {
+					fmt.Printf(" ✓ Valid format, ⚠ not found in API bikes\n")
+				}
+			} else {
+				fmt.Printf(" ✓ Valid format\n")
+			}
+		} else {
+			fmt.Printf(" ✗ Invalid format\n")
+		}
+	} else {
+		fmt.Println()
 	}
 
 	// Convert and display expiry timestamp
