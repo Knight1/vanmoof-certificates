@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/ed25519"
 	"encoding/base64"
 	"flag"
 	"fmt"
@@ -41,8 +42,8 @@ func main() {
 
 	// Validate pubkey if provided
 	if *pubkey != "" {
-		if !isValidBase64(*pubkey) {
-			fmt.Println("Error: Invalid base64 public key string")
+		if !isValidEd25519PublicKey(*pubkey) {
+			fmt.Println("Error: Invalid Ed25519 public key. Must be base64-encoded 32 or 33 bytes")
 			return
 		}
 	}
@@ -163,4 +164,33 @@ func isValidBikeID(bikeID string) bool {
 	}
 
 	return matched
+}
+
+// isValidEd25519PublicKey validates an Ed25519 public key
+func isValidEd25519PublicKey(pubkey string) bool {
+	pubkey = strings.TrimSpace(pubkey)
+	if pubkey == "" {
+		return false
+	}
+
+	// Decode base64
+	decoded, err := base64.StdEncoding.DecodeString(pubkey)
+	if err != nil {
+		return false
+	}
+
+	// Ed25519 public keys are 32 bytes
+	// Some implementations prefix with a 0x00 byte, making it 33 bytes
+	if len(decoded) != ed25519.PublicKeySize && len(decoded) != ed25519.PublicKeySize+1 {
+		return false
+	}
+
+	// If 33 bytes, check the first byte is 0x00
+	if len(decoded) == ed25519.PublicKeySize+1 {
+		if decoded[0] != 0x00 {
+			return false
+		}
+	}
+
+	return true
 }
