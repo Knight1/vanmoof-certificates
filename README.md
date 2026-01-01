@@ -85,9 +85,25 @@ With optional public key verification:
 ./vanmoof-certificates -cert "BASE64_CERT" -pubkey "BASE64_PUBKEY" -bikeid "BIKE_ID"
 ```
 
+### Generate Ed25519 Key Pair
+
+Generate a new Ed25519 key pair and exit (useful for creating keys to reuse):
+
+```console
+./vanmoof-certificates -genkey
+```
+
+This will output:
+```
+Privkey = <base64-encoded-private-key>
+Pubkey = <base64-encoded-public-key>
+```
+
+You can then use the public key when requesting certificates from the API by providing it via the tool, and save both keys for later use.
+
 ### Manually Generate Ed25519 Key Pair
 
-If you want to use the same unlock key every time you request a new Certificate you need to generate your own Ed25519 key pair instead of using the tool's automatic generation. You can use one of these methods:
+If you want to use the same unlock key every time you request a new Certificate you need to generate your own Ed25519 key pair instead of using the tool's automatic generation. The easiest method is to use the `-genkey` flag (see above), or you can use one of these alternative methods:
 
 **Using OpenSSL:**
 ```console
@@ -150,6 +166,7 @@ AFM (Authorized Frame Module): ✂️
 | `-cert` | Base64 encoded certificate to parse | - |
 | `-pubkey` | Base64 encoded public key (optional) | - |
 | `-bikeid` | Bike ID for verification (optional) | - |
+| `-genkey` | Generate Ed25519 key pair and exit | - |
 | `-version` | Print version information | - |
 
 ## Requirements

@@ -17,6 +17,7 @@ import (
 
 func main() {
 	version := flag.Bool("version", false, "Print version information")
+	genkey := flag.Bool("genkey", false, "Generate Ed25519 key pair and exit")
 	cert := flag.String("cert", "", "Base64 encoded certificate string")
 	pubkey := flag.String("pubkey", "", "Base64 encoded public key string (optional)")
 	bikeid := flag.String("bikeid", "", "Bike ID to verify (optional)")
@@ -29,6 +30,17 @@ func main() {
 	if *version {
 		fmt.Println("vanmoof-certificates version", Version)
 		fmt.Printf("OS: %s, Arch: %s, Go: %s, CPUs: %d, Compiler: %s\n", runtime.GOOS, runtime.GOARCH, runtime.Version(), runtime.NumCPU(), runtime.Compiler)
+		return
+	}
+
+	if *genkey {
+		privKeyB64, pubKeyB64, err := generateED25519()
+		if err != nil {
+			fmt.Printf("Error generating key pair: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Privkey = %s\n", privKeyB64)
+		fmt.Printf("Pubkey = %s\n", pubKeyB64)
 		return
 	}
 
