@@ -85,6 +85,37 @@ With optional public key verification:
 ./vanmoof-certificates -cert "BASE64_CERT" -pubkey "BASE64_PUBKEY" -bikeid "BIKE_ID"
 ```
 
+### Manually Generate Ed25519 Key Pair
+
+If you want to use the same unlock key every time you request a new Certificate you need to generate your own Ed25519 key pair instead of using the tool's automatic generation. You can use one of these methods:
+
+**Using OpenSSL:**
+```console
+# Generate private key
+openssl genpkey -algorithm ED25519 -out private.pem
+
+# Extract public key
+openssl pkey -in private.pem -pubout -out public.pem
+
+# For private key (64 bytes total):
+# The last 64 bytes of the DER format contain: 32-byte seed + 32-byte public key
+openssl pkey -in private.pem -traditional -outform DER 2>/dev/null | tail -c 64 | base64
+
+# For public key (32 bytes):
+# Extract the raw 32-byte public key from DER format
+openssl pkey -in public.pem -pubin -outform DER | tail -c 32 | base64
+```
+
+**Key Format (as used in crypto.go):**
+- **Private key**: 64 bytes in base64 encoding (Ed25519 seed concatenated with public key)
+- **Public key**: 32 bytes in base64 encoding (raw Ed25519 public key)
+- **Encoding**: Standard base64 (`base64.StdEncoding` in Go)
+- **No additional prefixes**: Unlike some implementations, this uses raw keys without metadata
+
+**Important Notes:**
+- Some implementations may prefix the public key with 0x00 (33 bytes total) - this is also accepted
+- The private key from `ed25519.GenerateKey()` is 64 bytes: 32-byte seed + 32-byte public key
+
 ## Example Output
 
 ```
