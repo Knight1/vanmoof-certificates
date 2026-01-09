@@ -37,7 +37,7 @@ func createCertificate(bikeID, pubKey, appToken string, debug bool) (string, err
 		"Content-Type":  "application/json",
 	}
 
-	url := fmt.Sprintf("https://bikeapi.production.vanmoof.cloud/bikes/%s/create_certificate", bikeID)
+	url := fmt.Sprintf(BikeApiBaseURL+"/bikes/%s/create_certificate", bikeID)
 	body, err := doHTTPRequest("POST", url, bytes.NewBuffer(reqBody), headers, debug)
 	if err != nil {
 		return "", err

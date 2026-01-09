@@ -8,6 +8,9 @@ const (
 	// SA5 (S5/A5) frame number pattern: 6 letters + 5 digits + 2 letters
 	// I doubt SA6 is different so for now lets use it for both bikes.
 	FrameNumberPattern = `^[A-Z]{6}\d{5}[A-Z]{2}$`
+
+	ApiBaseURL     = "https://api.vanmoof-api.com/v8"
+	BikeApiBaseURL = "https://bikeapi.production.vanmoof.cloud"
 )
 
 var SupportedBleProfiles = []string{
