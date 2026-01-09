@@ -1,10 +1,12 @@
 # vanmoof-certificates
 
-A Go tool to fetch and parse VanMoof SA5 and SA6 bike certificates. This tool authenticates with VanMoof's API, retrieves your bikes, generates Ed25519 key pairs, and creates certificates for your SA5 or later bikes. Currently this is the SA5 and SA6 bikes. So to list it S5, A5, S6, A6. SA6 is currently not implemented since I do not have one to test and I don't know the bleProfile Name.  
+A Go tool to fetch and parse VanMoof SA5 and Series 6 bike certificates.  
+This tool authenticates with VanMoof's API, retrieves your bikes, generates Ed25519 key pairs, and creates certificates for your SA5 or later bikes.  
+Currently this is the SA5 and SA6 bikes. So to list it S5, A5, Series 6, Series 6 Open.    
 
 If the RegEx does not match your Bikes Framenumber, open a PR, Issue or contact me.  
-If you have an SA6 and you want to invite me as a guest, just contact me :)  
-PRs welcome!
+If you have a Series 6 (Open) and you want to invite me as a guest, just contact me :)  
+Pull Requests are welcome! ❤️
 
 ## Features
 
@@ -18,7 +20,7 @@ PRs welcome!
 ## Installation
 
 ```console
-go build
+go build -ldflags "-w -d"
 ```
 
 ## Usage
