@@ -9,3 +9,9 @@ const (
 	// I doubt SA6 is different so for now lets use it for both bikes.
 	FrameNumberPattern = `^[A-Z]{6}\d{5}[A-Z]{2}$`
 )
+
+var SupportedBleProfiles = []string{
+	"ELECTRIFIED_2022",
+	"ELECTRIFIED_2023_TRACK_1",
+	"ELECTRIFIED_2025",
+}

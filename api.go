@@ -47,8 +47,11 @@ func getCert(email, password, bikeFilter string, debug bool) error {
 	// Filter for SA5 bikes only
 	var sa5Bikes []BikeData
 	for _, bike := range bikes {
-		if bike.BleProfile == "ELECTRIFIED_2022" {
-			sa5Bikes = append(sa5Bikes, bike)
+		for _, profile := range SupportedBleProfiles {
+			if bike.BleProfile == profile {
+				sa5Bikes = append(sa5Bikes, bike)
+				break
+			}
 		}
 	}
 
