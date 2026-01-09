@@ -17,7 +17,7 @@ func authenticate(email, password string, debug bool) (string, error) {
 		"User-Agent":    UserAgent,
 	}
 
-	body, err := doHTTPRequest("POST", "https://my.vanmoof.com/api/v8/authenticate", nil, headers, debug)
+	body, err := doHTTPRequest("POST", "https://api.vanmoof-api.com/v8/authenticate", nil, headers, debug)
 	if err != nil {
 		return "", err
 	}
@@ -95,7 +95,7 @@ func getCustomerData(authToken string, debug bool) (string, []BikeData, error) {
 		"User-Agent":    UserAgent,
 	}
 
-	body, err := doHTTPRequest("GET", "https://my.vanmoof.com/api/v8/getCustomerData?includeBikeDetails", nil, headers, debug)
+	body, err := doHTTPRequest("GET", "https://api.vanmoof-api.com/v8/getCustomerData?includeBikeDetails", nil, headers, debug)
 	if err != nil {
 		return "", nil, err
 	}
