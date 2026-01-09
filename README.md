@@ -20,6 +20,10 @@ Pull Requests are welcome! ❤️
 ## Usage & Installation
 See [USAGE.md](USAGE.md)
 
+## Certificate Structure
+
+VanMoof bike certificates use a binary format consisting of an Ed25519 signature followed by a CBOR-encoded payload.
+
 **Key Format (as used in crypto.go):**
 - **Private key**: 64 bytes in base64 encoding (Ed25519 seed concatenated with public key)
 - **Public key**: 32 bytes in base64 encoding (raw Ed25519 public key)
@@ -29,52 +33,6 @@ See [USAGE.md](USAGE.md)
 **Important Notes:**
 - Some implementations may prefix the public key with 0x00 (33 bytes total) - this is also accepted
 - The private key from `ed25519.GenerateKey()` is 64 bytes: 32-byte seed + 32-byte public key
-
-## Example Output
-
-```
-Privkey = ✂️
-Pubkey = Yd2bYMB3+vs4cCnDtPbcaM164KIl2zs05AK2jt/K6Gs=
-
-Bike ID: 1337
-Frame number: ^[A-Z]{6}\d{5}[A-Z]{2}$
-Bike is an SA5
-Certificate:
------------
-{"certificate":"BASE64_ENCODED_CERTIFICATE"}
------------
-
-Parsing certificate...
-Total Certificate Length: 166 bytes
-
---- Extracted from Certificate ---
-Embedded Public Key (Base64): Yd2bYMB3+vs4cCnDtPbcaM164KIl2zs05AK2jt/K6Gs=
-AFM (Authorized Frame Module): ✂️
-...
-```
-
-## Flags
-
-| Flag | Description | Default |
-|------|-------------|---------|
-| `-email` | VanMoof email address | Prompt if not provided |
-| `-password` | VanMoof password | Prompt if not provided |
-| `-bikes` | Bikes to process: 'all', IDs (comma-separated), or 'ask' | `all` |
-| `-debug` | Enable debug output | `false` |
-| `-cert` | Base64 encoded certificate to parse | - |
-| `-pubkey` | Base64 encoded public key (optional) | - |
-| `-bikeid` | Bike ID for verification (optional) | - |
-| `-genkey` | Generate Ed25519 key pair and exit | - |
-| `-version` | Print version information | - |
-
-## Requirements
-
-- Go 1.24 or later
-- VanMoof account with registered SA5 or later bike(s)
-
-## Certificate Structure
-
-VanMoof bike certificates use a binary format consisting of an Ed25519 signature followed by a CBOR-encoded payload.
 
 ### Overall Format
 

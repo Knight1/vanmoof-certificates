@@ -6,6 +6,48 @@
 go build -ldflags "-w -d"
 ```
 
+## Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-email` | VanMoof email address | Prompt if not provided |
+| `-password` | VanMoof password | Prompt if not provided |
+| `-bikes` | Bikes to process: 'all', IDs (comma-separated), or 'ask' | `all` |
+| `-debug` | Enable debug output | `false` |
+| `-cert` | Base64 encoded certificate to parse | - |
+| `-pubkey` | Base64 encoded public key (optional) | - |
+| `-bikeid` | Bike ID for verification (optional) | - |
+| `-genkey` | Generate Ed25519 key pair and exit | - |
+| `-version` | Print version information | - |
+
+## Requirements
+
+- Go 1.24 or later
+- VanMoof account with registered SA5 or later bike(s)
+
+## Example Output
+
+```
+Privkey = ✂️
+Pubkey = Yd2bYMB3+vs4cCnDtPbcaM164KIl2zs05AK2jt/K6Gs=
+
+Bike ID: 1337
+Frame number: ^[A-Z]{6}\d{5}[A-Z]{2}$
+Bike is an SA5
+Certificate:
+-----------
+{"certificate":"BASE64_ENCODED_CERTIFICATE"}
+-----------
+
+Parsing certificate...
+Total Certificate Length: 166 bytes
+
+--- Extracted from Certificate ---
+Embedded Public Key (Base64): Yd2bYMB3+vs4cCnDtPbcaM164KIl2zs05AK2jt/K6Gs=
+AFM (Authorized Frame Module): ✂️
+...
+```
+
 ## Usage
 
 ### Interactive Mode
