@@ -2,13 +2,9 @@ package main
 
 import (
 	"bufio"
-	"crypto/ed25519"
-	"encoding/base64"
 	"flag"
 	"fmt"
-	"net/mail"
 	"os"
-	"regexp"
 	"runtime"
 	"strings"
 
@@ -134,75 +130,4 @@ func main() {
 	}
 
 	processCertificate(*cert, *pubkey, *bikeid, "", nil, *debug)
-}
-
-// isValidEmail validates an email address
-func isValidEmail(email string) bool {
-	email = strings.TrimSpace(email)
-	if email == "" {
-		return false
-	}
-	_, err := mail.ParseAddress(email)
-	return err == nil
-}
-
-// isValidBase64 validates a base64 string
-func isValidBase64(s string) bool {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return false
-	}
-	_, err := base64.StdEncoding.DecodeString(s)
-	return err == nil
-}
-
-// isValidBikeID validates a bike ID (numeric or frame number)
-func isValidBikeID(bikeID string) bool {
-	bikeID = strings.TrimSpace(bikeID)
-	if bikeID == "" {
-		return false
-	}
-
-	// Check if it's a numeric ID
-	var numericID uint32
-	if _, err := fmt.Sscanf(bikeID, "%d", &numericID); err == nil {
-		return true
-	}
-
-	// Check if it's a valid frame number pattern
-	matched, err := regexp.MatchString(FrameNumberPattern, bikeID)
-	if err != nil {
-		return false
-	}
-
-	return matched
-}
-
-// isValidEd25519PublicKey validates an Ed25519 public key
-func isValidEd25519PublicKey(pubkey string) bool {
-	pubkey = strings.TrimSpace(pubkey)
-	if pubkey == "" {
-		return false
-	}
-
-	// Decode base64
-	decoded, err := base64.StdEncoding.DecodeString(pubkey)
-	if err != nil {
-		return false
-	}
-
-	// Ed25519 public keys are 32 bytes
-	// Some implementations prefix with a 0x00 byte, making it 33 bytes
-	if len(decoded) != ed25519.PublicKeySize && len(decoded) != ed25519.PublicKeySize+1 {
-		return false
-	}
-
-	// If 33 bytes, check the first byte is 0x00
-	if len(decoded) == ed25519.PublicKeySize+1 {
-		if decoded[0] != 0x00 {
-			return false
-		}
-	}
-
-	return true
 }

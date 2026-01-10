@@ -2,11 +2,8 @@ package main
 
 import (
 	"bytes"
-	"crypto/ed25519"
 	"encoding/base64"
-	"encoding/hex"
 	"fmt"
-	"regexp"
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
@@ -487,51 +484,6 @@ func getRoleDescription(role uint8) string {
 	}
 }
 
-// validateCertificateSignature attempts to validate the Ed25519 signature
-func validateCertificateSignature(signature, payload []byte, debug bool) {
-	// Known VanMoof CA public keys = none
-
-	knownCAKeys := []string{
-		// Add known VanMoof CA public keys here when discovered
-		// Format: hex-encoded 32-byte Ed25519 public key
-	}
-
-	if !debug {
-		return // Only show in debug mode
-	}
-
-	fmt.Println("\n[DEBUG] Signature Validation:")
-
-	if len(knownCAKeys) == 0 {
-		fmt.Println("  ⚠ No VanMoof CA public keys available for validation")
-		fmt.Println("  The signature appears to be a valid Ed25519 signature (64 bytes)")
-		fmt.Println("  To validate, we would need VanMoof's Certificate Authority public key")
-		return
-	}
-
-	// Try each known CA public key
-	validated := false
-	for i, keyHex := range knownCAKeys {
-		pubKeyBytes, err := hex.DecodeString(keyHex)
-		if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
-			fmt.Printf("  ✗ CA key %d: Invalid format\n", i+1)
-			continue
-		}
-
-		pubKey := ed25519.PublicKey(pubKeyBytes)
-		if ed25519.Verify(pubKey, payload, signature) {
-			fmt.Printf("  ✓ Signature VALID with CA key %d\n", i+1)
-			fmt.Printf("    CA Public Key: %x\n", pubKeyBytes)
-			validated = true
-			break
-		}
-	}
-
-	if !validated && len(knownCAKeys) > 0 {
-		fmt.Println("  ✗ Signature validation failed with all known CA keys")
-	}
-}
-
 // formatUUID formats a 16-byte UUID into standard hyphenated format
 func formatUUID(uuid []byte) string {
 	if len(uuid) != 16 {
@@ -548,40 +500,4 @@ func getUUIDVersion(uuid []byte) int {
 	}
 	// Version is in the high nibble of byte 6
 	return int(uuid[6] >> 4)
-}
-
-// validateUUID validates that the byte array is a valid UUID
-func validateUUID(uuid []byte) bool {
-	if len(uuid) != 16 {
-		return false
-	}
-
-	// Check version field (byte 6, high nibble should be 1-5)
-	version := uuid[6] >> 4
-	if version < 1 || version > 5 {
-		return false
-	}
-
-	// Check variant field (byte 8, high 2 bits should be 10)
-	variant := uuid[8] >> 6
-	return variant == 0b10
-}
-
-// validateFrameNumber validates a frame number against a pattern
-func validateFrameNumber(frameNumber string) bool {
-	if frameNumber == "" {
-		return false
-	}
-
-	// Check against pattern
-	matched, err := regexp.MatchString(FrameNumberPattern, frameNumber)
-	if err != nil {
-		return false
-	}
-
-	if matched {
-		return true
-	}
-
-	return false
 }
