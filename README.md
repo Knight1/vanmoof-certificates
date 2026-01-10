@@ -79,12 +79,12 @@ The `r` (role) field determines what permissions the certificate grants:
 
 The certificate cryptographically binds together:
 
-1. **Specific Bike**: Via frame/bike module serials (`f`, `b`)
+1. **Specific Bike**: frame/bike module serials (`f`, `b`)
 2. **Certificate ID**: The `i` field varies per certificate
-3. **Specific User**: Via user UUID (`u`)
-4. **Specific Public Key**: Via user's Ed25519 public key (`p`)
-5. **Access Level**: Via role field (`r`)
-6. **Validity Period**: Via expiry timestamp (`e`)
+3. **Specific User**: API user UUID (`u`)
+4. **Specific Public Key**: user's Ed25519 public key (`p`)
+5. **Access Level**: Vrole field (`r`)
+6. **Validity Period**: expiry timestamp (`e`)
 
 When a bike validates a certificate, it verifies:
 - The Ed25519 signature is valid (signed by VanMoof CA)
