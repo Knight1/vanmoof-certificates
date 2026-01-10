@@ -10,7 +10,6 @@ func authenticate(email, password string, debug bool) (string, error) {
 	headers := map[string]string{
 		"Authorization": "Basic " + basicAuth,
 		"Api-Key":       ApiKey,
-		"User-Agent":    UserAgent,
 	}
 
 	body, err := doHTTPRequest("POST", ApiBaseURL+"/authenticate", nil, headers, debug)
@@ -30,7 +29,6 @@ func getApplicationToken(authToken string, debug bool) (string, error) {
 	headers := map[string]string{
 		"Authorization": "Bearer " + authToken,
 		"Api-Key":       ApiKey,
-		"User-Agent":    UserAgent,
 	}
 
 	body, err := doHTTPRequest("GET", ApiBaseURL+"/getApplicationToken", nil, headers, debug)
@@ -55,7 +53,6 @@ func getCustomerData(authToken string, debug bool) (string, []BikeData, error) {
 	headers := map[string]string{
 		"Authorization": "Bearer " + authToken,
 		"Api-Key":       ApiKey,
-		"User-Agent":    UserAgent,
 	}
 
 	body, err := doHTTPRequest("GET", ApiBaseURL+"/getCustomerData?includeBikeDetails", nil, headers, debug)
