@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 func doHTTPRequest(method, url string, body io.Reader, headers map[string]string, debug bool) ([]byte, error) {
@@ -17,7 +18,9 @@ func doHTTPRequest(method, url string, body io.Reader, headers map[string]string
 		}
 	}
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return nil, err
