@@ -33,7 +33,6 @@ func createCertificate(bikeID, pubKey, appToken string, debug bool) (string, err
 
 	headers := map[string]string{
 		"Authorization": "Bearer " + appToken,
-		"User-Agent":    UserAgent,
 		"Content-Type":  "application/json",
 	}
 
