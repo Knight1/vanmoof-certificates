@@ -11,7 +11,6 @@ go build -ldflags "-w -d"
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-email` | VanMoof email address | Prompt if not provided |
-| `-password` | VanMoof password | Prompt if not provided |
 | `-bikes` | Bikes to process: 'all', IDs (comma-separated), or 'ask' | `all` |
 | `-debug` | Enable debug output | `false` |
 | `-cert` | Base64 encoded certificate to parse | - |
@@ -65,27 +64,27 @@ This will:
 
 ### Command-Line Mode
 
-Provide credentials via flags:
+Provide email via flag (and optionally set `VANMOOF_PASSWORD` environment variable):
 
 ```console
-./vanmoof-certificates -email user@example.com -password yourpassword
+./vanmoof-certificates -email user@example.com
 ```
 
 ### Select Specific Bikes
 
 **Process all bikes (default):**
 ```console
-./vanmoof-certificates -email user@example.com -password yourpassword -bikes all
+./vanmoof-certificates -email user@example.com -bikes all
 ```
 
 **Process specific bikes by ID:**
 ```console
-./vanmoof-certificates -email user@example.com -password yourpassword -bikes 42,1337
+./vanmoof-certificates -email user@example.com -bikes 42,1337
 ```
 
 **Interactive bike selection:**
 ```console
-./vanmoof-certificates -email user@example.com -password yourpassword -bikes ask
+./vanmoof-certificates -email user@example.com -bikes ask
 ```
 
 This will display your SA5 bikes and prompt you to select which ones to process.

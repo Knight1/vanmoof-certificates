@@ -18,7 +18,6 @@ func main() {
 	pubkey := flag.String("pubkey", "", "Base64 encoded public key string (optional)")
 	bikeid := flag.String("bikeid", "", "Bike ID to verify (optional)")
 	email := flag.String("email", "", "VanMoof email address (optional)")
-	password := flag.String("password", "", "VanMoof password (optional)")
 	bikes := flag.String("bikes", "all", "Bikes to fetch certificates for: 'all', bike IDs (comma-separated), or 'ask' to be prompted")
 	debug := flag.Bool("debug", false, "Enable debug output")
 	flag.Parse()
@@ -103,8 +102,8 @@ func main() {
 			return
 		}
 
-		// Get password from flag or prompt
-		passwordInput := *password
+		// Get password from env or prompt
+		passwordInput := os.Getenv("VANMOOF_PASSWORD")
 		if passwordInput == "" {
 			fmt.Print("Enter VanMoof password: ")
 			passwordBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
