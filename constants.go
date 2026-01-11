@@ -1,8 +1,8 @@
 package main
 
 const (
-	ApiKey    = "fcb38d47-f14b-30cf-843b-26283f6a5819"
-	UserAgent = "VanMoof/20 CFNetwork/1404.0.5 Darwin/22.3.0"
+	// API key number 3
+	ApiKey = "fcb38d47-f14b-30cf-843b-26283f6a5819"
 
 	// Frame number validation patterns for different bike models
 	// SA5 (S5/A5) frame number pattern: 6 letters + 5 digits + 2 letters
