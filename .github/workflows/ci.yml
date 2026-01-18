@@ -50,7 +50,7 @@ jobs:
           fi
 
       - name: Build
-        run: go build -v -o vanmoof-certificates .
+        run: go build -mod=vendor -v -o vanmoof-certificates .
 
       - name: Run tests
         run: go test -v -race -coverprofile=coverage.out ./...
