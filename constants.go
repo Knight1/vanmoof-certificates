@@ -5,7 +5,7 @@ const (
 	ApiKey = "fcb38d47-f14b-30cf-843b-26283f6a5819"
 
 	// Frame number validation patterns for different bike models
-	// SA5 (S5/A5) frame number pattern: 6 letters + 5 digits + 2 letters
+	// SA5 (S5/A5) frame number pattern: 1 letter (S for S5 and A for A5) + 4 letters + 5 digits + 2 letters (possibly always OA for the SA5)
 	// I doubt SA6 is different so for now lets use it for both bikes.
 	FrameNumberPattern = `^[A-Z]{6}\d{5}[A-Z]{2}$`
 

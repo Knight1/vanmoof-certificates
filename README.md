@@ -56,8 +56,8 @@ Starting at byte 64, the certificate contains a CBOR-encoded map with the follow
 | Key | Type | Description | Example |
 |-----|------|-------------|---------|
 | `i` | uint32 | Certificate ID | `1337` |
-| `f` | string | Frame Module serial number (AFM - Authorized Frame Module) | `"SVTBKLdddddLL"` |
-| `b` | string | Bike Module serial number (ABM - Authorized Bike Module) | `"SVTBKLdddddLL"` |
+| `f` | string | Frame Module serial number (AFM - Authorized Frame Module) | `"SVTBKLdddddOA"` |
+| `b` | string | Bike Module serial number (ABM - Authorized Bike Module) | `"SVTBKLdddddOA"` |
 | `e` | uint32 | Certificate expiry (Unix timestamp) | `1767668550` |
 | `r` | uint8 | Role/Access level (0-15) | `7` |
 | `u` | bytes[16] | User UUID (without hyphens) | `uuid3` |
@@ -97,8 +97,8 @@ When a bike validates a certificate, it verifies:
 Decoded structure:
 - **Signature**: `...` (64 bytes)
 - **Certificate ID**: `1337`
-- **Frame Module Serial (AFM)**: `SVTBKLdddddLL`
-- **Bike Module Serial (ABM)**: `SVTBKLdddddLL`
+- **Frame Module Serial (AFM)**: `SVTBKLdddddOA`
+- **Bike Module Serial (ABM)**: `SVTBKLdddddOA`
 - **Expiry**: `1767668550` (January 6, 2026 04:02:38 CET)
 - **Role**: `7` (Owner - Full Control)
 - **User UUID**: `1111111-1111-3111-1111-111111111111` (UUIDv3)
@@ -115,11 +115,11 @@ The payload uses CBOR (Concise Binary Object Representation, RFC 8949) encoding:
   
   0x61 0x66             # Text string "f" 
   0x6d                  # Text string, 13 bytes
-  "SVTBKLdddddLL"       # Frame Module serial (AFM)
+  "SVTBKLdddddOA"       # Frame Module serial (AFM)
   
   0x61 0x62             # Text string "b"
   0x6d                  # Text string, 13 bytes  
-  "SVTBKLdddddLL"       # Bike Module serial (ABM)
+  "SVTBKLdddddOA"       # Bike Module serial (ABM)
   
   0x61 0x65             # Text string "e"
   0x1a 0x69 0x5c 0x7b 0x46  # uint32: 1767668550
