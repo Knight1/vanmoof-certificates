@@ -3,6 +3,7 @@
 ## Installation
 
 ```console
+git clone https://github.com/Knight1/vanmoof-ble.git
 go build -mod=vendor -ldflags "-w -d"
 ```
 
@@ -13,6 +14,7 @@ go build -mod=vendor -ldflags "-w -d"
 | `-email` | VanMoof email address | Prompt if not provided |
 | `-bikes` | Bikes to process: 'all', IDs (comma-separated), or 'ask' | `all` |
 | `-debug` | Enable debug output | `false` |
+| `-sudo` | Skip all validation checks | `false` |
 | `-cert` | Base64 encoded certificate to parse | - |
 | `-pubkey` | Base64 encoded public key (optional) | - |
 | `-bikeid` | Bike ID for verification (optional) | - |
