@@ -20,6 +20,7 @@ func main() {
 	email := flag.String("email", "", "VanMoof email address (optional)")
 	bikes := flag.String("bikes", "all", "Bikes to fetch certificates for: 'all', bike IDs (comma-separated), or 'ask' to be prompted")
 	debug := flag.Bool("debug", false, "Enable debug output")
+	sudo := flag.Bool("sudo", false, "Skip all validation checks")
 	flag.Parse()
 
 	if *version {
@@ -41,7 +42,7 @@ func main() {
 
 	// Validate cert if provided
 	if *cert != "" {
-		if !isValidBase64(*cert) {
+		if !*sudo && !isValidBase64(*cert) {
 			fmt.Println("Error: Invalid base64 certificate string")
 			return
 		}
@@ -49,7 +50,7 @@ func main() {
 
 	// Validate pubkey if provided
 	if *pubkey != "" {
-		if !isValidEd25519PublicKey(*pubkey) {
+		if !*sudo && !isValidEd25519PublicKey(*pubkey) {
 			fmt.Println("Error: Invalid Ed25519 public key. Must be base64-encoded 32 or 33 bytes")
 			return
 		}
@@ -57,7 +58,7 @@ func main() {
 
 	// Validate bikeid if provided
 	if *bikeid != "" {
-		if !isValidBikeID(*bikeid) {
+		if !*sudo && !isValidBikeID(*bikeid) {
 			fmt.Printf("Error: Invalid bike ID '%s'. Must be a numeric ID or valid frame number pattern\n", *bikeid)
 			return
 		}
@@ -97,7 +98,7 @@ func main() {
 		}
 
 		// Validate email
-		if !isValidEmail(emailInput) {
+		if !*sudo && !isValidEmail(emailInput) {
 			fmt.Printf("Error: Invalid email address '%s'\n", emailInput)
 			return
 		}
