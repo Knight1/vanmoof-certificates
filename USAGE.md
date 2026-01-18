@@ -3,7 +3,7 @@
 ## Installation
 
 ```console
-go build -ldflags "-w -d"
+go build -mod=vendor -ldflags "-w -d"
 ```
 
 ## Flags
