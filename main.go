@@ -126,7 +126,7 @@ func main() {
 			return
 		}
 
-		if err := getCert(emailInput, passwordInput, *bikes, *debug); err != nil {
+		if err := getCert(emailInput, passwordInput, *bikes, *pubkey, *debug); err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return
 		}

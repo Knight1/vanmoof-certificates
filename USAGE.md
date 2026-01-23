@@ -64,6 +64,7 @@ This will:
 2. Prompt for your password (hidden input)
 3. Fetch all SA5 or later bikes and generate certificates
 
+
 ### Command-Line Mode
 
 Provide email via flag (and optionally set `VANMOOF_PASSWORD` environment variable):
@@ -71,6 +72,16 @@ Provide email via flag (and optionally set `VANMOOF_PASSWORD` environment variab
 ```console
 ./vanmoof-certificates -email user@example.com
 ```
+
+#### Request a certificate with your own public key
+
+If you want to use your own Ed25519 public key (instead of generating a new one), supply it with the `-pubkey` flag:
+
+```console
+./vanmoof-certificates -email user@example.com -pubkey <BASE64_PUBKEY>
+```
+
+This will request a certificate for your bike(s) using the provided public key. No private key will be generated or printed in this mode.
 
 ### Select Specific Bikes
 
@@ -98,6 +109,7 @@ Enable debug output to see detailed API requests and responses:
 ```console
 ./vanmoof-certificates -email user@example.com -debug
 ```
+
 
 ### Parse Existing Certificate
 

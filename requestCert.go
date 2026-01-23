@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-func getCert(email, password, bikeFilter string, debug bool) error {
+func getCert(email, password, bikeFilter, pubkey string, debug bool) error {
 	if debug {
 		fmt.Println("[DEBUG] Starting authentication...")
 	}
@@ -71,15 +71,23 @@ func getCert(email, password, bikeFilter string, debug bool) error {
 		return nil
 	}
 
-	// Generate Ed25519 key pair only when SA5 bikes are found
-	privKeyB64, pubKeyB64, err := generateED25519()
-	if err != nil {
-		return err
-	}
+	var privKeyB64, pubKeyB64 string
 
-	fmt.Printf("Privkey = %s\n", privKeyB64)
-	fmt.Printf("Pubkey = %s\n", pubKeyB64)
-	fmt.Println()
+	if pubkey != "" {
+		pubKeyB64 = pubkey
+		if debug {
+			fmt.Printf("[DEBUG] Using supplied public key for certificate requests: %s\n", pubKeyB64)
+		}
+	} else {
+		var genErr error
+		privKeyB64, pubKeyB64, genErr = generateED25519()
+		if genErr != nil {
+			return genErr
+		}
+		fmt.Printf("Privkey = %s\n", privKeyB64)
+		fmt.Printf("Pubkey = %s\n", pubKeyB64)
+		fmt.Println()
+	}
 
 	// Step 4: Process each selected SA5 bike and create certificate
 	for _, bike := range selectedBikes {
