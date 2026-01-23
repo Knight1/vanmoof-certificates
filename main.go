@@ -23,13 +23,17 @@ func main() {
 	sudo := flag.Bool("sudo", false, "Skip all validation checks")
 	flag.Parse()
 
+	if *debug {
+		fmt.Printf("[DEBUG] Flags: version=%v, genkey=%v, cert='%s', pubkey='%s', bikeid='%s', email='%s', bikes='%s', sudo=%v\n", *version, *genkey, *cert, *pubkey, *bikeid, *email, *bikes, *sudo)
+	}
+
 	if *version {
 		fmt.Println("vanmoof-certificates version", Version)
 		fmt.Printf("OS: %s, Arch: %s, Go: %s, CPUs: %d, Compiler: %s\n", runtime.GOOS, runtime.GOARCH, runtime.Version(), runtime.NumCPU(), runtime.Compiler)
 		return
 	}
 
-	if *genkey {
+	if genkey != nil && *genkey {
 		privKeyB64, pubKeyB64, err := generateED25519()
 		if err != nil {
 			fmt.Printf("Error generating key pair: %v\n", err)
