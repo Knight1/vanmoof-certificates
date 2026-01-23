@@ -11,6 +11,7 @@ const (
 
 	ApiBaseURL     = "https://api.vanmoof-api.com/v8"
 	BikeApiBaseURL = "https://bikeapi.production.vanmoof.cloud"
+	Version        = "1.0.0"
 )
 
 var SupportedBleProfiles = []string{
