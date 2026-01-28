@@ -205,7 +205,7 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 	}
 
 	// Validate role
-	validRoles := []uint8{0x00, 0x01, 0x03, 0x07, 0x0F}
+validRoles := []uint8{0x00, 0x01, 0x03, 0x07, 0x0F, 0x0B}
 	roleValid := false
 	for _, validRole := range validRoles {
 		if role == validRole {
@@ -470,7 +470,9 @@ func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 func getRoleDescription(role uint8) string {
 	switch role {
 	case 0x00:
-		return "Guest (Read-Only Access)"
+		return "Guest"
+case 0x0B:
+	return "Guest"
 	case 0x01:
 		return "Limited Access"
 	case 0x03:
