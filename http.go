@@ -5,8 +5,18 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 )
+
+// parseResetTime parses the x-ratelimit-reset header value (Unix timestamp) into a time.Time
+func parseResetTime(reset string) (time.Time, error) {
+	timestamp, err := strconv.ParseInt(reset, 10, 64)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Unix(timestamp, 0), nil
+}
 
 func doHTTPRequest(method, url string, body io.Reader, headers map[string]string, debug bool) ([]byte, error) {
 	if debug {
@@ -39,6 +49,23 @@ func doHTTPRequest(method, url string, body io.Reader, headers map[string]string
 
 	if debug {
 		fmt.Printf("[DEBUG] Response status: %d\n", resp.StatusCode)
+
+		// Display rate limit headers in human-readable format
+		if limit := resp.Header.Get("x-ratelimit-limit"); limit != "" {
+			fmt.Printf("[DEBUG] Rate Limit: %s requests\n", limit)
+		}
+		if remaining := resp.Header.Get("x-ratelimit-remaining"); remaining != "" {
+			fmt.Printf("[DEBUG] Rate Limit Remaining: %s requests\n", remaining)
+		}
+		if reset := resp.Header.Get("x-ratelimit-reset"); reset != "" {
+			if resetTime, err := parseResetTime(reset); err == nil {
+				fmt.Printf("[DEBUG] Rate Limit Reset: %s (in %s)\n",
+					resetTime.Format("2006-01-02 15:04:05 MST"),
+					time.Until(resetTime).Round(time.Second))
+			} else {
+				fmt.Printf("[DEBUG] Rate Limit Reset: %s\n", reset)
+			}
+		}
 	}
 
 	respBody, err := io.ReadAll(resp.Body)
