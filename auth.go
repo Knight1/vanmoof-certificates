@@ -1,12 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 )
 
-func authenticate(email, password string, debug bool) (string, error) {
+func authenticate(email, password string, debug bool) (string, string, error) {
 	basicAuth := base64.StdEncoding.EncodeToString([]byte(email + ":" + password))
 	headers := map[string]string{
 		"Authorization": "Basic " + basicAuth,
@@ -15,15 +16,39 @@ func authenticate(email, password string, debug bool) (string, error) {
 
 	body, err := doHTTPRequest("POST", ApiBaseURL+"/authenticate", nil, headers, debug)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	var authResp AuthResponse
 	if err := json.Unmarshal(body, &authResp); err != nil {
+		return "", "", err
+	}
+
+	return authResp.Token, authResp.RefreshToken, nil
+}
+
+func refreshAuthToken(refreshToken string, debug bool) (string, error) {
+	reqBody, err := json.Marshal(RefreshTokenRequest{RefreshToken: refreshToken})
+	if err != nil {
 		return "", err
 	}
 
-	return authResp.Token, nil
+	headers := map[string]string{
+		"Api-Key":      ApiKey,
+		"Content-Type": "application/json",
+	}
+
+	body, err := doHTTPRequest("POST", ApiBaseURL+"/token", bytes.NewBuffer(reqBody), headers, debug)
+	if err != nil {
+		return "", err
+	}
+
+	var resp AuthResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", err
+	}
+
+	return resp.Token, nil
 }
 
 func getApplicationToken(authToken string, debug bool) (string, error) {

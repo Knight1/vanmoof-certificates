@@ -3,27 +3,117 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+
+	"golang.org/x/term"
 )
 
-func getCert(email, password, bikeFilter, pubkey string, debug bool) error {
-	if debug {
-		fmt.Println("[DEBUG] Starting authentication...")
+// resolveTokens tries cached tokens first, then falls back to password auth.
+// Returns authToken, appToken, refreshToken.
+func resolveTokens(email, password string, debug, noCache bool) (string, string, string, error) {
+	var cached *CachedTokens
+	if !noCache {
+		cached = loadTokenCache(email, debug)
 	}
 
-	// Step 1: Authenticate
-	authToken, err := authenticate(email, password, debug)
+	if cached != nil {
+		// Try app token first (valid ~2 hours)
+		if !isJWTExpired(cached.AppToken) {
+			if debug {
+				fmt.Println("[DEBUG] Using cached app token")
+			}
+			return cached.AuthToken, cached.AppToken, cached.RefreshToken, nil
+		}
+
+		// App token expired — try auth token (valid ~1 year)
+		if !isJWTExpired(cached.AuthToken) {
+			if debug {
+				fmt.Println("[DEBUG] App token expired, refreshing with cached auth token")
+			}
+			appToken, err := getApplicationToken(cached.AuthToken, debug)
+			if err == nil {
+				if !noCache {
+					saveTokenCache(email, cached.AuthToken, cached.RefreshToken, appToken, debug)
+				}
+				return cached.AuthToken, appToken, cached.RefreshToken, nil
+			}
+			if debug {
+				fmt.Printf("[DEBUG] Failed to get app token with cached auth token: %v\n", err)
+			}
+		}
+
+		// Auth token expired — try refresh token
+		if cached.RefreshToken != "" {
+			if debug {
+				fmt.Println("[DEBUG] Auth token expired, trying refresh token")
+			}
+			authToken, err := refreshAuthToken(cached.RefreshToken, debug)
+			if err == nil {
+				appToken, err := getApplicationToken(authToken, debug)
+				if err == nil {
+					if !noCache {
+						saveTokenCache(email, authToken, cached.RefreshToken, appToken, debug)
+					}
+					return authToken, appToken, cached.RefreshToken, nil
+				}
+				if debug {
+					fmt.Printf("[DEBUG] Failed to get app token after refresh: %v\n", err)
+				}
+			} else if debug {
+				fmt.Printf("[DEBUG] Refresh token failed: %v\n", err)
+			}
+		}
+
+		if debug {
+			fmt.Println("[DEBUG] All cached tokens expired, need password")
+		}
+	}
+
+	// No valid cached tokens — need password
+	if password == "" {
+		password = os.Getenv("VANMOOF_PASSWORD")
+	}
+	if password == "" {
+		fmt.Print("Enter VanMoof password: ")
+		passwordBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+		if err != nil {
+			return "", "", "", fmt.Errorf("error reading password: %w", err)
+		}
+		fmt.Println()
+		password = string(passwordBytes)
+	}
+	if password == "" {
+		return "", "", "", fmt.Errorf("password required")
+	}
+
+	authToken, refreshToken, err := authenticate(email, password, debug)
 	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
+		return "", "", "", err
 	}
 
 	if debug {
 		fmt.Printf("[DEBUG] Auth token received: %s...\n", authToken[:min(20, len(authToken))])
 	}
 
-	// Step 2: Get application token
 	appToken, err := getApplicationToken(authToken, debug)
 	if err != nil {
-		return fmt.Errorf("failed to get app token: %w", err)
+		return "", "", "", err
+	}
+
+	if !noCache {
+		saveTokenCache(email, authToken, refreshToken, appToken, debug)
+	}
+	return authToken, appToken, refreshToken, nil
+}
+
+func getCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
+	if debug {
+		fmt.Println("[DEBUG] Starting authentication...")
+	}
+
+	authToken, appToken, _, err := resolveTokens(email, "", debug, noCache)
+	if err != nil {
+		return fmt.Errorf("authentication failed: %w", err)
 	}
 
 	if debug {
@@ -85,7 +175,7 @@ func getCert(email, password, bikeFilter, pubkey string, debug bool) error {
 		})
 	}
 
-	// Filter for SA5 bikes only
+	// Filter for supported bikes only
 	var sa5Bikes []BikeData
 	for _, bike := range bikes {
 		for _, profile := range SupportedBleProfiles {
@@ -130,7 +220,7 @@ func getCert(email, password, bikeFilter, pubkey string, debug bool) error {
 		fmt.Println()
 	}
 
-	// Step 4: Process each selected SA5 bike and create certificate
+	// Process each selected bike and create certificate
 	for _, bike := range selectedBikes {
 		if bike.BikeID != 0 {
 			fmt.Printf("Bike ID: %d\n", bike.BikeID)

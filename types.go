@@ -4,7 +4,20 @@ import "encoding/json"
 
 // API response types
 type AuthResponse struct {
-	Token string `json:"token"`
+	Token        string `json:"token"`
+	RefreshToken string `json:"refreshToken"`
+}
+
+// Cached tokens stored on disk (keyed by email in the cache file)
+type CachedTokens struct {
+	AuthToken    string `json:"auth_token"`
+	AppToken     string `json:"app_token"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+// Refresh token request body
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refreshToken"`
 }
 
 type AppTokenResponse struct {

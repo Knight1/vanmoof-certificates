@@ -14,6 +14,7 @@ go build -mod=vendor -ldflags "-w -d"
 | `-email` | VanMoof email address | Prompt if not provided |
 | `-bikes` | Bikes to process: 'all', IDs (comma-separated), or 'ask' | `all` |
 | `-debug` | Enable debug output | `false` |
+| `-no-cache` | Do not read or write token cache | `false` |
 | `-sudo` | Skip all validation checks | `false` |
 | `-cert` | Base64 encoded certificate to parse | - |
 | `-pubkey` | Base64 encoded public key (optional) | - |
@@ -56,8 +57,31 @@ Run without any flags to be prompted for credentials:
 
 This will:
 1. Prompt for your VanMoof email
-2. Prompt for your password (hidden input)
+2. Use cached tokens if available, otherwise prompt for your password (hidden input)
 3. Fetch all owned SA5/S6 bikes and shared bikes (guest access) and generate certificates
+
+### Token Caching
+
+Tokens are cached in `~/.vanmoof-certificates/tokens.json` (file permissions `0600`). Multiple accounts are supported — each email's tokens are stored independently. On subsequent runs, the tool will:
+1. Reuse the app token if still valid (~2 hours)
+2. Refresh the app token using the auth token if needed (~1 year validity)
+3. Use the refresh token if the auth token has expired
+4. Only prompt for password if all cached tokens are expired
+
+To encrypt the token cache, set the `VANMOOF_CACHE_KEY` environment variable:
+
+```console
+export VANMOOF_CACHE_KEY="your-secret-passphrase"
+./vanmoof-certificates -email user@vanmoof.com
+```
+
+This encrypts the cache file with AES-256-GCM (PBKDF2-SHA256 key derivation, 100k iterations). Without the env var, the cache is stored as plain JSON.
+
+To disable token caching entirely:
+
+```console
+./vanmoof-certificates -email user@vanmoof.com -no-cache
+```
 
 
 ### Command-Line Mode

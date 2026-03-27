@@ -7,8 +7,6 @@ import (
 	"os"
 	"runtime"
 	"strings"
-
-	"golang.org/x/term"
 )
 
 func main() {
@@ -20,6 +18,7 @@ func main() {
 	email := flag.String("email", "", "VanMoof email address (optional)")
 	bikes := flag.String("bikes", "all", "Bikes to fetch certificates for: 'all', bike IDs (comma-separated), or 'ask' to be prompted")
 	debug := flag.Bool("debug", false, "Enable debug output")
+	noCache := flag.Bool("no-cache", false, "Do not read or write token cache")
 	sudo := flag.Bool("sudo", false, "Skip all validation checks")
 	flag.Parse()
 
@@ -110,26 +109,7 @@ func main() {
 			return
 		}
 
-		// Get password from env or prompt
-		passwordInput := os.Getenv("VANMOOF_PASSWORD")
-		if passwordInput == "" {
-			fmt.Print("Enter VanMoof password: ")
-			passwordBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
-			if err != nil {
-				fmt.Printf("\nError reading password: %v\n", err)
-				return
-			}
-			fmt.Println()
-			passwordInput = string(passwordBytes)
-		}
-
-		// Validate password
-		if len(passwordInput) == 0 {
-			fmt.Println("Error: Password cannot be empty")
-			return
-		}
-
-		if err := getCert(emailInput, passwordInput, *bikes, *pubkey, *debug); err != nil {
+		if err := getCert(emailInput, *bikes, *pubkey, *debug, *noCache); err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return
 		}
