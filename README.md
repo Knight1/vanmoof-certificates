@@ -11,10 +11,11 @@ Pull Requests are welcome! ❤️
 ## Features
 
 - Authenticate with VanMoof API
-- Retrieve and filter SA5 or later bikes from your account
+- Retrieve and filter SA5 and S6 bikes from your account
+- Support for shared/guest bikes via VanMoof's Vehicle Registry API
 - Generate Ed25519 key pairs
 - Create and parse bike certificates
-- Interactive or command-line bike selection
+- Interactive or command-line bike selection (by ID or frame number)
 - Debug mode for troubleshooting
 
 ## Usage & Installation

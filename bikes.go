@@ -16,7 +16,11 @@ func selectBikes(bikes []BikeData, filter string) ([]BikeData, error) {
 		// Display available bikes
 		fmt.Println("\nAvailable SA5 bikes:")
 		for i, bike := range bikes {
-			fmt.Printf("%d. Bike ID: %d, Frame: %s\n", i+1, bike.BikeID, bike.FrameNumber)
+			if bike.BikeID != 0 {
+				fmt.Printf("%d. %s (ID: %d, Frame: %s)\n", i+1, bike.Name, bike.BikeID, bike.FrameNumber)
+			} else {
+				fmt.Printf("%d. %s (Frame: %s)\n", i+1, bike.Name, bike.FrameNumber)
+			}
 		}
 
 		reader := bufio.NewReader(os.Stdin)
@@ -48,11 +52,19 @@ func selectBikes(bikes []BikeData, filter string) ([]BikeData, error) {
 			}
 		}
 
-		// Try to parse as bike ID
+		// Try to match as bike ID
 		var bikeID int
 		if _, err := fmt.Sscanf(part, "%d", &bikeID); err == nil {
 			for _, bike := range bikes {
 				if bike.BikeID == bikeID {
+					selected = append(selected, bike)
+					break
+				}
+			}
+		} else {
+			// Try to match as frame number (for shared bikes)
+			for _, bike := range bikes {
+				if bike.FrameNumber == part {
 					selected = append(selected, bike)
 					break
 				}

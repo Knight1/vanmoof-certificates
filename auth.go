@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 )
 
 func authenticate(email, password string, debug bool) (string, error) {
@@ -47,6 +48,44 @@ func getApplicationToken(authToken string, debug bool) (string, error) {
 	}
 
 	return appTokenResp.Token, nil
+}
+
+func getSharedVehicles(riderUUID, appToken string, debug bool) ([]VehicleAccess, error) {
+	headers := map[string]string{
+		"Authorization": "Bearer " + appToken,
+	}
+
+	url := fmt.Sprintf(VehicleRegistryBaseURL+"/external/riders/%s/vehicles", riderUUID)
+	body, err := doHTTPRequest("GET", url, nil, headers, debug)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp RiderVehiclesResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, err
+	}
+
+	return resp.VehicleAccess, nil
+}
+
+func getBikeSharingInvitations(authToken string, debug bool) (int, error) {
+	headers := map[string]string{
+		"Authorization": "Bearer " + authToken,
+		"Api-Key":       ApiKey,
+	}
+
+	body, err := doHTTPRequest("GET", ApiBaseURL+"/getBikeSharingInvitations", nil, headers, debug)
+	if err != nil {
+		return 0, err
+	}
+
+	var resp BikeSharingInvitationsResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return 0, err
+	}
+
+	return len(resp.Invitations), nil
 }
 
 func getCustomerData(authToken string, debug bool) (string, []BikeData, error) {

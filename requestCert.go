@@ -30,6 +30,16 @@ func getCert(email, password, bikeFilter, pubkey string, debug bool) error {
 		fmt.Printf("[DEBUG] App token received: %s...\n", appToken[:min(20, len(appToken))])
 	}
 
+	// Check for pending bike sharing invitations
+	pendingInvitations, err := getBikeSharingInvitations(authToken, debug)
+	if err != nil {
+		if debug {
+			fmt.Printf("[DEBUG] Failed to check sharing invitations: %v\n", err)
+		}
+	} else if pendingInvitations > 0 {
+		fmt.Printf("WARNING: You have %d pending bike sharing invitation(s)! Accept them in the VanMoof app first.\n", pendingInvitations)
+	}
+
 	// Step 3: Get customer data (bikes)
 	customerUUID, bikes, err := getCustomerData(authToken, debug)
 	if err != nil {
@@ -41,7 +51,38 @@ func getCert(email, password, bikeFilter, pubkey string, debug bool) error {
 	}
 
 	if debug {
-		fmt.Printf("[DEBUG] Retrieved %d bikes\n", len(bikes))
+		fmt.Printf("[DEBUG] Retrieved %d owned bikes\n", len(bikes))
+	}
+
+	// Fetch shared bikes from vehicle registry
+	sharedVehicles, err := getSharedVehicles(customerUUID, appToken, debug)
+	if err != nil {
+		if debug {
+			fmt.Printf("[DEBUG] Failed to fetch shared vehicles: %v\n", err)
+		}
+	} else if debug {
+		fmt.Printf("[DEBUG] Retrieved %d shared vehicles\n", len(sharedVehicles))
+	}
+
+	// Convert shared vehicles to BikeData and merge
+	for _, v := range sharedVehicles {
+		// Skip if we already have this bike as an owned bike
+		alreadyOwned := false
+		for _, b := range bikes {
+			if b.FrameNumber == v.VehicleID {
+				alreadyOwned = true
+				break
+			}
+		}
+		if alreadyOwned {
+			continue
+		}
+
+		bikes = append(bikes, BikeData{
+			Name:        v.Name + " (shared by " + v.OwnerName + ")",
+			FrameNumber: v.VehicleID,
+			BleProfile:  v.BleProfile,
+		})
 	}
 
 	// Filter for SA5 bikes only
@@ -56,7 +97,7 @@ func getCert(email, password, bikeFilter, pubkey string, debug bool) error {
 	}
 
 	if len(sa5Bikes) == 0 {
-		fmt.Println("No SA5 bikes found")
+		fmt.Println("No supported bikes found (SA5/S6)")
 		return nil
 	}
 
@@ -91,12 +132,19 @@ func getCert(email, password, bikeFilter, pubkey string, debug bool) error {
 
 	// Step 4: Process each selected SA5 bike and create certificate
 	for _, bike := range selectedBikes {
-		fmt.Printf("Bike ID: %d\n", bike.BikeID)
+		if bike.BikeID != 0 {
+			fmt.Printf("Bike ID: %d\n", bike.BikeID)
+		}
+		fmt.Printf("Name: %s\n", bike.Name)
 		fmt.Printf("Frame number: %s\n", bike.FrameNumber)
-		fmt.Println("Bike is an SA5")
+		model := BleProfileModel[bike.BleProfile]
+		if model == "" {
+			model = "Unknown"
+		}
+		fmt.Printf("Model: %s (%s)\n", model, bike.BleProfile)
 
 		if debug {
-			fmt.Printf("[DEBUG] Creating certificate for bike ID %d\n", bike.BikeID)
+			fmt.Printf("[DEBUG] Creating certificate for %s\n", bike.FrameNumber)
 		}
 
 		certResp, err := createCertificate(bike.FrameNumber, pubKeyB64, appToken, debug)
@@ -120,7 +168,11 @@ func getCert(email, password, bikeFilter, pubkey string, debug bool) error {
 		// Parse the certificate
 		if cert, ok := respData["certificate"].(string); ok {
 			fmt.Println("Parsing certificate...")
-			processCertificate(cert, pubKeyB64, fmt.Sprintf("%d", bike.BikeID), customerUUID, bikes, debug)
+			bikeIDStr := bike.FrameNumber
+			if bike.BikeID != 0 {
+				bikeIDStr = fmt.Sprintf("%d", bike.BikeID)
+			}
+			processCertificate(cert, pubKeyB64, bikeIDStr, customerUUID, bikes, debug)
 		}
 	}
 	return nil

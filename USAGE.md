@@ -24,7 +24,7 @@ go build -mod=vendor -ldflags "-w -d"
 ## Requirements
 
 - Go 1.24 or later
-- VanMoof account with registered SA5 or later bike(s)
+- VanMoof account with registered SA5/S6 bike(s), or shared bike access (guest invitations)
 
 ## Example Output
 
@@ -33,8 +33,8 @@ Privkey = ✂️
 Pubkey = Yd2bYMB3+vs4cCnDtPbcaM164KIl2zs05AK2jt/K6Gs=
 
 Bike ID: 1337
-Frame number: ^[A-Z]{6}\d{5}[A-Z]{2}$
-Bike is an SA5
+Frame number: LLLLLLDDDDDLL
+Model: SA5 (ELECTRIFIED_2022)
 Certificate:
 -----------
 {"certificate":"BASE64_ENCODED_CERTIFICATE"}
@@ -62,7 +62,7 @@ Run without any flags to be prompted for credentials:
 This will:
 1. Prompt for your VanMoof email
 2. Prompt for your password (hidden input)
-3. Fetch all SA5 or later bikes and generate certificates
+3. Fetch all owned SA5/S6 bikes and shared bikes (guest access) and generate certificates
 
 
 ### Command-Line Mode
@@ -70,7 +70,7 @@ This will:
 Provide email via flag (and optionally set `VANMOOF_PASSWORD` environment variable):
 
 ```console
-./vanmoof-certificates -email user@example.com
+./vanmoof-certificates -email user@vanmoof.com
 ```
 
 #### Request a certificate with your own public key
@@ -78,7 +78,7 @@ Provide email via flag (and optionally set `VANMOOF_PASSWORD` environment variab
 If you want to use your own Ed25519 public key (instead of generating a new one), supply it with the `-pubkey` flag:
 
 ```console
-./vanmoof-certificates -email user@example.com -pubkey <BASE64_PUBKEY>
+./vanmoof-certificates -email user@vanmoof.com -pubkey <BASE64_PUBKEY>
 ```
 
 This will request a certificate for your bike(s) using the provided public key. No private key will be generated or printed in this mode.
@@ -87,27 +87,32 @@ This will request a certificate for your bike(s) using the provided public key. 
 
 **Process all bikes (default):**
 ```console
-./vanmoof-certificates -email user@example.com -bikes all
+./vanmoof-certificates -email user@vanmoof.com -bikes all
 ```
 
 **Process specific bikes by ID:**
 ```console
-./vanmoof-certificates -email user@example.com -bikes 42,1337
+./vanmoof-certificates -email user@vanmoof.com -bikes 42,1337
+```
+
+**Process shared bikes by frame number:**
+```console
+./vanmoof-certificates -email user@vanmoof.com -bikes {Framenumber}
 ```
 
 **Interactive bike selection:**
 ```console
-./vanmoof-certificates -email user@example.com -bikes ask
+./vanmoof-certificates -email user@vanmoof.com -bikes ask
 ```
 
-This will display your SA5 bikes and prompt you to select which ones to process.
+This will display your owned and shared bikes and prompt you to select which ones to process.
 
 ### Debug Mode
 
 Enable debug output to see detailed API requests and responses:
 
 ```console
-./vanmoof-certificates -email user@example.com -debug
+./vanmoof-certificates -email user@vanmoof.com -debug
 ```
 
 

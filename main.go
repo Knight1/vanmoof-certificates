@@ -70,7 +70,7 @@ func main() {
 
 	// Validate bikes parameter
 	if *bikes != "all" && *bikes != "ask" {
-		// Check if it's comma-separated bike IDs
+		// Check if it's comma-separated bike IDs or frame numbers
 		bikeIDs := strings.Split(*bikes, ",")
 		for _, id := range bikeIDs {
 			id = strings.TrimSpace(id)
@@ -80,8 +80,11 @@ func main() {
 			}
 			var numericID uint32
 			if _, err := fmt.Sscanf(id, "%d", &numericID); err != nil {
-				fmt.Printf("Error: Invalid bike ID '%s' in bikes list. Must be numeric\n", id)
-				return
+				// Not numeric — check if it's a valid frame number
+				if !*sudo && !validateFrameNumber(id) {
+					fmt.Printf("Error: Invalid bike ID '%s' in bikes list. Must be a numeric ID or frame number\n", id)
+					return
+				}
 			}
 		}
 	}
