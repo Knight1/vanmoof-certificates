@@ -139,9 +139,9 @@ func getCert(email, password, bikeFilter, pubkey string, debug bool) error {
 		fmt.Printf("Frame number: %s\n", bike.FrameNumber)
 		model := BleProfileModel[bike.BleProfile]
 		if model == "" {
-			model = "Unknown"
+			model = bike.BleProfile
 		}
-		fmt.Printf("Model: %s (%s)\n", model, bike.BleProfile)
+		fmt.Printf("Model: %s\n", model)
 
 		if debug {
 			fmt.Printf("[DEBUG] Creating certificate for %s\n", bike.FrameNumber)
