@@ -41,12 +41,7 @@ Certificate:
 -----------
 
 Parsing certificate...
-Total Certificate Length: 166 bytes
-
---- Extracted from Certificate ---
-Embedded Public Key (Base64): Yd2bYMB3+vs4cCnDtPbcaM164KIl2zs05AK2jt/K6Gs=
-AFM (Authorized Frame Module): ✂️
-...
+Certificate valid: LLLLLLDDDDDLL, Owner (Full Control), expires 2026-01-06 04:02:38 CET, bike matched, pubkey ok, user ok
 ```
 
 ## Usage
