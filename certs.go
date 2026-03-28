@@ -25,24 +25,24 @@ type CertificatePayload struct {
 // certResult collects all parsed certificate data and validation outcomes
 type certResult struct {
 	// Parsed data
-	signature  []byte
-	apiID      uint32
-	frameID    []byte
-	bikeID     []byte
-	expiry     uint32
-	role       uint8
-	userID     []byte
-	publicKey  []byte
+	signature []byte
+	apiID     uint32
+	frameID   []byte
+	bikeID    []byte
+	expiry    uint32
+	role      uint8
+	userID    []byte
+	publicKey []byte
 
 	// Validation
 	errors   []string
 	warnings []string
 
 	// Match results
-	matchedBike     *BikeData
-	bikeIDVerified  bool
-	pubKeyVerified  bool
-	userIDVerified  bool
+	matchedBike    *BikeData
+	bikeIDVerified bool
+	pubKeyVerified bool
+	userIDVerified bool
 }
 
 func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID string, bikes []BikeData, debug bool) {

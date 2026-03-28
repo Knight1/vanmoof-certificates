@@ -9,10 +9,10 @@ const (
 	// S6: 5 letters + 6 digits + 2 letters (e.g. TVSEF300106TA)
 	FrameNumberPattern = `^[A-Z]{5,6}\d{5,6}[A-Z]{2}$`
 
-	ApiBaseURL              = "https://api.vanmoof-api.com/v8"
-	BikeApiBaseURL          = "https://bikeapi.production.vanmoof.cloud"
-	VehicleRegistryBaseURL  = "https://vehicleregistry.production.vanmoof.cloud"
-	Version                 = "1.1.0"
+	ApiBaseURL             = "https://api.vanmoof-api.com/v8"
+	BikeApiBaseURL         = "https://bikeapi.production.vanmoof.cloud"
+	VehicleRegistryBaseURL = "https://vehicleregistry.production.vanmoof.cloud"
+	Version                = "1.1.0"
 )
 
 var SupportedBleProfiles = []string{
