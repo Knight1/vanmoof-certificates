@@ -1,13 +1,9 @@
 version: 2
 updates:
-  # For Golang modules
   - package-ecosystem: "go"
-    directory: "/" # Directory where the `go.mod` file is located
+    directory: "/"
     schedule:
-      interval: "weekly" # Options: daily, weekly, or monthly
-
-  # For GitHub Actions workflows
+      interval: "weekly"
   - package-ecosystem: "github-actions"
-    directory: "/.github/workflows" # Directory for your workflows
     schedule:
-      interval: "weekly" # Adjust the frequency as needed
+      interval: "weekly"
