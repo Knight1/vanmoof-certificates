@@ -7,6 +7,8 @@ import (
 	"os"
 	"runtime"
 	"strings"
+
+	"vanmoof-certificates/internal/vanmoof"
 )
 
 func main() {
@@ -27,13 +29,13 @@ func main() {
 	}
 
 	if *version {
-		fmt.Println("vanmoof-certificates version", Version)
+		fmt.Println("vanmoof-certificates version", vanmoof.Version)
 		fmt.Printf("OS: %s, Arch: %s, Go: %s, CPUs: %d, Compiler: %s\n", runtime.GOOS, runtime.GOARCH, runtime.Version(), runtime.NumCPU(), runtime.Compiler)
 		return
 	}
 
 	if genkey != nil && *genkey {
-		privKeyB64, pubKeyB64, err := generateED25519()
+		privKeyB64, pubKeyB64, err := vanmoof.GenerateED25519()
 		if err != nil {
 			fmt.Printf("Error generating key pair: %v\n", err)
 			os.Exit(1)
@@ -45,7 +47,7 @@ func main() {
 
 	// Validate cert if provided
 	if *cert != "" {
-		if !*sudo && !isValidBase64(*cert) {
+		if !*sudo && !vanmoof.IsValidBase64(*cert) {
 			fmt.Println("Error: Invalid base64 certificate string")
 			return
 		}
@@ -53,7 +55,7 @@ func main() {
 
 	// Validate pubkey if provided
 	if *pubkey != "" {
-		if !*sudo && !isValidEd25519PublicKey(*pubkey) {
+		if !*sudo && !vanmoof.IsValidEd25519PublicKey(*pubkey) {
 			fmt.Println("Error: Invalid Ed25519 public key. Must be base64-encoded 32 or 33 bytes")
 			return
 		}
@@ -61,7 +63,7 @@ func main() {
 
 	// Validate bikeid if provided
 	if *bikeid != "" {
-		if !*sudo && !isValidBikeID(*bikeid) {
+		if !*sudo && !vanmoof.IsValidBikeID(*bikeid) {
 			fmt.Printf("Error: Invalid bike ID '%s'. Must be a numeric ID or valid frame number pattern\n", *bikeid)
 			return
 		}
@@ -69,7 +71,6 @@ func main() {
 
 	// Validate bikes parameter
 	if *bikes != "all" && *bikes != "ask" {
-		// Check if it's comma-separated bike IDs or frame numbers
 		bikeIDs := strings.Split(*bikes, ",")
 		for _, id := range bikeIDs {
 			id = strings.TrimSpace(id)
@@ -79,8 +80,7 @@ func main() {
 			}
 			var numericID uint32
 			if _, err := fmt.Sscanf(id, "%d", &numericID); err != nil {
-				// Not numeric — check if it's a valid frame number
-				if !*sudo && !validateFrameNumber(id) {
+				if !*sudo && !vanmoof.ValidateFrameNumber(id) {
 					fmt.Printf("Error: Invalid bike ID '%s' in bikes list. Must be a numeric ID or frame number\n", id)
 					return
 				}
@@ -89,7 +89,6 @@ func main() {
 	}
 
 	if *cert == "" {
-		// Get email from flag or prompt
 		emailInput := *email
 		if emailInput == "" {
 			reader := bufio.NewReader(os.Stdin)
@@ -103,18 +102,17 @@ func main() {
 			emailInput = strings.TrimSpace(emailInput)
 		}
 
-		// Validate email
-		if !*sudo && !isValidEmail(emailInput) {
+		if !*sudo && !vanmoof.IsValidEmail(emailInput) {
 			fmt.Printf("Error: Invalid email address '%s'\n", emailInput)
 			return
 		}
 
-		if err := getCert(emailInput, *bikes, *pubkey, *debug, *noCache); err != nil {
+		if err := vanmoof.GetCert(emailInput, *bikes, *pubkey, *debug, *noCache); err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return
 		}
 		return
 	}
 
-	processCertificate(*cert, *pubkey, *bikeid, "", nil, *debug)
+	vanmoof.ProcessCertificate(*cert, *pubkey, *bikeid, "", nil, *debug)
 }

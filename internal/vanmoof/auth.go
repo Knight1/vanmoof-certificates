@@ -1,4 +1,4 @@
-package main
+package vanmoof
 
 import (
 	"bytes"
@@ -7,14 +7,24 @@ import (
 	"fmt"
 )
 
+// apiHeaders builds common VanMoof API headers with the Api-Key included.
+func apiHeaders(extra map[string]string) map[string]string {
+	headers := map[string]string{
+		"Api-Key": apiKey,
+	}
+	for k, v := range extra {
+		headers[k] = v
+	}
+	return headers
+}
+
 func authenticate(email, password string, debug bool) (string, string, error) {
 	basicAuth := base64.StdEncoding.EncodeToString([]byte(email + ":" + password))
-	headers := map[string]string{
+	headers := apiHeaders(map[string]string{
 		"Authorization": "Basic " + basicAuth,
-		"Api-Key":       ApiKey,
-	}
+	})
 
-	body, err := doHTTPRequest("POST", ApiBaseURL+"/authenticate", nil, headers, debug)
+	body, err := doHTTPRequest("POST", apiBaseURL+"/authenticate", nil, headers, debug)
 	if err != nil {
 		return "", "", err
 	}
@@ -33,12 +43,11 @@ func refreshAuthToken(refreshToken string, debug bool) (string, error) {
 		return "", err
 	}
 
-	headers := map[string]string{
-		"Api-Key":      ApiKey,
+	headers := apiHeaders(map[string]string{
 		"Content-Type": "application/json",
-	}
+	})
 
-	body, err := doHTTPRequest("POST", ApiBaseURL+"/token", bytes.NewBuffer(reqBody), headers, debug)
+	body, err := doHTTPRequest("POST", apiBaseURL+"/token", bytes.NewBuffer(reqBody), headers, debug)
 	if err != nil {
 		return "", err
 	}
@@ -52,12 +61,11 @@ func refreshAuthToken(refreshToken string, debug bool) (string, error) {
 }
 
 func getApplicationToken(authToken string, debug bool) (string, error) {
-	headers := map[string]string{
+	headers := apiHeaders(map[string]string{
 		"Authorization": "Bearer " + authToken,
-		"Api-Key":       ApiKey,
-	}
+	})
 
-	body, err := doHTTPRequest("GET", ApiBaseURL+"/getApplicationToken", nil, headers, debug)
+	body, err := doHTTPRequest("GET", apiBaseURL+"/getApplicationToken", nil, headers, debug)
 	if err != nil {
 		return "", err
 	}
@@ -75,12 +83,13 @@ func getApplicationToken(authToken string, debug bool) (string, error) {
 	return appTokenResp.Token, nil
 }
 
+// getSharedVehicles uses the Vehicle Registry API which does not require the Api-Key header.
 func getSharedVehicles(riderUUID, appToken string, debug bool) ([]VehicleAccess, error) {
 	headers := map[string]string{
 		"Authorization": "Bearer " + appToken,
 	}
 
-	url := fmt.Sprintf(VehicleRegistryBaseURL+"/external/riders/%s/vehicles", riderUUID)
+	url := fmt.Sprintf(vehicleRegistryBaseURL+"/external/riders/%s/vehicles", riderUUID)
 	body, err := doHTTPRequest("GET", url, nil, headers, debug)
 	if err != nil {
 		return nil, err
@@ -95,12 +104,11 @@ func getSharedVehicles(riderUUID, appToken string, debug bool) ([]VehicleAccess,
 }
 
 func getBikeSharingInvitations(authToken string, debug bool) (int, error) {
-	headers := map[string]string{
+	headers := apiHeaders(map[string]string{
 		"Authorization": "Bearer " + authToken,
-		"Api-Key":       ApiKey,
-	}
+	})
 
-	body, err := doHTTPRequest("GET", ApiBaseURL+"/getBikeSharingInvitations", nil, headers, debug)
+	body, err := doHTTPRequest("GET", apiBaseURL+"/getBikeSharingInvitations", nil, headers, debug)
 	if err != nil {
 		return 0, err
 	}
@@ -114,12 +122,11 @@ func getBikeSharingInvitations(authToken string, debug bool) (int, error) {
 }
 
 func getCustomerData(authToken string, debug bool) (string, []BikeData, error) {
-	headers := map[string]string{
+	headers := apiHeaders(map[string]string{
 		"Authorization": "Bearer " + authToken,
-		"Api-Key":       ApiKey,
-	}
+	})
 
-	body, err := doHTTPRequest("GET", ApiBaseURL+"/getCustomerData?includeBikeDetails", nil, headers, debug)
+	body, err := doHTTPRequest("GET", apiBaseURL+"/getCustomerData?includeBikeDetails", nil, headers, debug)
 	if err != nil {
 		return "", nil, err
 	}

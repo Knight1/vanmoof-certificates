@@ -1,4 +1,4 @@
-package main
+package vanmoof
 
 import "encoding/json"
 
@@ -74,4 +74,39 @@ type CertificateRequest struct {
 
 type CertificateResponse struct {
 	Certificate string `json:"certificate"`
+}
+
+// CertificatePayload represents the CBOR-encoded certificate structure
+type CertificatePayload struct {
+	ID        uint32                 `cbor:"i"`  // Bike API ID
+	FrameID   []byte                 `cbor:"fm"` // Frame module serial (byte string)
+	BikeID    []byte                 `cbor:"bm"` // Bike module serial (byte string)
+	Expiry    uint32                 `cbor:"e"`  // Expiry timestamp
+	Role      uint8                  `cbor:"r"`  // Access level/role
+	UserID    []byte                 `cbor:"u"`  // User ID (16 bytes)
+	PublicKey []byte                 `cbor:"p"`  // Public key (32 bytes)
+	Extra     map[string]interface{} `cbor:",inline"`
+}
+
+// certResult collects all parsed certificate data and validation outcomes
+type certResult struct {
+	// Parsed data
+	signature []byte
+	apiID     uint32
+	frameID   []byte
+	bikeID    []byte
+	expiry    uint32
+	role      uint8
+	userID    []byte
+	publicKey []byte
+
+	// Validation
+	errors   []string
+	warnings []string
+
+	// Match results
+	matchedBike    *BikeData
+	bikeIDVerified bool
+	pubKeyVerified bool
+	userIDVerified bool
 }

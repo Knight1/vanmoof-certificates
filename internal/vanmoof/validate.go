@@ -1,4 +1,4 @@
-package main
+package vanmoof
 
 import (
 	"crypto/ed25519"
@@ -13,8 +13,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// isValidEmail validates an email address
-func isValidEmail(email string) bool {
+// IsValidEmail validates an email address
+func IsValidEmail(email string) bool {
 	email = strings.TrimSpace(email)
 	if email == "" {
 		return false
@@ -23,8 +23,8 @@ func isValidEmail(email string) bool {
 	return err == nil
 }
 
-// isValidBase64 validates a base64 string
-func isValidBase64(s string) bool {
+// IsValidBase64 validates a base64 string
+func IsValidBase64(s string) bool {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return false
@@ -33,8 +33,8 @@ func isValidBase64(s string) bool {
 	return err == nil
 }
 
-// isValidBikeID validates a bike ID (numeric or frame number)
-func isValidBikeID(bikeID string) bool {
+// IsValidBikeID validates a bike ID (numeric or frame number)
+func IsValidBikeID(bikeID string) bool {
 	bikeID = strings.TrimSpace(bikeID)
 	if bikeID == "" {
 		return false
@@ -47,7 +47,7 @@ func isValidBikeID(bikeID string) bool {
 	}
 
 	// Check if it's a valid frame number pattern
-	matched, err := regexp.MatchString(FrameNumberPattern, bikeID)
+	matched, err := regexp.MatchString(frameNumberPattern, bikeID)
 	if err != nil {
 		return false
 	}
@@ -55,8 +55,8 @@ func isValidBikeID(bikeID string) bool {
 	return matched
 }
 
-// isValidEd25519PublicKey validates an Ed25519 public key
-func isValidEd25519PublicKey(pubkey string) bool {
+// IsValidEd25519PublicKey validates an Ed25519 public key
+func IsValidEd25519PublicKey(pubkey string) bool {
 	pubkey = strings.TrimSpace(pubkey)
 	if pubkey == "" {
 		return false
@@ -82,6 +82,21 @@ func isValidEd25519PublicKey(pubkey string) bool {
 	}
 
 	return true
+}
+
+// ValidateFrameNumber validates a frame number against a pattern
+func ValidateFrameNumber(frameNumber string) bool {
+	if frameNumber == "" {
+		return false
+	}
+
+	// Check against pattern
+	matched, err := regexp.MatchString(frameNumberPattern, frameNumber)
+	if err != nil {
+		return false
+	}
+
+	return matched
 }
 
 func validateAndShowJWT(tokenString string) {
@@ -120,7 +135,6 @@ func validateAndShowJWT(tokenString string) {
 // validateCertificateSignature attempts to validate the Ed25519 signature
 func validateCertificateSignature(signature, payload []byte, debug bool) {
 	// Known VanMoof CA public keys = none
-
 	knownCAKeys := []string{
 		// Add known VanMoof CA public keys here when discovered
 		// Format: hex-encoded 32-byte Ed25519 public key
@@ -177,23 +191,4 @@ func validateUUID(uuid []byte) bool {
 	// Check variant field (byte 8, high 2 bits should be 10)
 	variant := uuid[8] >> 6
 	return variant == 0b10
-}
-
-// validateFrameNumber validates a frame number against a pattern
-func validateFrameNumber(frameNumber string) bool {
-	if frameNumber == "" {
-		return false
-	}
-
-	// Check against pattern
-	matched, err := regexp.MatchString(FrameNumberPattern, frameNumber)
-	if err != nil {
-		return false
-	}
-
-	if matched {
-		return true
-	}
-
-	return false
 }

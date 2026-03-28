@@ -1,4 +1,4 @@
-package main
+package vanmoof
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 	"fmt"
 )
 
-func generateED25519() (string, string, error) {
+func GenerateED25519() (string, string, error) {
 	pubKey, privKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate key pair: %w", err)
@@ -36,7 +36,7 @@ func createCertificate(bikeID, pubKey, appToken string, debug bool) (string, err
 		"Content-Type":  "application/json",
 	}
 
-	url := fmt.Sprintf(BikeApiBaseURL+"/bikes/%s/create_certificate", bikeID)
+	url := fmt.Sprintf(bikeApiBaseURL+"/bikes/%s/create_certificate", bikeID)
 	body, err := doHTTPRequest("POST", url, bytes.NewBuffer(reqBody), headers, debug)
 	if err != nil {
 		return "", err

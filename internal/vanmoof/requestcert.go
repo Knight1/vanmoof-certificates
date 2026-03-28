@@ -1,4 +1,4 @@
-package main
+package vanmoof
 
 import (
 	"encoding/json"
@@ -106,7 +106,7 @@ func resolveTokens(email, password string, debug, noCache bool) (string, string,
 	return authToken, appToken, refreshToken, nil
 }
 
-func getCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
+func GetCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 	if debug {
 		fmt.Println("[DEBUG] Starting authentication...")
 	}
@@ -130,7 +130,7 @@ func getCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 		fmt.Printf("WARNING: You have %d pending bike sharing invitation(s)! Accept them in the VanMoof app first.\n", pendingInvitations)
 	}
 
-	// Step 3: Get customer data (bikes)
+	// Get customer data (bikes)
 	customerUUID, bikes, err := getCustomerData(authToken, debug)
 	if err != nil {
 		return fmt.Errorf("failed to get customer data: %w", err)
@@ -138,9 +138,6 @@ func getCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 
 	if debug {
 		fmt.Printf("[DEBUG] Customer UUID: %s\n", customerUUID)
-	}
-
-	if debug {
 		fmt.Printf("[DEBUG] Retrieved %d owned bikes\n", len(bikes))
 	}
 
@@ -176,23 +173,23 @@ func getCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 	}
 
 	// Filter for supported bikes only
-	var sa5Bikes []BikeData
+	var supported []BikeData
 	for _, bike := range bikes {
-		for _, profile := range SupportedBleProfiles {
+		for _, profile := range supportedBleProfiles {
 			if bike.BleProfile == profile {
-				sa5Bikes = append(sa5Bikes, bike)
+				supported = append(supported, bike)
 				break
 			}
 		}
 	}
 
-	if len(sa5Bikes) == 0 {
+	if len(supported) == 0 {
 		fmt.Println("No supported bikes found (SA5/S6)")
 		return nil
 	}
 
 	// Filter bikes based on user selection
-	selectedBikes, err := selectBikes(sa5Bikes, bikeFilter)
+	selectedBikes, err := selectBikes(supported, bikeFilter)
 	if err != nil {
 		return err
 	}
@@ -211,7 +208,7 @@ func getCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 		}
 	} else {
 		var genErr error
-		privKeyB64, pubKeyB64, genErr = generateED25519()
+		privKeyB64, pubKeyB64, genErr = GenerateED25519()
 		if genErr != nil {
 			return genErr
 		}
@@ -227,7 +224,7 @@ func getCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 		}
 		fmt.Printf("Name: %s\n", bike.Name)
 		fmt.Printf("Frame number: %s\n", bike.FrameNumber)
-		model := BleProfileModel[bike.BleProfile]
+		model := bleProfileModel[bike.BleProfile]
 		if model == "" {
 			model = bike.BleProfile
 		}
@@ -262,7 +259,7 @@ func getCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 			if bike.BikeID != 0 {
 				bikeIDStr = fmt.Sprintf("%d", bike.BikeID)
 			}
-			processCertificate(cert, pubKeyB64, bikeIDStr, customerUUID, bikes, debug)
+			ProcessCertificate(cert, pubKeyB64, bikeIDStr, customerUUID, bikes, debug)
 		}
 	}
 	return nil

@@ -1,4 +1,4 @@
-package main
+package vanmoof
 
 import (
 	"bytes"
@@ -10,42 +10,7 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
-// CertificatePayload represents the CBOR-encoded certificate structure
-type CertificatePayload struct {
-	ID        uint32                 `cbor:"i"`  // Bike API ID
-	FrameID   []byte                 `cbor:"fm"` // Frame module serial (byte string)
-	BikeID    []byte                 `cbor:"bm"` // Bike module serial (byte string)
-	Expiry    uint32                 `cbor:"e"`  // Expiry timestamp
-	Role      uint8                  `cbor:"r"`  // Access level/role
-	UserID    []byte                 `cbor:"u"`  // User ID (16 bytes)
-	PublicKey []byte                 `cbor:"p"`  // Public key (32 bytes)
-	Extra     map[string]interface{} `cbor:",inline"`
-}
-
-// certResult collects all parsed certificate data and validation outcomes
-type certResult struct {
-	// Parsed data
-	signature []byte
-	apiID     uint32
-	frameID   []byte
-	bikeID    []byte
-	expiry    uint32
-	role      uint8
-	userID    []byte
-	publicKey []byte
-
-	// Validation
-	errors   []string
-	warnings []string
-
-	// Match results
-	matchedBike    *BikeData
-	bikeIDVerified bool
-	pubKeyVerified bool
-	userIDVerified bool
-}
-
-func processCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID string, bikes []BikeData, debug bool) {
+func ProcessCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID string, bikes []BikeData, debug bool) {
 	if certStr == "" {
 		fmt.Println("Error: Certificate string is empty")
 		return
@@ -161,14 +126,14 @@ func parseCertificate(certData []byte, bikes []BikeData) certResult {
 	// Validate frame ID format
 	if len(r.frameID) == 0 {
 		r.errors = append(r.errors, "Frame ID (f) is empty")
-	} else if !validateFrameNumber(string(r.frameID)) {
+	} else if !ValidateFrameNumber(string(r.frameID)) {
 		r.warnings = append(r.warnings, fmt.Sprintf("Frame ID (f) has invalid format: %s", string(r.frameID)))
 	}
 
 	// Validate bike ID format
 	if len(r.bikeID) == 0 {
 		r.errors = append(r.errors, "Bike ID (b) is empty")
-	} else if !validateFrameNumber(string(r.bikeID)) {
+	} else if !ValidateFrameNumber(string(r.bikeID)) {
 		r.warnings = append(r.warnings, fmt.Sprintf("Bike ID (b) has invalid format: %s", string(r.bikeID)))
 	}
 
@@ -349,7 +314,7 @@ func printVerbose(r certResult, certData []byte, expectedPubKeyStr, bikeID, expe
 	fmt.Printf("AFM (Authorized Frame Module): %s", frameIDStr)
 	if r.matchedBike != nil && (r.matchedBike.FrameNumber == frameIDStr || r.matchedBike.FrameSerial == frameIDStr) {
 		fmt.Printf(" ✓ Valid (matches API bike)\n")
-	} else if validateFrameNumber(frameIDStr) {
+	} else if ValidateFrameNumber(frameIDStr) {
 		fmt.Printf(" ✓ Valid format\n")
 	} else if frameIDStr != "" {
 		fmt.Printf(" ✗ Invalid format\n")
@@ -361,7 +326,7 @@ func printVerbose(r certResult, certData []byte, expectedPubKeyStr, bikeID, expe
 	fmt.Printf("ABM (Authorized Bike Module): %s", bikeIDStr)
 	if r.matchedBike != nil && (r.matchedBike.FrameNumber == bikeIDStr || r.matchedBike.FrameSerial == bikeIDStr || r.matchedBike.MainEcuSerial == bikeIDStr) {
 		fmt.Printf(" ✓ Valid (matches API bike)\n")
-	} else if validateFrameNumber(bikeIDStr) {
+	} else if ValidateFrameNumber(bikeIDStr) {
 		fmt.Printf(" ✓ Valid format\n")
 	} else if bikeIDStr != "" {
 		fmt.Printf(" ✗ Invalid format\n")
