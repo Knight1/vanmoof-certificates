@@ -30,6 +30,10 @@ func doHTTPRequest(method, url string, body io.Reader, headers map[string]string
 
 	client := &http.Client{
 		Timeout: 30 * time.Second,
+		// Do not follow redirects to prevent leaking auth headers to redirect targets
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
 	}
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {

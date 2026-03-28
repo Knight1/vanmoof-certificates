@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/url"
 )
 
 func GenerateED25519() (string, string, error) {
@@ -36,7 +37,7 @@ func createCertificate(bikeID, pubKey, appToken string, debug bool) (string, err
 		"Content-Type":  "application/json",
 	}
 
-	url := fmt.Sprintf(bikeApiBaseURL+"/bikes/%s/create_certificate", bikeID)
+	url := fmt.Sprintf(bikeApiBaseURL+"/bikes/%s/create_certificate", url.PathEscape(bikeID))
 	body, err := doHTTPRequest("POST", url, bytes.NewBuffer(reqBody), headers, debug)
 	if err != nil {
 		return "", err

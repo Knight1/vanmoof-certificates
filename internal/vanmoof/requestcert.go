@@ -90,6 +90,9 @@ func resolveTokens(email, password string, debug, noCache bool) (string, string,
 	if err != nil {
 		return "", "", "", err
 	}
+	if authToken == "" {
+		return "", "", "", fmt.Errorf("authentication returned empty token")
+	}
 
 	if debug {
 		fmt.Printf("[DEBUG] Auth token received: %s...\n", authToken[:min(20, len(authToken))])
@@ -98,6 +101,9 @@ func resolveTokens(email, password string, debug, noCache bool) (string, string,
 	appToken, err := getApplicationToken(authToken, debug)
 	if err != nil {
 		return "", "", "", err
+	}
+	if appToken == "" {
+		return "", "", "", fmt.Errorf("application token request returned empty token")
 	}
 
 	if !noCache {
@@ -242,25 +248,31 @@ func GetCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 
 		// Check if response contains an error
 		var respData map[string]interface{}
-		if err := json.Unmarshal([]byte(certResp), &respData); err == nil {
-			if _, hasErr := respData["err"]; hasErr {
-				fmt.Printf("Certificate error: %v\n", certResp)
-				continue
-			}
+		if err := json.Unmarshal([]byte(certResp), &respData); err != nil {
+			fmt.Printf("Failed to parse certificate response: %v\n", err)
+			continue
+		}
+
+		if _, hasErr := respData["err"]; hasErr {
+			fmt.Printf("Certificate error: %v\n", certResp)
+			continue
 		}
 
 		fmt.Println("Certificate:")
 		fmt.Println(certResp)
 
 		// Parse the certificate
-		if cert, ok := respData["certificate"].(string); ok {
-			fmt.Println("Parsing certificate...")
-			bikeIDStr := bike.FrameNumber
-			if bike.BikeID != 0 {
-				bikeIDStr = fmt.Sprintf("%d", bike.BikeID)
-			}
-			ProcessCertificate(cert, pubKeyB64, bikeIDStr, customerUUID, bikes, debug)
+		cert, ok := respData["certificate"].(string)
+		if !ok {
+			fmt.Println("Certificate response missing 'certificate' field")
+			continue
 		}
+		fmt.Println("Parsing certificate...")
+		bikeIDStr := bike.FrameNumber
+		if bike.BikeID != 0 {
+			bikeIDStr = fmt.Sprintf("%d", bike.BikeID)
+		}
+		ProcessCertificate(cert, pubKeyB64, bikeIDStr, customerUUID, bikes, debug)
 	}
 	return nil
 }

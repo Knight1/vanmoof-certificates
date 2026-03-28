@@ -139,11 +139,7 @@ The payload uses CBOR (Concise Binary Object Representation, RFC 8949) encoding:
 
 ### Security Notes
 
-- The signature ensures the certificate cannot be modified without detection
-- Each certificate is bound to a specific user UUID from the VanMoof account
-- Certificates have an expiry date (typically set ~1 week in the future)
-- The CA public key needed for signature verification is likely embedded in the bike firmware
 - It seems that there is no revocation nor public logging. If someone has access to the VanMoof account with your bike, they can generate certificates without you noticing. Furthermore, these certificates are irrevocable. So the only way to secure the bike would be to lock it in the garage or basement until 7 days have passed.
 - It is currently not known how the bike knows the time after a power loss. This would be either via GSM, GPS, or the phone. What happens if a jammer is in place or if the GPS time was spoofed is currently unknown. In the case where you can spoof an older time, you could in theory unlock the bike with an older certificate if the bike accepts the new time as the "correct time".
-- If you are 7 days without internet, you can no longer unlock your bike with your phone. Only via the backup code. 
-- What happens after 10 years? Since VanMoof reverted the 10-year certificate lifetime, it is currently not possible to control the bike (besides the backup code) without talking to the VanMoof API with the key to issue certificates. Alternatively, logic could be implemented where 2FA is required to issue a certificate valid for more than 7 days.
+- What happens after 7 days? Since VanMoof reverted the 10-year certificate lifetime, it is currently not possible to control the bike (besides the backup code) without talking to the VanMoof API to issue a new certificate. Alternatively, logic could be implemented where 2FA is required to issue a certificate valid for more than 7 days.
+- Also VanMoof can lock you out at any time. 

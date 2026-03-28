@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/url"
 )
 
 // apiHeaders builds common VanMoof API headers with the Api-Key included.
@@ -89,7 +90,7 @@ func getSharedVehicles(riderUUID, appToken string, debug bool) ([]VehicleAccess,
 		"Authorization": "Bearer " + appToken,
 	}
 
-	url := fmt.Sprintf(vehicleRegistryBaseURL+"/external/riders/%s/vehicles", riderUUID)
+	url := fmt.Sprintf(vehicleRegistryBaseURL+"/external/riders/%s/vehicles", url.PathEscape(riderUUID))
 	body, err := doHTTPRequest("GET", url, nil, headers, debug)
 	if err != nil {
 		return nil, err

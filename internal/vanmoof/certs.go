@@ -224,6 +224,10 @@ func verifyPublicKey(r *certResult, expectedPubKeyStr string) {
 		r.errors = append(r.errors, "Error decoding expected public key")
 		return
 	}
+	if len(pubKeyData) < 32 {
+		r.errors = append(r.errors, fmt.Sprintf("Public key too short: expected at least 32 bytes, got %d", len(pubKeyData)))
+		return
+	}
 	if bytes.Equal(r.publicKey, pubKeyData[len(pubKeyData)-32:]) {
 		r.pubKeyVerified = true
 	} else {
