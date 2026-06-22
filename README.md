@@ -50,6 +50,15 @@ The first 64 bytes contain an Ed25519 signature that cryptographically signs the
 
 This signature is created by VanMoof's Certificate Authority (CA) and can be verified using the CA's public key to ensure the certificate is authentic and hasn't been tampered with.
 
+The CA signing public key (recovered from the bike's BLE certificate, and the same across all certificates) is:
+
+```
+29b1f31c07d1c63b124057ebe75a0bc0796259722e5dd9a9a9302ae2061184a0
+```
+
+Every parsed certificate's signature is verified against this key; a mismatch is
+flagged as an error (silent on success). Run with `-debug` for full verification detail.
+
 ### CBOR Payload Structure
 
 Starting at byte 64, the certificate contains a CBOR-encoded map with the following fields:

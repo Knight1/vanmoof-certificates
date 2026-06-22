@@ -132,14 +132,34 @@ func validateAndShowJWT(tokenString string) {
 	fmt.Println()
 }
 
-// validateCertificateSignature attempts to validate the Ed25519 signature
-func validateCertificateSignature(signature, payload []byte, debug bool) {
-	// Known VanMoof CA public keys = none
-	knownCAKeys := []string{
-		// Add known VanMoof CA public keys here when discovered
-		// Format: hex-encoded 32-byte Ed25519 public key
-	}
+// knownCAKeys are VanMoof's certificate signing (CA) public keys.
+// Format: hex-encoded 32-byte Ed25519 public key.
+var knownCAKeys = []string{
+	// BLE certificate signing key recovered from the bike; verifies the
+	// Ed25519 signature embedded in every certificate.
+	"29b1f31c07d1c63b124057ebe75a0bc0796259722e5dd9a9a9302ae2061184a0",
+}
 
+// verifyCertificateSignature reports whether the signature verifies against any
+// known CA key. hasKeys is false when no CA keys are configured.
+func verifyCertificateSignature(signature, payload []byte) (verified, hasKeys bool) {
+	if len(knownCAKeys) == 0 {
+		return false, false
+	}
+	for _, keyHex := range knownCAKeys {
+		pubKeyBytes, err := hex.DecodeString(keyHex)
+		if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
+			continue
+		}
+		if ed25519.Verify(ed25519.PublicKey(pubKeyBytes), payload, signature) {
+			return true, true
+		}
+	}
+	return false, true
+}
+
+// validateCertificateSignature prints detailed signature validation (debug mode)
+func validateCertificateSignature(signature, payload []byte, debug bool) {
 	if !debug {
 		return // Only show in debug mode
 	}

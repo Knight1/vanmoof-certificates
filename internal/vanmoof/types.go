@@ -79,8 +79,8 @@ type CertificateResponse struct {
 // CertificatePayload represents the CBOR-encoded certificate structure
 type CertificatePayload struct {
 	ID        uint32                 `cbor:"i"`  // Bike API ID
-	FrameID   []byte                 `cbor:"fm"` // Frame module serial (byte string)
-	BikeID    []byte                 `cbor:"bm"` // Bike module serial (byte string)
+	FrameID   []byte                 `cbor:"f"` // Frame module serial (byte string)
+	BikeID    []byte                 `cbor:"b"` // Bike module serial (byte string)
 	Expiry    uint32                 `cbor:"e"`  // Expiry timestamp
 	Role      uint8                  `cbor:"r"`  // Access level/role
 	UserID    []byte                 `cbor:"u"`  // User ID (16 bytes)

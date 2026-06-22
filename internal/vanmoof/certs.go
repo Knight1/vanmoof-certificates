@@ -35,6 +35,12 @@ func ProcessCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 	verifyPublicKey(&r, expectedPubKeyStr)
 	verifyUserID(&r, expectedUserID)
 
+	// Silently verify the certificate signature against known CA keys.
+	// Only surfaces an error when the signature does NOT match a known key.
+	if verified, hasKeys := verifyCertificateSignature(r.signature, certData[64:]); hasKeys && !verified {
+		r.errors = append(r.errors, "Signature INVALID: does not verify against any known VanMoof CA key")
+	}
+
 	// Output
 	if debug {
 		printVerbose(r, certData, expectedPubKeyStr, bikeID, expectedUserID, bikes)
@@ -241,7 +247,7 @@ func verifyUserID(r *certResult, expectedUserID string) {
 		return
 	}
 	certUserID := fmt.Sprintf("%x", r.userID)
-	expectedClean := strings.ReplaceAll(expectedUserID, "-", "")
+	expectedClean := strings.ToLower(strings.ReplaceAll(expectedUserID, "-", ""))
 	if certUserID == expectedClean {
 		r.userIDVerified = true
 	} else {

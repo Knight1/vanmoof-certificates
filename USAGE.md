@@ -134,6 +134,11 @@ Enable debug output to see detailed API requests and responses:
 ./vanmoof-certificates -email user@vanmoof.com -debug
 ```
 
+The certificate's Ed25519 signature is always verified against VanMoof's known
+certificate signing (CA) key. In normal mode this is silent — a mismatch is
+reported as an error, a valid signature prints nothing. Debug mode additionally
+shows the full signature validation detail.
+
 
 ### Parse Existing Certificate
 

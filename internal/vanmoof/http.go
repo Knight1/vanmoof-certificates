@@ -72,9 +72,15 @@ func doHTTPRequest(method, url string, body io.Reader, headers map[string]string
 		}
 	}
 
-	respBody, err := io.ReadAll(resp.Body)
+	// Limit response body to 10 MB to prevent OOM from malicious/broken servers
+	const maxResponseSize = 10 * 1024 * 1024
+	limitedReader := io.LimitReader(resp.Body, maxResponseSize+1)
+	respBody, err := io.ReadAll(limitedReader)
 	if err != nil {
 		return nil, err
+	}
+	if len(respBody) > maxResponseSize {
+		return nil, fmt.Errorf("response body too large (>%d bytes)", maxResponseSize)
 	}
 
 	if debug {
@@ -84,7 +90,11 @@ func doHTTPRequest(method, url string, body io.Reader, headers map[string]string
 
 	// Check for HTTP errors
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+		body := string(respBody)
+		if len(body) > 500 {
+			body = body[:500] + "... (truncated)"
+		}
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, body)
 	}
 
 	return respBody, nil
