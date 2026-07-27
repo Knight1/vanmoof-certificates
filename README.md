@@ -69,21 +69,23 @@ Starting at byte 64, the certificate contains a CBOR-encoded map with the follow
 | `f` | string | Frame Module serial number (AFM - Authorized Frame Module) | `"SVTBKLdddddOA"` |
 | `b` | string | Bike Module serial number (ABM - Authorized Bike Module) | `"SVTBKLdddddOA"` |
 | `e` | uint32 | Certificate expiry (Unix timestamp) | `1767668550` |
-| `r` | uint8 | Role/Access level (0-15) | `7` |
+| `r` | uint8 | Role/Access level (7-66) | `7` |
 | `u` | bytes[16] | User UUID (without hyphens) | `uuid3` |
 | `p` | bytes[32] | User's Ed25519 public key | 32-byte public key |
 
 ### Access Levels (Role Field)
 
-The `r` (role) field determines what permissions the certificate grants:
+The `r` (role) field determines what permissions the certificate grants by assigned the following username "Access Level" to the process accessing the MQTT Broker on the Bike.
+More information here [acl.txt](https://github.com/Knight1/vanmoof-s5-decomp/blob/main/main/docs/acl.txt)
 
 | Value | Access Level | Description |
 |-------|--------------|-------------|
-| `0x00` | Guest | Read-only access |
-| `0x01` | Limited Access | Restricted permissions |
-| `0x03` | Owner | Standard owner access |
-| `0x07` | Owner | Full control (unlock, settings, firmware) |
-| `0x0F` | Service/Admin | Extended permissions for service/maintenance |
+| `0x07` | Owner | Standard access |
+| `0x0B` | Shared | Restricted access |
+| `0x11` | Bike Doctor | Full access |
+| `0x16` | Bike Hunter | Full access |
+| `0x37` | QA Engineer | Full access |
+| `0x37` | R&D Engineer | Full access |
 
 ### Certificate Binding
 
@@ -93,7 +95,7 @@ The certificate cryptographically binds together:
 2. **Certificate ID**: The `i` field varies per certificate
 3. **Specific User**: API user UUID (`u`)
 4. **Specific Public Key**: user's Ed25519 public key (`p`)
-5. **Access Level**: Vrole field (`r`)
+5. **Access Level**: role field (`r`)
 6. **Validity Period**: expiry timestamp (`e`)
 
 When a bike validates a certificate, it verifies:
