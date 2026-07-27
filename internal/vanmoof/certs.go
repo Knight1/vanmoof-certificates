@@ -427,18 +427,18 @@ func printVerbose(r certResult, certData []byte, expectedPubKeyStr, bikeID, expe
 // getRoleDescription returns a human-readable description of the role value
 func getRoleDescription(role uint8) string {
 	switch role {
-	case 0x00:
-		return "Guest"
-	case 0x0B:
-		return "Guest"
-	case 0x01:
-		return "Limited Access"
-	case 0x03:
-		return "Owner (Standard Access)"
 	case 0x07:
 		return "Owner (Full Control)"
-	case 0x0F:
-		return "Service/Admin (Extended Permissions)"
+	case 0x0B:
+		return "Guest"
+	case 0x11:
+		return "Bike Doctor"
+	case 0x16:
+		return "Bike Hunter"
+	case 0x37:
+		return "QA Engineer"
+	case 0x42:
+		return "R&D Engineer"
 	default:
 		return fmt.Sprintf("Unknown Role (0x%02X)", role)
 	}
