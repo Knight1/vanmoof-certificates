@@ -428,7 +428,7 @@ func printVerbose(r certResult, certData []byte, expectedPubKeyStr, bikeID, expe
 func getRoleDescription(role uint8) string {
 	switch role {
 	case 0x07:
-		return "Owner (Full Control)"
+		return "Owner"
 	case 0x0B:
 		return "Guest"
 	case 0x11:
