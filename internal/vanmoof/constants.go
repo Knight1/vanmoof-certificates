@@ -1,5 +1,7 @@
 package vanmoof
 
+import "regexp"
+
 const (
 	// API key number 3
 	apiKey = "fcb38d47-f14b-30cf-843b-26283f6a5819"
@@ -43,3 +45,6 @@ var bleProfileModel = map[string]string{
 	"ELECTRIFIED_2023_TRACK1":  "S4/X4",
 	"ELECTRIFIED_2025":         "S6",
 }
+
+// s6FrameNumberRegexp matches S6 frame numbers (5 letters + 6 digits + 2 letters)
+var s6FrameNumberRegexp = regexp.MustCompile(`^[A-Z]{5}\d{6}[A-Z]{2}$`)

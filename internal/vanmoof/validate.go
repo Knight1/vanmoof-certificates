@@ -159,7 +159,7 @@ func verifyCertificateSignature(signature, payload []byte) (verified, hasKeys bo
 }
 
 // validateCertificateSignature prints detailed signature validation (debug mode)
-func validateCertificateSignature(signature, payload []byte, debug bool) {
+func validateCertificateSignature(signature, payload []byte, debug, perBikeKey bool) {
 	if !debug {
 		return // Only show in debug mode
 	}
@@ -192,6 +192,10 @@ func validateCertificateSignature(signature, payload []byte, debug bool) {
 	}
 
 	if !validated && len(knownCAKeys) > 0 {
+		if perBikeKey {
+			fmt.Println("  Info: Signature verification unavailable for S6 (no signing key known yet)")
+			return
+		}
 		fmt.Println("  ✗ Signature validation failed with all known CA keys")
 	}
 }

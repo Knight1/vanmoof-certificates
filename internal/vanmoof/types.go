@@ -117,6 +117,7 @@ type certResult struct {
 	// Validation
 	errors   []string
 	warnings []string
+	notes    []string // informational only, shown but never makes a certificate invalid
 
 	// Match results
 	matchedBike    *BikeData
