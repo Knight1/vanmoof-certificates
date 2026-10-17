@@ -142,9 +142,10 @@ instead of a certificate. It is returned as `key.encryptionKey` by `getCustomerD
 ./vanmoof-certificates -email user@vanmoof.com -show-keys all
 ```
 
-`static` shows only bikes where the API returns a key. `all` shows the key of every non-certificate bike
-(`bleSecret: not available` if the API returns none) and then runs the regular certificate flow, including `-pubkey`.
-`-bikes` applies to both parts. S5/A5 and S6 have no BLE key, so they only appear in the certificate part.
+Both modes list every non-certificate bike, whether or not the API has returned a key yet
+(`bleSecret: not available` if not). `all` additionally runs the regular certificate flow afterwards,
+including `-pubkey`, for S5/A5 and S6. `-bikes` applies to both parts; S5/A5 and S6 only appear in the
+certificate part, since they have no BLE key.
 
 Output per bike:
 ```
@@ -156,8 +157,9 @@ bleSecret: 00112233445566778899aabbccddeeff
 
 **Keep the BLE secret private.** Anyone who has it can control the bike over Bluetooth.
 
-If a bike has no key and uses `"messagesViaBLE": "BLEv2"`, the key may still be on its way as a
-bike message queued for delivery the next time the bike connects over BLE (`getBikeMessages`).
+If a bike has no key yet and isn't S5/A5 or S6 (every older generation authenticates with a static
+key, not just a handful of known profiles), the key may still be on its way as a bike message queued
+for delivery the next time the bike connects over BLE (`getBikeMessages`).
 In that case an extra line is printed:
 ```
 bikeMessage: 1 message(s) waiting for delivery over BLE
