@@ -50,6 +50,12 @@ func ShowKeys(email, mode, bikeFilter, pubkey string, debug, noCache bool) error
 		return fmt.Errorf("failed to get customer data: %w", err)
 	}
 
+	if debug {
+		fmt.Printf("[DEBUG] Customer UUID: %s\n", customerData.Data.UUID)
+		fmt.Printf("[DEBUG] Retrieved %d owned bikes\n", len(customerData.Data.Bikes))
+		debugPrintBikeProfiles(customerData.Data.Bikes)
+	}
+
 	printStaticKeys(customerData.Data.BikeDetails, mode, bikeFilter, authToken, debug)
 
 	if mode != ShowKeysAll {
