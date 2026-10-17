@@ -126,15 +126,7 @@ func GetCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 		fmt.Printf("[DEBUG] App token received: %s...\n", appToken[:min(20, len(appToken))])
 	}
 
-	// Check for pending bike sharing invitations
-	pendingInvitations, err := getBikeSharingInvitations(authToken, debug)
-	if err != nil {
-		if debug {
-			fmt.Printf("[DEBUG] Failed to check sharing invitations: %v\n", err)
-		}
-	} else if pendingInvitations > 0 {
-		fmt.Printf("WARNING: You have %d pending bike sharing invitation(s)! Accept them in the VanMoof app first.\n", pendingInvitations)
-	}
+	warnPendingInvitations(authToken, debug)
 
 	// Get customer data (bikes)
 	customerUUID, bikes, err := getCustomerData(authToken, debug)
@@ -147,17 +139,40 @@ func GetCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 		fmt.Printf("[DEBUG] Retrieved %d owned bikes\n", len(bikes))
 	}
 
-	// Fetch shared bikes from vehicle registry
+	bikes = mergeSharedVehicles(bikes, customerUUID, appToken, debug)
+
+	return requestCertificates(bikes, customerUUID, appToken, bikeFilter, pubkey, debug)
+}
+
+// warnPendingInvitations prints a warning if the account has pending bike sharing
+// invitations. A lookup failure is only surfaced in debug mode, since it isn't fatal.
+func warnPendingInvitations(authToken string, debug bool) {
+	pendingInvitations, err := getBikeSharingInvitations(authToken, debug)
+	if err != nil {
+		if debug {
+			fmt.Printf("[DEBUG] Failed to check sharing invitations: %v\n", err)
+		}
+		return
+	}
+	if pendingInvitations > 0 {
+		fmt.Printf("WARNING: You have %d pending bike sharing invitation(s)! Accept them in the VanMoof app first.\n", pendingInvitations)
+	}
+}
+
+// mergeSharedVehicles appends shared/guest bikes from the Vehicle Registry API to
+// bikes, skipping any already present as an owned bike.
+func mergeSharedVehicles(bikes []BikeData, customerUUID, appToken string, debug bool) []BikeData {
 	sharedVehicles, err := getSharedVehicles(customerUUID, appToken, debug)
 	if err != nil {
 		if debug {
 			fmt.Printf("[DEBUG] Failed to fetch shared vehicles: %v\n", err)
 		}
-	} else if debug {
+		return bikes
+	}
+	if debug {
 		fmt.Printf("[DEBUG] Retrieved %d shared vehicles\n", len(sharedVehicles))
 	}
 
-	// Convert shared vehicles to BikeData and merge
 	for _, v := range sharedVehicles {
 		// Skip if we already have this bike as an owned bike
 		alreadyOwned := false
@@ -177,7 +192,14 @@ func GetCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 			BleProfile:  v.BleProfile,
 		})
 	}
+	return bikes
+}
 
+// requestCertificates filters bikes down to the certificate-based ones (SA5/S6),
+// lets the user pick which to process, and requests + parses a certificate for each.
+// It is shared by GetCert and ShowKeys (in "all" mode), which fetch the account's
+// bikes once and pass them in here rather than each fetching them separately.
+func requestCertificates(bikes []BikeData, customerUUID, appToken, bikeFilter, pubkey string, debug bool) error {
 	// Filter for supported bikes only
 	var supported []BikeData
 	for _, bike := range bikes {

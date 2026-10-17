@@ -121,14 +121,12 @@ func main() {
 		}
 
 		if *showKeys != "" {
-			if err := vanmoof.ShowKeys(emailInput, *showKeys, *bikes, *debug, *noCache); err != nil {
+			// ShowKeys itself requests certificates too in "all" mode, reusing the
+			// authentication and customer data it already fetched for the keys.
+			if err := vanmoof.ShowKeys(emailInput, *showKeys, *bikes, *pubkey, *debug, *noCache); err != nil {
 				fmt.Printf("Error: %v\n", err)
-				return
 			}
-			// static: keys only; all: keys plus the regular certificate flow below
-			if *showKeys == vanmoof.ShowKeysStatic {
-				return
-			}
+			return
 		}
 
 		if err := vanmoof.GetCert(emailInput, *bikes, *pubkey, *debug, *noCache); err != nil {

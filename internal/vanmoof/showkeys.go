@@ -34,9 +34,11 @@ func filterKeyBikes(details []BikeDetail, mode string) []BikeDetail {
 }
 
 // ShowKeys prints the BLE encryption key of the account's static (non-certificate) bikes.
-// It does not request certificates itself.
-func ShowKeys(email, mode, bikeFilter string, debug, noCache bool) error {
-	authToken, _, _, err := resolveTokens(email, "", debug, noCache)
+// In "all" mode it additionally requests certificates for the certificate-based bikes
+// (SA5/S6), reusing the authentication and customer data already fetched for the keys
+// instead of fetching them a second time.
+func ShowKeys(email, mode, bikeFilter, pubkey string, debug, noCache bool) error {
+	authToken, appToken, _, err := resolveTokens(email, "", debug, noCache)
 	if err != nil {
 		return fmt.Errorf("authentication failed: %w", err)
 	}
@@ -46,14 +48,28 @@ func ShowKeys(email, mode, bikeFilter string, debug, noCache bool) error {
 		return fmt.Errorf("failed to get customer data: %w", err)
 	}
 
-	candidates := filterKeyBikes(customerData.Data.BikeDetails, mode)
+	printStaticKeys(customerData.Data.BikeDetails, mode, bikeFilter, authToken, debug)
+
+	if mode != ShowKeysAll {
+		return nil
+	}
+
+	warnPendingInvitations(authToken, debug)
+	bikes := mergeSharedVehicles(customerData.Data.Bikes, customerData.Data.UUID, appToken, debug)
+	return requestCertificates(bikes, customerData.Data.UUID, appToken, bikeFilter, pubkey, debug)
+}
+
+// printStaticKeys prints the BLE encryption key (or bike message status) of the
+// account's static (non-certificate) bikes matching mode and bikeFilter.
+func printStaticKeys(details []BikeDetail, mode, bikeFilter, authToken string, debug bool) {
+	candidates := filterKeyBikes(details, mode)
 	if len(candidates) == 0 {
 		if mode == ShowKeysStatic {
 			fmt.Println("No bikes with a BLE encryption key found (S2/S3/S4 and older)")
 		} else {
 			fmt.Println("No static bikes found (S5/A5 and S6 use certificates and have no BLE key)")
 		}
-		return nil
+		return
 	}
 
 	// Reuse the regular bike selection (-bikes all / IDs / frame numbers / ask)
@@ -63,11 +79,12 @@ func ShowKeys(email, mode, bikeFilter string, debug, noCache bool) error {
 	}
 	selected, err := selectBikes(list, bikeFilter)
 	if err != nil {
-		return err
+		fmt.Printf("Error selecting bikes: %v\n", err)
+		return
 	}
 	if len(selected) == 0 {
 		fmt.Println("No bikes selected")
-		return nil
+		return
 	}
 
 	for _, sel := range selected {
@@ -109,5 +126,4 @@ func ShowKeys(email, mode, bikeFilter string, debug, noCache bool) error {
 			break
 		}
 	}
-	return nil
 }
