@@ -17,9 +17,9 @@ func TestFilterKeyBikes(t *testing.T) {
 		detail(5, "ELECTRIFIED_2025", ""),
 	}
 
-	legacy := filterKeyBikes(details, ShowKeysLegacy)
-	if len(legacy) != 2 || legacy[0].BikeID != 1 || legacy[1].BikeID != 3 {
-		t.Errorf("legacy: got %+v, want bikes 1 and 3", legacy)
+	static := filterKeyBikes(details, ShowKeysStatic)
+	if len(static) != 2 || static[0].BikeID != 1 || static[1].BikeID != 3 {
+		t.Errorf("static: got %+v, want bikes 1 and 3", static)
 	}
 
 	all := filterKeyBikes(details, ShowKeysAll)

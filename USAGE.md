@@ -13,7 +13,7 @@ go build -mod=vendor -ldflags "-w -d"
 |------|-------------|---------|
 | `-email` | VanMoof email address | Prompt if not provided |
 | `-bikes` | Bikes to process: 'all', IDs (comma-separated), or 'ask' | `all` |
-| `-show-keys` | Show BLE encryption keys instead of requesting certificates: `legacy` (bikes with a key) or `all` (also bikes without one) | - |
+| `-show-keys` | Show BLE encryption keys instead of requesting certificates: `static` (only the keys) or `all` (keys, plus certificates for the certificate bikes) | - |
 | `-debug` | Enable debug output | `false` |
 | `-no-cache` | Do not read or write token cache | `false` |
 | `-sudo` | Skip all validation checks | `false` |
@@ -132,18 +132,19 @@ This will display your owned and shared bikes and prompt you to select which one
 Bikes older than the S5 (S2/S3/S4 and earlier) authenticate over BLE with a key
 instead of a certificate. It is returned as `key.encryptionKey` by `getCustomerData`.
 
-**Only bikes that have a key (S2/S3/S4 and older):**
+**Only the keys of S2/S3/S4 and older bikes (no certificates):**
 ```console
-./vanmoof-certificates -email user@vanmoof.com -show-keys legacy
+./vanmoof-certificates -email user@vanmoof.com -show-keys static
 ```
 
-**All S4 and older bikes, also those where the API returns no key (shown as `not available`):**
+**Keys, then certificates for S5/A5 and S6 as usual:**
 ```console
 ./vanmoof-certificates -email user@vanmoof.com -show-keys all
 ```
 
-`-bikes` narrows the selection as usual. No certificates are requested and no keys are generated in this mode.
-S5/A5 and S6 bikes are never listed because they use certificates and have no BLE key.
+`static` shows only bikes where the API returns a key. `all` shows the key of every non-certificate bike
+(`bleSecret: not available` if the API returns none) and then runs the regular certificate flow, including `-pubkey`.
+`-bikes` applies to both parts. S5/A5 and S6 have no BLE key, so they only appear in the certificate part.
 
 Output per bike:
 ```

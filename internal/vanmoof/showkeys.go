@@ -4,7 +4,7 @@ import "fmt"
 
 // Modes for ShowKeys
 const (
-	ShowKeysLegacy = "legacy"
+	ShowKeysStatic = "static"
 	ShowKeysAll    = "all"
 )
 
@@ -18,14 +18,14 @@ func isCertOnlyProfile(profile string) bool {
 }
 
 // filterKeyBikes skips certificate-only bikes (S5/A5, S6), which have no BLE key.
-// Legacy mode additionally skips bikes where the API returned no key.
+// Static mode additionally skips bikes where the API returned no key.
 func filterKeyBikes(details []BikeDetail, mode string) []BikeDetail {
 	var out []BikeDetail
 	for _, d := range details {
 		if isCertOnlyProfile(d.BleProfile) {
 			continue
 		}
-		if mode == ShowKeysLegacy && d.Key.EncryptionKey == "" {
+		if mode == ShowKeysStatic && d.Key.EncryptionKey == "" {
 			continue
 		}
 		out = append(out, d)
@@ -33,7 +33,8 @@ func filterKeyBikes(details []BikeDetail, mode string) []BikeDetail {
 	return out
 }
 
-// ShowKeys prints the BLE encryption key of the account's bikes and does not request certificates.
+// ShowKeys prints the BLE encryption key of the account's static (non-certificate) bikes.
+// It does not request certificates itself.
 func ShowKeys(email, mode, bikeFilter string, debug, noCache bool) error {
 	authToken, _, _, err := resolveTokens(email, "", debug, noCache)
 	if err != nil {
@@ -47,10 +48,10 @@ func ShowKeys(email, mode, bikeFilter string, debug, noCache bool) error {
 
 	candidates := filterKeyBikes(customerData.Data.BikeDetails, mode)
 	if len(candidates) == 0 {
-		if mode == ShowKeysLegacy {
+		if mode == ShowKeysStatic {
 			fmt.Println("No bikes with a BLE encryption key found (S2/S3/S4 and older)")
 		} else {
-			fmt.Println("No bikes found (S5/A5 and S6 use certificates and have no BLE key)")
+			fmt.Println("No static bikes found (S5/A5 and S6 use certificates and have no BLE key)")
 		}
 		return nil
 	}

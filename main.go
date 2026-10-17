@@ -19,7 +19,7 @@ func main() {
 	bikeid := flag.String("bikeid", "", "Bike ID to verify (optional)")
 	email := flag.String("email", "", "VanMoof email address (optional)")
 	bikes := flag.String("bikes", "all", "Bikes to fetch certificates for: 'all', bike IDs (comma-separated), or 'ask' to be prompted")
-	showKeys := flag.String("show-keys", "", "Show BLE encryption keys instead of requesting certificates: 'legacy' (bikes with a key) or 'all' (also bikes without a key; S5/A5 and S6 never have one)")
+	showKeys := flag.String("show-keys", "", "Show BLE encryption keys instead of requesting certificates: 'static' (only the keys) or 'all' (keys, and certificates for the certificate bikes as usual)")
 	debug := flag.Bool("debug", false, "Enable debug output")
 	noCache := flag.Bool("no-cache", false, "Do not read or write token cache")
 	sudo := flag.Bool("sudo", false, "Skip all validation checks")
@@ -48,8 +48,8 @@ func main() {
 
 	// Validate show-keys if provided
 	if *showKeys != "" {
-		if *showKeys != vanmoof.ShowKeysLegacy && *showKeys != vanmoof.ShowKeysAll {
-			fmt.Printf("Error: Invalid -show-keys value '%s'. Must be '%s' or '%s'\n", *showKeys, vanmoof.ShowKeysLegacy, vanmoof.ShowKeysAll)
+		if *showKeys != vanmoof.ShowKeysStatic && *showKeys != vanmoof.ShowKeysAll {
+			fmt.Printf("Error: Invalid -show-keys value '%s'. Must be '%s' or '%s'\n", *showKeys, vanmoof.ShowKeysStatic, vanmoof.ShowKeysAll)
 			return
 		}
 		if *cert != "" {
@@ -123,8 +123,12 @@ func main() {
 		if *showKeys != "" {
 			if err := vanmoof.ShowKeys(emailInput, *showKeys, *bikes, *debug, *noCache); err != nil {
 				fmt.Printf("Error: %v\n", err)
+				return
 			}
-			return
+			// static: keys only; all: keys plus the regular certificate flow below
+			if *showKeys == vanmoof.ShowKeysStatic {
+				return
+			}
 		}
 
 		if err := vanmoof.GetCert(emailInput, *bikes, *pubkey, *debug, *noCache); err != nil {
