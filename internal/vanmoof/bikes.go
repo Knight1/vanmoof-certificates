@@ -60,11 +60,15 @@ func selectBikes(bikes []BikeData, filter string) ([]BikeData, error) {
 		}
 
 		if isNumeric {
-			// Match by bike API ID
-			for _, bike := range bikes {
-				if bike.BikeID == numericID {
-					selected = append(selected, bike)
-					break
+			// Match by bike API ID. 0 is never a real bike ID — it's the zero value
+			// shared/guest bikes get when merged in (they have no numeric ID), so
+			// treat it as "no match" rather than matching every shared bike.
+			if numericID != 0 {
+				for _, bike := range bikes {
+					if bike.BikeID == numericID {
+						selected = append(selected, bike)
+						break
+					}
 				}
 			}
 		} else {
