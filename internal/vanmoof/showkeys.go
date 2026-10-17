@@ -43,6 +43,8 @@ func ShowKeys(email, mode, bikeFilter, pubkey string, debug, noCache bool) error
 		return fmt.Errorf("authentication failed: %w", err)
 	}
 
+	warnPendingInvitations(authToken, debug)
+
 	customerData, err := fetchCustomerData(authToken, debug)
 	if err != nil {
 		return fmt.Errorf("failed to get customer data: %w", err)
@@ -54,7 +56,6 @@ func ShowKeys(email, mode, bikeFilter, pubkey string, debug, noCache bool) error
 		return nil
 	}
 
-	warnPendingInvitations(authToken, debug)
 	bikes := mergeSharedVehicles(customerData.Data.Bikes, customerData.Data.UUID, appToken, debug)
 	return requestCertificates(bikes, customerData.Data.UUID, appToken, bikeFilter, pubkey, debug)
 }
