@@ -27,3 +27,19 @@ func TestFilterKeyBikes(t *testing.T) {
 		t.Errorf("all: got %+v, want bikes 1, 2 and 3", all)
 	}
 }
+
+func TestIsKnownStaticKeyProfile(t *testing.T) {
+	staticProfiles := []string{"ELECTRIFIED_2018", "ELECTRIFIED_2019", "ELECTRIFIED_2020", "ELECTRIFIED_2021", "ELECTRIFIED_2023_TRACK_1"}
+	for _, p := range staticProfiles {
+		if !isKnownStaticKeyProfile(p) {
+			t.Errorf("isKnownStaticKeyProfile(%q) = false, want true", p)
+		}
+	}
+
+	certProfiles := []string{"ELECTRIFIED_2022", "ELECTRIFIED_2025", "SMARTBIKE_2016", ""}
+	for _, p := range certProfiles {
+		if isKnownStaticKeyProfile(p) {
+			t.Errorf("isKnownStaticKeyProfile(%q) = true, want false", p)
+		}
+	}
+}
