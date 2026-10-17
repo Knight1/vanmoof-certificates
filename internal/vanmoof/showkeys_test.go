@@ -1,0 +1,29 @@
+package vanmoof
+
+import "testing"
+
+func detail(id int, profile, key string) BikeDetail {
+	d := BikeDetail{BikeID: id, BleProfile: profile}
+	d.Key.EncryptionKey = key
+	return d
+}
+
+func TestFilterKeyBikes(t *testing.T) {
+	details := []BikeDetail{
+		detail(1, "ELECTRIFIED_2021", "00112233445566778899aabbccddeeff"),
+		detail(2, "ELECTRIFIED_2021", ""),
+		detail(3, "ELECTRIFIED_2023_TRACK_1", "ffeeddccbbaa99887766554433221100"),
+		detail(4, "ELECTRIFIED_2022", "00112233445566778899aabbccddeeff"),
+		detail(5, "ELECTRIFIED_2025", ""),
+	}
+
+	legacy := filterKeyBikes(details, ShowKeysLegacy)
+	if len(legacy) != 2 || legacy[0].BikeID != 1 || legacy[1].BikeID != 3 {
+		t.Errorf("legacy: got %+v, want bikes 1 and 3", legacy)
+	}
+
+	all := filterKeyBikes(details, ShowKeysAll)
+	if len(all) != 3 || all[0].BikeID != 1 || all[1].BikeID != 2 || all[2].BikeID != 3 {
+		t.Errorf("all: got %+v, want bikes 1, 2 and 3", all)
+	}
+}

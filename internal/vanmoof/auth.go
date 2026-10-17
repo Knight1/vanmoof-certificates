@@ -122,18 +122,27 @@ func getBikeSharingInvitations(authToken string, debug bool) (int, error) {
 	return len(resp.Invitations), nil
 }
 
-func getCustomerData(authToken string, debug bool) (string, []BikeData, error) {
+func fetchCustomerData(authToken string, debug bool) (*CustomerData, error) {
 	headers := apiHeaders(map[string]string{
 		"Authorization": "Bearer " + authToken,
 	})
 
 	body, err := doHTTPRequest("GET", apiBaseURL+"/getCustomerData?includeBikeDetails", nil, headers, debug)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
 	var customerData CustomerData
 	if err := json.Unmarshal(body, &customerData); err != nil {
+		return nil, err
+	}
+
+	return &customerData, nil
+}
+
+func getCustomerData(authToken string, debug bool) (string, []BikeData, error) {
+	customerData, err := fetchCustomerData(authToken, debug)
+	if err != nil {
 		return "", nil, err
 	}
 

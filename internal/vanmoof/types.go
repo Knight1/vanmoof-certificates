@@ -33,10 +33,24 @@ type BikeData struct {
 	MainEcuSerial string `json:"mainEcuSerial"`
 }
 
+// BikeDetail is an entry of bikeDetails in the getCustomerData response
+type BikeDetail struct {
+	BikeID      int    `json:"id"`
+	Name        string `json:"name"`
+	FrameNumber string `json:"frameNumber"`
+	MacAddress  string `json:"macAddress"`
+	BleProfile  string `json:"bleProfile"`
+	Key         struct {
+		EncryptionKey string `json:"encryptionKey"`
+	} `json:"key"`
+}
+
 type CustomerData struct {
 	Data struct {
 		UUID  string     `json:"uuid"`
 		Bikes []BikeData `json:"bikes"`
+		// BikeDetails carries the per-bike BLE key, which getCustomerData does not put in Bikes
+		BikeDetails []BikeDetail `json:"bikeDetails"`
 	} `json:"data"`
 }
 

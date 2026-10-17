@@ -13,6 +13,7 @@ go build -mod=vendor -ldflags "-w -d"
 |------|-------------|---------|
 | `-email` | VanMoof email address | Prompt if not provided |
 | `-bikes` | Bikes to process: 'all', IDs (comma-separated), or 'ask' | `all` |
+| `-show-keys` | Show BLE encryption keys instead of requesting certificates: `legacy` (bikes with a key) or `all` (also bikes without one) | - |
 | `-debug` | Enable debug output | `false` |
 | `-no-cache` | Do not read or write token cache | `false` |
 | `-sudo` | Skip all validation checks | `false` |
@@ -125,6 +126,34 @@ This will request a certificate for your bike(s) using the provided public key. 
 ```
 
 This will display your owned and shared bikes and prompt you to select which ones to process.
+
+### Show BLE Encryption Keys
+
+Bikes older than the S5 (S2/S3/S4 and earlier) authenticate over BLE with a key
+instead of a certificate. It is returned as `key.encryptionKey` by `getCustomerData`.
+
+**Only bikes that have a key (S2/S3/S4 and older):**
+```console
+./vanmoof-certificates -email user@vanmoof.com -show-keys legacy
+```
+
+**All S4 and older bikes, also those where the API returns no key (shown as `not available`):**
+```console
+./vanmoof-certificates -email user@vanmoof.com -show-keys all
+```
+
+`-bikes` narrows the selection as usual. No certificates are requested and no keys are generated in this mode.
+S5/A5 and S6 bikes are never listed because they use certificates and have no BLE key.
+
+Output per bike:
+```
+bikeName: Wooosh
+frameNumber: ASY0000000
+macAddress: 00:11:22:33:44:55
+bleSecret: 00112233445566778899aabbccddeeff
+```
+
+**Keep the BLE secret private.** Anyone who has it can control the bike over Bluetooth.
 
 ### Debug Mode
 

@@ -19,13 +19,14 @@ func main() {
 	bikeid := flag.String("bikeid", "", "Bike ID to verify (optional)")
 	email := flag.String("email", "", "VanMoof email address (optional)")
 	bikes := flag.String("bikes", "all", "Bikes to fetch certificates for: 'all', bike IDs (comma-separated), or 'ask' to be prompted")
+	showKeys := flag.String("show-keys", "", "Show BLE encryption keys instead of requesting certificates: 'legacy' (bikes with a key) or 'all' (also bikes without a key; S5/A5 and S6 never have one)")
 	debug := flag.Bool("debug", false, "Enable debug output")
 	noCache := flag.Bool("no-cache", false, "Do not read or write token cache")
 	sudo := flag.Bool("sudo", false, "Skip all validation checks")
 	flag.Parse()
 
 	if *debug {
-		fmt.Printf("[DEBUG] Flags: version=%v, genkey=%v, cert='%s', pubkey='%s', bikeid='%s', email='%s', bikes='%s', sudo=%v\n", *version, *genkey, *cert, *pubkey, *bikeid, *email, *bikes, *sudo)
+		fmt.Printf("[DEBUG] Flags: version=%v, genkey=%v, cert='%s', pubkey='%s', bikeid='%s', email='%s', bikes='%s', show-keys='%s', sudo=%v\n", *version, *genkey, *cert, *pubkey, *bikeid, *email, *bikes, *showKeys, *sudo)
 	}
 
 	if *version {
@@ -43,6 +44,18 @@ func main() {
 		fmt.Printf("Privkey = %s\n", privKeyB64)
 		fmt.Printf("Pubkey = %s\n", pubKeyB64)
 		return
+	}
+
+	// Validate show-keys if provided
+	if *showKeys != "" {
+		if *showKeys != vanmoof.ShowKeysLegacy && *showKeys != vanmoof.ShowKeysAll {
+			fmt.Printf("Error: Invalid -show-keys value '%s'. Must be '%s' or '%s'\n", *showKeys, vanmoof.ShowKeysLegacy, vanmoof.ShowKeysAll)
+			return
+		}
+		if *cert != "" {
+			fmt.Println("Error: -show-keys cannot be combined with -cert")
+			return
+		}
 	}
 
 	// Validate cert if provided
@@ -104,6 +117,13 @@ func main() {
 
 		if !*sudo && !vanmoof.IsValidEmail(emailInput) {
 			fmt.Printf("Error: Invalid email address '%s'\n", emailInput)
+			return
+		}
+
+		if *showKeys != "" {
+			if err := vanmoof.ShowKeys(emailInput, *showKeys, *bikes, *debug, *noCache); err != nil {
+				fmt.Printf("Error: %v\n", err)
+			}
 			return
 		}
 

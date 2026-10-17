@@ -16,7 +16,7 @@ func selectBikes(bikes []BikeData, filter string) ([]BikeData, error) {
 
 	if interactive {
 		// Display available bikes
-		fmt.Println("\nAvailable SA5 bikes:")
+		fmt.Println("\nAvailable bikes:")
 		for i, bike := range bikes {
 			if bike.BikeID != 0 {
 				fmt.Printf("%d. %s (ID: %d, Frame: %s)\n", i+1, bike.Name, bike.BikeID, bike.FrameNumber)
