@@ -156,6 +156,18 @@ bleSecret: 00112233445566778899aabbccddeeff
 
 **Keep the BLE secret private.** Anyone who has it can control the bike over Bluetooth.
 
+If a bike has no key and uses `"messagesViaBLE": "BLEv2"`, the key may still be on its way as a
+bike message queued for delivery the next time the bike connects over BLE (`getBikeMessages`).
+In that case an extra line is printed:
+```
+bikeMessage: 1 message(s) waiting for delivery over BLE
+```
+or, if nothing is queued:
+```
+bikeMessage: none waiting
+```
+If a bike message is waiting either sent it to the bike via a tool or use the official app.  
+
 ### Debug Mode
 
 Enable debug output to see detailed API requests and responses:

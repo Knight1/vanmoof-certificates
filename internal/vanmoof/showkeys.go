@@ -83,6 +83,21 @@ func ShowKeys(email, mode, bikeFilter string, debug, noCache bool) error {
 			fmt.Printf("frameNumber: %s\n", d.FrameNumber)
 			fmt.Printf("macAddress: %s\n", d.MacAddress)
 			fmt.Printf("bleSecret: %s\n", secret)
+
+			// No key on a BLEv2 bike means the key itself may be waiting as a bike
+			// message, delivered the next time the bike connects over BLE.
+			if d.Key.EncryptionKey == "" && d.MessagesViaBLE == "BLEv2" {
+				messages, err := getBikeMessages(d.BikeID, authToken, debug)
+				if err != nil {
+					if debug {
+						fmt.Printf("[DEBUG] Failed to check bike messages: %v\n", err)
+					}
+				} else if len(messages) > 0 {
+					fmt.Printf("bikeMessage: %d message(s) waiting for delivery over BLE\n", len(messages))
+				} else {
+					fmt.Println("bikeMessage: none waiting")
+				}
+			}
 			if debug {
 				model := bleProfileModel[d.BleProfile]
 				if model == "" {

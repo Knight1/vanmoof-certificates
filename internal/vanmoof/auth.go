@@ -122,6 +122,26 @@ func getBikeSharingInvitations(authToken string, debug bool) (int, error) {
 	return len(resp.Invitations), nil
 }
 
+// getBikeMessages checks for messages queued for BLE delivery to a bike (getBikeMessages
+// returns [] when nothing is waiting, or a list of {"content": "..."} entries otherwise).
+func getBikeMessages(bikeID int, authToken string, debug bool) ([]BikeMessage, error) {
+	headers := apiHeaders(map[string]string{
+		"Authorization": "Bearer " + authToken,
+	})
+
+	body, err := doHTTPRequest("GET", fmt.Sprintf(apiBaseURL+"/getBikeMessages/%d", bikeID), nil, headers, debug)
+	if err != nil {
+		return nil, err
+	}
+
+	var messages []BikeMessage
+	if err := json.Unmarshal(body, &messages); err != nil {
+		return nil, err
+	}
+
+	return messages, nil
+}
+
 func fetchCustomerData(authToken string, debug bool) (*CustomerData, error) {
 	headers := apiHeaders(map[string]string{
 		"Authorization": "Bearer " + authToken,

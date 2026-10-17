@@ -35,14 +35,21 @@ type BikeData struct {
 
 // BikeDetail is an entry of bikeDetails in the getCustomerData response
 type BikeDetail struct {
-	BikeID      int    `json:"id"`
-	Name        string `json:"name"`
-	FrameNumber string `json:"frameNumber"`
-	MacAddress  string `json:"macAddress"`
-	BleProfile  string `json:"bleProfile"`
-	Key         struct {
+	BikeID         int    `json:"id"`
+	Name           string `json:"name"`
+	FrameNumber    string `json:"frameNumber"`
+	MacAddress     string `json:"macAddress"`
+	BleProfile     string `json:"bleProfile"`
+	MessagesViaBLE string `json:"messagesViaBLE"`
+	Key            struct {
 		EncryptionKey string `json:"encryptionKey"`
 	} `json:"key"`
+}
+
+// BikeMessage is one entry of the getBikeMessages response: a message queued for
+// delivery to the bike the next time it connects over BLE.
+type BikeMessage struct {
+	Content string `json:"content"`
 }
 
 type CustomerData struct {

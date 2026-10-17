@@ -15,7 +15,7 @@ Pull Requests are welcome! ❤️
 - Support for shared/guest bikes via VanMoof's Vehicle Registry API
 - Generate Ed25519 key pairs
 - Create and parse bike certificates
-- Show the BLE encryption key of S2/S3/S4 and older bikes (`-show-keys`)
+- Show the BLE encryption key of S2/S3/S4 and older bikes (`-show-keys`), including a check for a pending key delivery over BLE (`getBikeMessages`) when no key is available yet
 - Interactive or command-line bike selection (by ID or frame number)
 - Debug mode for troubleshooting
 
