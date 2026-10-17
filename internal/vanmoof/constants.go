@@ -31,18 +31,6 @@ var certOnlyBleProfiles = []string{
 	"ELECTRIFIED_2025",
 }
 
-// knownStaticKeyBleProfiles are the profiles confirmed to authenticate with a
-// static BLE key (key.encryptionKey from getCustomerData), rather than a
-// certificate. A bike on one of these profiles with no key set yet is expected
-// to receive it via getBikeMessages.
-var knownStaticKeyBleProfiles = []string{
-	"ELECTRIFIED_2018",
-	"ELECTRIFIED_2019",
-	"ELECTRIFIED_2020",
-	"ELECTRIFIED_2021",
-	"ELECTRIFIED_2023_TRACK_1",
-}
-
 // bleProfileModel maps BLE profiles to human-readable model names
 var bleProfileModel = map[string]string{
 	"SMARTBIKE_2016":           "Smartbike",

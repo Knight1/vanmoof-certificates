@@ -17,24 +17,14 @@ func isCertOnlyProfile(profile string) bool {
 	return false
 }
 
-func isKnownStaticKeyProfile(profile string) bool {
-	for _, p := range knownStaticKeyBleProfiles {
-		if p == profile {
-			return true
-		}
-	}
-	return false
-}
-
 // filterKeyBikes skips certificate-only bikes (S5/A5, S6), which have no BLE key.
-// Static mode additionally skips bikes where the API returned no key.
-func filterKeyBikes(details []BikeDetail, mode string) []BikeDetail {
+// A bike with no key yet is kept, in both modes: it still needs to be checked for a
+// pending key delivery via getBikeMessages (see printStaticKeys), so it can't be
+// dropped here just because the key itself hasn't arrived.
+func filterKeyBikes(details []BikeDetail) []BikeDetail {
 	var out []BikeDetail
 	for _, d := range details {
 		if isCertOnlyProfile(d.BleProfile) {
-			continue
-		}
-		if mode == ShowKeysStatic && d.Key.EncryptionKey == "" {
 			continue
 		}
 		out = append(out, d)
@@ -65,7 +55,7 @@ func ShowKeys(email, mode, bikeFilter, pubkey string, debug, noCache bool) error
 		debugPrintBikeProfiles(customerData.Data.Bikes)
 	}
 
-	printStaticKeys(customerData.Data.BikeDetails, mode, bikeFilter, authToken, debug)
+	printStaticKeys(customerData.Data.BikeDetails, bikeFilter, authToken, debug)
 
 	if mode != ShowKeysAll {
 		return nil
@@ -76,15 +66,11 @@ func ShowKeys(email, mode, bikeFilter, pubkey string, debug, noCache bool) error
 }
 
 // printStaticKeys prints the BLE encryption key (or bike message status) of the
-// account's static (non-certificate) bikes matching mode and bikeFilter.
-func printStaticKeys(details []BikeDetail, mode, bikeFilter, authToken string, debug bool) {
-	candidates := filterKeyBikes(details, mode)
+// account's static (non-certificate) bikes matching bikeFilter.
+func printStaticKeys(details []BikeDetail, bikeFilter, authToken string, debug bool) {
+	candidates := filterKeyBikes(details)
 	if len(candidates) == 0 {
-		if mode == ShowKeysStatic {
-			fmt.Println("No bikes with a BLE encryption key found (S2/S3/S4 and older)")
-		} else {
-			fmt.Println("No static bikes found (S5/A5 and S6 use certificates and have no BLE key)")
-		}
+		fmt.Println("No static bikes found (S5/A5 and S6 use certificates and have no BLE key)")
 		return
 	}
 
@@ -117,9 +103,11 @@ func printStaticKeys(details []BikeDetail, mode, bikeFilter, authToken string, d
 			fmt.Printf("macAddress: %s\n", d.MacAddress)
 			fmt.Printf("bleSecret: %s\n", secret)
 
-			// No key set yet on a bike known to use a static key means the key itself
-			// may be waiting as a bike message, delivered next time the bike connects over BLE.
-			if d.Key.EncryptionKey == "" && isKnownStaticKeyProfile(d.BleProfile) {
+			// No key set yet on a non-certificate (pre-S5) bike means the key itself may
+			// be waiting as a bike message, delivered next time the bike connects over BLE.
+			// This isn't limited to a few known profiles: every pre-S5 generation uses a
+			// static key the same way, server-side, regardless of its exact bleProfile string.
+			if d.Key.EncryptionKey == "" && !isCertOnlyProfile(d.BleProfile) {
 				messages, err := getBikeMessages(d.BikeID, authToken, debug)
 				if err != nil {
 					if debug {
