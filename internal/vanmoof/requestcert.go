@@ -137,11 +137,24 @@ func GetCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 	if debug {
 		fmt.Printf("[DEBUG] Customer UUID: %s\n", customerUUID)
 		fmt.Printf("[DEBUG] Retrieved %d owned bikes\n", len(bikes))
+		debugPrintBikeProfiles(bikes)
 	}
 
 	bikes = mergeSharedVehicles(bikes, customerUUID, appToken, debug)
 
 	return requestCertificates(bikes, customerUUID, appToken, bikeFilter, pubkey, debug)
+}
+
+// debugPrintBikeProfiles prints each bike's BLE profile and, if it's one we recognize,
+// the model name we map it to (debug mode only; callers only call this under debug).
+func debugPrintBikeProfiles(bikes []BikeData) {
+	for _, b := range bikes {
+		model := bleProfileModel[b.BleProfile]
+		if model == "" {
+			model = "unknown"
+		}
+		fmt.Printf("[DEBUG]   %s: %s (%s)\n", b.FrameNumber, b.BleProfile, model)
+	}
 }
 
 // warnPendingInvitations prints a warning if the account has pending bike sharing
