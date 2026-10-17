@@ -157,6 +157,18 @@ func debugPrintBikeProfiles(bikes []BikeData) {
 	}
 }
 
+// debugPrintVehicleAccessProfiles is debugPrintBikeProfiles for shared/guest bikes from
+// the Vehicle Registry API, which come back as VehicleAccess rather than BikeData.
+func debugPrintVehicleAccessProfiles(vehicles []VehicleAccess) {
+	for _, v := range vehicles {
+		model := bleProfileModel[v.BleProfile]
+		if model == "" {
+			model = "unknown"
+		}
+		fmt.Printf("[DEBUG]   %s: %s (%s)\n", v.VehicleID, v.BleProfile, model)
+	}
+}
+
 // warnPendingInvitations prints a warning if the account has pending bike sharing
 // invitations. A lookup failure is only surfaced in debug mode, since it isn't fatal.
 func warnPendingInvitations(authToken string, debug bool) {
@@ -184,6 +196,7 @@ func mergeSharedVehicles(bikes []BikeData, customerUUID, appToken string, debug 
 	}
 	if debug {
 		fmt.Printf("[DEBUG] Retrieved %d shared vehicles\n", len(sharedVehicles))
+		debugPrintVehicleAccessProfiles(sharedVehicles)
 	}
 
 	for _, v := range sharedVehicles {
