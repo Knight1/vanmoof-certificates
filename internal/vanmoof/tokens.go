@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -95,48 +96,63 @@ func decrypt(data []byte, passphrase string) ([]byte, error) {
 	return gcm.Open(nil, nonce, ciphertext, nil)
 }
 
-// loadAllTokenCaches loads the full cache map from disk
-func loadAllTokenCaches(debug bool) map[string]CachedTokens {
+// loadAllTokenCaches loads the full cache map from disk. With no cache file yet it
+// returns a nil map and no error. A cache file that exists but can't be read, decrypted
+// or parsed is an error instead, so callers don't overwrite it: it may hold other
+// accounts' tokens, or be encrypted with a different VANMOOF_CACHE_KEY.
+func loadAllTokenCaches(debug bool) (map[string]CachedTokens, error) {
 	path, err := tokenCachePath()
 	if err != nil {
 		if debug {
 			fmt.Printf("[DEBUG] Token cache path error: %v\n", err)
 		}
-		return nil
+		return nil, nil
 	}
 
 	data, err := os.ReadFile(path)
-	if err != nil {
+	if errors.Is(err, os.ErrNotExist) {
 		if debug {
 			fmt.Printf("[DEBUG] No token cache found: %v\n", err)
 		}
-		return nil
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
 	}
 
-	// Decrypt if cache key is set
-	if key := getCacheKey(); key != "" {
-		plaintext, err := decrypt(data, key)
-		if err != nil {
+	key := getCacheKey()
+
+	// An unencrypted (plain JSON) cache is used as is. If VANMOOF_CACHE_KEY has been
+	// set since it was written, it's encrypted right away, keeping every account.
+	var plainMap map[string]CachedTokens
+	if err := json.Unmarshal(data, &plainMap); err == nil {
+		if key != "" && plainMap != nil {
 			if debug {
-				fmt.Printf("[DEBUG] Token cache decryption failed: %v\n", err)
+				fmt.Println("[DEBUG] Encrypting the unencrypted token cache with VANMOOF_CACHE_KEY")
 			}
-			return nil
+			saveAllTokenCaches(plainMap, debug)
 		}
-		data = plaintext
-		if debug {
-			fmt.Println("[DEBUG] Token cache decrypted")
-		}
+		return plainMap, nil
+	}
+
+	// Anything else has to be encrypted
+	if key == "" {
+		return nil, fmt.Errorf("%s is encrypted or corrupt: set VANMOOF_CACHE_KEY if you use one, or delete the file to start over", path)
+	}
+	plaintext, err := decrypt(data, key)
+	if err != nil {
+		return nil, fmt.Errorf("can't decrypt %s: wrong VANMOOF_CACHE_KEY, or the file is corrupt (delete it to start over)", path)
+	}
+	if debug {
+		fmt.Println("[DEBUG] Token cache decrypted")
 	}
 
 	var cacheMap map[string]CachedTokens
-	if err := json.Unmarshal(data, &cacheMap); err != nil {
-		if debug {
-			fmt.Printf("[DEBUG] Token cache parse error: %v\n", err)
-		}
-		return nil
+	if err := json.Unmarshal(plaintext, &cacheMap); err != nil {
+		return nil, fmt.Errorf("%s is corrupt (delete it to start over): %w", path, err)
 	}
 
-	return cacheMap
+	return cacheMap, nil
 }
 
 // saveAllTokenCaches writes the full cache map to disk
@@ -193,7 +209,11 @@ func saveAllTokenCaches(cacheMap map[string]CachedTokens, debug bool) {
 
 // loadTokenCache loads cached tokens from disk for the given email
 func loadTokenCache(email string, debug bool) *CachedTokens {
-	cacheMap := loadAllTokenCaches(debug)
+	cacheMap, err := loadAllTokenCaches(debug)
+	if err != nil {
+		fmt.Printf("WARNING: Token cache not used: %v\n", err)
+		return nil
+	}
 	if cacheMap == nil {
 		return nil
 	}
@@ -212,10 +232,15 @@ func loadTokenCache(email string, debug bool) *CachedTokens {
 	return &cached
 }
 
-// saveTokenCache saves tokens to disk for the given email, preserving other accounts
+// saveTokenCache saves tokens to disk for the given email, preserving other accounts.
+// A cache file that can't be read is left alone rather than overwritten.
 func saveTokenCache(email, authToken, refreshToken, appToken string, debug bool) {
 	// Load existing cache to preserve other accounts
-	cacheMap := loadAllTokenCaches(debug)
+	cacheMap, err := loadAllTokenCaches(debug)
+	if err != nil {
+		fmt.Println("WARNING: New tokens not cached, so the token cache isn't overwritten")
+		return
+	}
 	if cacheMap == nil {
 		cacheMap = make(map[string]CachedTokens)
 	}

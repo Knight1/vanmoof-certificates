@@ -78,7 +78,9 @@ export VANMOOF_CACHE_KEY="your-secret-passphrase"
 ./vanmoof-certificates -email user@vanmoof.com
 ```
 
-This encrypts the cache file with AES-256-GCM (PBKDF2-SHA256 key derivation, 100k iterations). Without the env var, the cache is stored as plain JSON.
+This encrypts the cache file with AES-256-GCM (PBKDF2-SHA256 key derivation, 100k iterations). Without the env var, the cache is stored as plain JSON. An existing unencrypted cache is encrypted the first time the tool runs with the variable set.
+
+If the cache can't be read (it's encrypted and `VANMOOF_CACHE_KEY` is missing or wrong, or the file is corrupt), the tool warns, logs in without it and leaves the file as it is, so no account's tokens are lost. Set the right key again, or delete the file to start over.
 
 To disable token caching entirely:
 
