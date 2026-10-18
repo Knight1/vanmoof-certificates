@@ -10,7 +10,21 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
-func ProcessCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID string, bikes []BikeData, debug bool) {
+// ProcessCertificate parses and checks a certificate given with -cert, against the
+// optional -pubkey and -framenumber.
+func ProcessCertificate(certStr, expectedPubKeyStr, frameNumber string, debug bool) {
+	var expectedBike *BikeData
+	if frameNumber != "" {
+		expectedBike = &BikeData{FrameNumber: frameNumber}
+	}
+	checkCertificate(certStr, expectedPubKeyStr, expectedBike, "", nil, debug)
+}
+
+// checkCertificate parses a certificate and checks it against the expected public key,
+// bike and user ID, each skipped if empty. expectedBike is the bike the certificate was
+// requested for, or the one given with -framenumber. bikes are the account's bikes, to report
+// which one the certificate matches.
+func checkCertificate(certStr, expectedPubKeyStr string, expectedBike *BikeData, expectedUserID string, bikes []BikeData, debug bool) {
 	if certStr == "" {
 		fmt.Println("Error: Certificate string is empty")
 		return
@@ -31,14 +45,16 @@ func ProcessCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 	r := parseCertificate(certData, bikes)
 
 	// Cross-reference verifications
-	verifyBikeID(&r, bikeID, bikes)
+	verifyBike(&r, expectedBike)
 	verifyPublicKey(&r, expectedPubKeyStr)
 	verifyUserID(&r, expectedUserID)
 
-	// Silently verify the certificate signature against known CA keys.
-	// Only surfaces an error when the signature does NOT match a known key.
-	perBikeKey := isS6Certificate(r)
-	if verified, hasKeys := verifyCertificateSignature(r.signature, certData[64:]); hasKeys && !verified {
+	// Verify the certificate signature against known CA keys. A match is silent, a
+	// mismatch is an error, except on S6 where it only means the key isn't known yet.
+	perBikeKey := isS6Certificate(r, expectedBike)
+	verified, hasKeys := verifyCertificateSignature(r.signature, certData[64:])
+	r.signatureVerified = verified
+	if hasKeys && !verified {
 		if perBikeKey {
 			// No S6 signing key is known yet, so a mismatch against the known CA keys
 			// says nothing about the certificate and is not an error.
@@ -50,7 +66,7 @@ func ProcessCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 
 	// Output
 	if debug {
-		printVerbose(r, certData, expectedPubKeyStr, bikeID, expectedUserID, bikes)
+		printVerbose(r, certData, expectedPubKeyStr, expectedBike, expectedUserID, bikes)
 		validateCertificateSignature(r.signature, certData[64:], debug, perBikeKey)
 		for _, n := range r.notes {
 			fmt.Printf("  Info: %s\n", n)
@@ -63,13 +79,18 @@ func ProcessCertificate(certStr, expectedPubKeyStr, bikeID, expectedUserID strin
 // parseCertificate extracts and validates all fields from raw certificate bytes
 const s6SignatureNote = "Signature verification unavailable: no S6 certificate signing key is known yet"
 
-// isS6Certificate reports whether the certificate belongs to an S6, either from the
-// matched bike's BLE profile or, without a match, from the S6 frame number pattern.
-func isS6Certificate(r certResult) bool {
-	if r.matchedBike != nil && r.matchedBike.BleProfile == "ELECTRIFIED_2025" {
-		return true
+// isS6Certificate reports whether the certificate belongs to an S6. The BLE profile of
+// the bike it was requested for decides, or else that of the account bike it matches.
+// Without either (offline), the frame number shape decides, which some SA5s share.
+func isS6Certificate(r certResult, requestedBike *BikeData) bool {
+	switch {
+	case requestedBike != nil && requestedBike.BleProfile != "":
+		return requestedBike.BleProfile == "ELECTRIFIED_2025"
+	case r.matchedBike != nil && r.matchedBike.BleProfile != "":
+		return r.matchedBike.BleProfile == "ELECTRIFIED_2025"
+	default:
+		return s6FrameNumberRegexp.MatchString(string(r.frameID))
 	}
-	return s6FrameNumberRegexp.MatchString(string(r.frameID))
 }
 
 func parseCertificate(certData []byte, bikes []BikeData) certResult {
@@ -206,37 +227,30 @@ func parseCertificate(certData []byte, bikes []BikeData) certResult {
 	return r
 }
 
-// verifyBikeID checks the certificate against the expected bike ID
-func verifyBikeID(r *certResult, bikeID string, bikes []BikeData) {
-	if bikeID == "" {
+// verifyBike checks the certificate against the bike it should be for
+func verifyBike(r *certResult, bike *BikeData) {
+	if bike == nil {
 		return
 	}
 
 	frameIDStr := string(r.frameID)
 	bikeIDStr := string(r.bikeID)
 
-	var parsedNumericID uint32
-	isNumeric := false
-	if _, err := fmt.Sscanf(bikeID, "%d", &parsedNumericID); err == nil {
-		isNumeric = true
-	}
-
-	if isNumeric && len(bikes) > 0 {
-		for _, bike := range bikes {
-			if bike.BikeID == int(parsedNumericID) {
-				if (frameIDStr == bike.FrameNumber || frameIDStr == bike.FrameSerial) &&
-					(bikeIDStr == bike.FrameNumber || bikeIDStr == bike.FrameSerial || bikeIDStr == bike.MainEcuSerial) {
-					r.bikeIDVerified = true
-				}
-				return
-			}
-		}
-		r.errors = append(r.errors, fmt.Sprintf("Bike ID %d not found in your account", parsedNumericID))
-	} else if !isNumeric {
-		if frameIDStr == bikeID || bikeIDStr == bikeID {
+	switch {
+	case bike.BikeID != 0:
+		// One of the account's own bikes, with its module serials from the API
+		if (frameIDStr == bike.FrameNumber || frameIDStr == bike.FrameSerial) &&
+			(bikeIDStr == bike.FrameNumber || bikeIDStr == bike.FrameSerial || bikeIDStr == bike.MainEcuSerial) {
 			r.bikeIDVerified = true
 		} else {
-			r.errors = append(r.errors, fmt.Sprintf("Bike frame %s not found in certificate (AFM: %s, ABM: %s)", bikeID, frameIDStr, bikeIDStr))
+			r.errors = append(r.errors, fmt.Sprintf("Bike ID %d mismatch: bike has frame %s, certificate has AFM %s, ABM %s", bike.BikeID, bike.FrameNumber, frameIDStr, bikeIDStr))
+		}
+	default:
+		// Only the frame number is known: a shared bike, or -framenumber
+		if frameIDStr == bike.FrameNumber || bikeIDStr == bike.FrameNumber {
+			r.bikeIDVerified = true
+		} else {
+			r.errors = append(r.errors, fmt.Sprintf("Bike frame %s not found in certificate (AFM: %s, ABM: %s)", bike.FrameNumber, frameIDStr, bikeIDStr))
 		}
 	}
 }
@@ -293,15 +307,20 @@ func printCompact(r certResult) {
 		if r.userIDVerified {
 			parts = append(parts, "user ok")
 		}
-		fmt.Printf("Certificate valid: %s\n", strings.Join(parts, ", "))
+		verdict := "Certificate valid"
+		if !r.signatureVerified {
+			verdict = "Certificate valid, but signature not verified"
+		}
+		fmt.Printf("%s: %s\n", verdict, strings.Join(parts, ", "))
 	} else {
 		fmt.Printf("Certificate INVALID: %d error(s), %d warning(s)\n", len(r.errors), len(r.warnings))
 		for _, e := range r.errors {
 			fmt.Printf("  ✗ %s\n", e)
 		}
-		for _, w := range r.warnings {
-			fmt.Printf("  ⚠ %s\n", w)
-		}
+	}
+	// Warnings never make a certificate invalid, but are always shown
+	for _, w := range r.warnings {
+		fmt.Printf("  ⚠ %s\n", w)
 	}
 	for _, n := range r.notes {
 		fmt.Printf("  Note: %s\n", n)
@@ -309,7 +328,7 @@ func printCompact(r certResult) {
 }
 
 // printVerbose prints the full detailed output (debug mode)
-func printVerbose(r certResult, certData []byte, expectedPubKeyStr, bikeID, expectedUserID string, bikes []BikeData) {
+func printVerbose(r certResult, certData []byte, expectedPubKeyStr string, expectedBike *BikeData, expectedUserID string, bikes []BikeData) {
 	fmt.Printf("Total Certificate Length: %d bytes\n", len(certData))
 	fmt.Printf("Decoded Certificate (hex): %x\n", certData)
 
@@ -387,7 +406,7 @@ func printVerbose(r certResult, certData []byte, expectedPubKeyStr, bikeID, expe
 	if len(bikes) > 0 {
 		fmt.Println("\n--- Certificate Validation Summary ---")
 		if r.matchedBike != nil {
-			fmt.Printf("✓ Certificate is VALID for your bike\n")
+			fmt.Printf("✓ Certificate matches one of your bikes\n")
 			if r.matchedBike.BikeID != 0 {
 				fmt.Printf("  Matched Bike ID: %d\n", r.matchedBike.BikeID)
 			}
@@ -413,15 +432,19 @@ func printVerbose(r certResult, certData []byte, expectedPubKeyStr, bikeID, expe
 	}
 
 	// Bike ID verification
-	if bikeID != "" {
+	if expectedBike != nil {
+		bikeLabel := expectedBike.FrameNumber
+		if expectedBike.BikeID != 0 {
+			bikeLabel = fmt.Sprintf("%d", expectedBike.BikeID)
+		}
 		fmt.Println("\n--- Bike ID Verification ---")
 		if r.bikeIDVerified {
-			fmt.Printf("✓ Bike ID Verified: %s\n", bikeID)
+			fmt.Printf("✓ Bike ID Verified: %s\n", bikeLabel)
 			if r.matchedBike != nil {
 				fmt.Printf("  Certificate matches bike from your account\n")
 			}
 		} else {
-			fmt.Printf("✗ Bike ID verification failed for: %s\n", bikeID)
+			fmt.Printf("✗ Bike ID verification failed for: %s\n", bikeLabel)
 		}
 	}
 

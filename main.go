@@ -16,7 +16,7 @@ func main() {
 	genkey := flag.Bool("genkey", false, "Generate Ed25519 key pair and exit")
 	cert := flag.String("cert", "", "Base64 encoded certificate string")
 	pubkey := flag.String("pubkey", "", "Base64 encoded public key string (optional)")
-	bikeid := flag.String("bikeid", "", "Bike ID to verify (optional)")
+	frameNumber := flag.String("framenumber", "", "Frame number to verify the -cert certificate against (optional)")
 	email := flag.String("email", "", "VanMoof email address (optional)")
 	bikes := flag.String("bikes", "all", "Bikes to fetch certificates for: 'all', bike IDs (comma-separated), or 'ask' to be prompted")
 	showKeys := flag.String("show-keys", "", "Show BLE encryption keys instead of requesting certificates: 'static' (only the keys) or 'all' (keys, and certificates for the certificate bikes as usual)")
@@ -26,7 +26,7 @@ func main() {
 	flag.Parse()
 
 	if *debug {
-		fmt.Printf("[DEBUG] Flags: version=%v, genkey=%v, cert='%s', pubkey='%s', bikeid='%s', email='%s', bikes='%s', show-keys='%s', sudo=%v\n", *version, *genkey, *cert, *pubkey, *bikeid, *email, *bikes, *showKeys, *sudo)
+		fmt.Printf("[DEBUG] Flags: version=%v, genkey=%v, cert='%s', pubkey='%s', framenumber='%s', email='%s', bikes='%s', show-keys='%s', sudo=%v\n", *version, *genkey, *cert, *pubkey, *frameNumber, *email, *bikes, *showKeys, *sudo)
 	}
 
 	if *version {
@@ -74,10 +74,14 @@ func main() {
 		}
 	}
 
-	// Validate bikeid if provided
-	if *bikeid != "" {
-		if !*sudo && !vanmoof.IsValidBikeID(*bikeid) {
-			fmt.Printf("Error: Invalid bike ID '%s'. Must be a numeric ID or valid frame number pattern\n", *bikeid)
+	// Validate framenumber if provided
+	if *frameNumber != "" {
+		if *cert == "" {
+			fmt.Println("Error: -framenumber only works with -cert (use -bikes to pick bikes)")
+			return
+		}
+		if !*sudo && !vanmoof.ValidateFrameNumber(*frameNumber) {
+			fmt.Printf("Error: Invalid frame number '%s'\n", *frameNumber)
 			return
 		}
 	}
@@ -136,5 +140,5 @@ func main() {
 		return
 	}
 
-	vanmoof.ProcessCertificate(*cert, *pubkey, *bikeid, "", nil, *debug)
+	vanmoof.ProcessCertificate(*cert, *pubkey, *frameNumber, *debug)
 }

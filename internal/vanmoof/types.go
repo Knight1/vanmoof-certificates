@@ -133,8 +133,9 @@ type certResult struct {
 	notes    []string // informational only, shown but never makes a certificate invalid
 
 	// Match results
-	matchedBike    *BikeData
-	bikeIDVerified bool
-	pubKeyVerified bool
-	userIDVerified bool
+	matchedBike       *BikeData
+	bikeIDVerified    bool
+	pubKeyVerified    bool
+	userIDVerified    bool
+	signatureVerified bool // a known CA key verified the signature (never for S6 yet)
 }

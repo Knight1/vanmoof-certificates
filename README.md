@@ -59,6 +59,7 @@ The CA signing public key (recovered from the bike's BLE certificate, and the sa
 
 Every parsed certificate's signature is verified against this key; a mismatch is
 flagged as an error (silent on success). Run with `-debug` for full verification detail.
+No S6 signing key is known yet, so S6 certificates are reported with the signature not verified.
 
 ### CBOR Payload Structure
 

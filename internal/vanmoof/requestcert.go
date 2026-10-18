@@ -345,11 +345,7 @@ func requestCertificates(bikes []BikeData, customerUUID, appToken, bikeFilter, p
 			continue
 		}
 		fmt.Println("Parsing certificate...")
-		bikeIDStr := bike.FrameNumber
-		if bike.BikeID != 0 {
-			bikeIDStr = fmt.Sprintf("%d", bike.BikeID)
-		}
-		ProcessCertificate(cert, pubKeyB64, bikeIDStr, customerUUID, bikes, debug)
+		checkCertificate(cert, pubKeyB64, &bike, customerUUID, bikes, debug)
 	}
 	return nil
 }

@@ -33,28 +33,6 @@ func IsValidBase64(s string) bool {
 	return err == nil
 }
 
-// IsValidBikeID validates a bike ID (numeric or frame number)
-func IsValidBikeID(bikeID string) bool {
-	bikeID = strings.TrimSpace(bikeID)
-	if bikeID == "" {
-		return false
-	}
-
-	// Check if it's a numeric ID
-	var numericID uint32
-	if _, err := fmt.Sscanf(bikeID, "%d", &numericID); err == nil {
-		return true
-	}
-
-	// Check if it's a valid frame number pattern
-	matched, err := regexp.MatchString(frameNumberPattern, bikeID)
-	if err != nil {
-		return false
-	}
-
-	return matched
-}
-
 // IsValidEd25519PublicKey validates an Ed25519 public key
 func IsValidEd25519PublicKey(pubkey string) bool {
 	pubkey = strings.TrimSpace(pubkey)

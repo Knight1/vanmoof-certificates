@@ -19,7 +19,7 @@ go build -mod=vendor -ldflags "-w -d"
 | `-sudo` | Skip all validation checks | `false` |
 | `-cert` | Base64 encoded certificate to parse | - |
 | `-pubkey` | Base64 encoded public key (optional) | - |
-| `-bikeid` | Bike ID for verification (optional) | - |
+| `-framenumber` | Frame number to verify a `-cert` certificate against (optional) | - |
 | `-genkey` | Generate Ed25519 key pair and exit | - |
 | `-version` | Print version information | - |
 
@@ -189,6 +189,13 @@ certificate signing (CA) key. In normal mode this is silent — a mismatch is
 reported as an error, a valid signature prints nothing. Debug mode additionally
 shows the full signature validation detail.
 
+No S6 signing key is known yet, so S6 certificates are reported as
+`Certificate valid, but signature not verified` instead. When requesting
+certificates, the bike's BLE profile tells an S6 apart; offline (`-cert`) only
+the frame number can, and some SA5 frame numbers look like S6 ones. Warnings,
+such as an expiry more than a year away or an unknown role, are listed under
+the result even when the certificate is valid.
+
 
 ### Parse Existing Certificate
 
@@ -198,11 +205,13 @@ Parse a certificate without fetching from API:
 ./vanmoof-certificates -cert "BASE64_CERTIFICATE_STRING"
 ```
 
-With optional public key verification:
+With optional public key and frame number verification:
 
 ```console
-./vanmoof-certificates -cert "BASE64_CERT" -pubkey "BASE64_PUBKEY" -bikeid "BIKE_ID"
+./vanmoof-certificates -cert "BASE64_CERT" -pubkey "BASE64_PUBKEY" -framenumber "FRAME_NUMBER"
 ```
+
+Certificates the tool requests itself are always checked against the bike they were requested for.
 
 ### Generate Ed25519 Key Pair
 
