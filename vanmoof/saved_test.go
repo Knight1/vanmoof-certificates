@@ -271,3 +271,15 @@ func TestCleartextKeysNeedConsent(t *testing.T) {
 		}
 	}
 }
+
+// -show-saved reports a cache it can't read, instead of showing nothing
+func TestShowSavedUnreadable(t *testing.T) {
+	useTempCache(t, "secret")
+	captureStdout(t, func() {
+		bikeCache.save(leakEmail, savedAccount{Key: &savedKeyPair{PrivateKey: "private", PublicKey: "public"}}, false)
+	})
+	t.Setenv("VANMOOF_CACHE_KEY", "wrong")
+	if err := ShowSaved(leakEmail, false); err == nil || !strings.Contains(err.Error(), "can't decrypt") {
+		t.Errorf("err = %v", err)
+	}
+}

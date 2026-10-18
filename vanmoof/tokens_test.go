@@ -3,13 +3,16 @@ package vanmoof
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestTokenCacheEncryptionFormat(t *testing.T) {
@@ -208,5 +211,66 @@ func TestTokenCacheCorruptNotOverwritten(t *testing.T) {
 	saveTokenCache("a@example.com", "authA2", "refreshA2", "appA2", false)
 	if after, _ := os.ReadFile(path); !bytes.Equal(truncated, after) {
 		t.Error("corrupt cache file was overwritten")
+	}
+}
+
+func TestIsJWTExpired(t *testing.T) {
+	jwt := func(claims string) string {
+		return base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`)) + "." +
+			base64.RawURLEncoding.EncodeToString([]byte(claims)) + ".c2lnbmF0dXJl"
+	}
+	now := time.Now().Unix()
+	tests := []struct {
+		token   string
+		expired bool
+	}{
+		{"", true},
+		{"garbage", true},
+		{"a.b.c", true},
+		{jwt(`{}`), true}, // without expiry
+		{jwt(`{"exp":"tomorrow"}`), true},
+		{jwt(fmt.Sprintf(`{"exp":%d}`, now-1)), true},
+		{jwt(fmt.Sprintf(`{"exp":%d}`, now+30)), true}, // within the minute before it expires
+		{jwt(fmt.Sprintf(`{"exp":%d}`, now+3600)), false},
+	}
+	for _, tt := range tests {
+		if got := isJWTExpired(tt.token); got != tt.expired {
+			t.Errorf("isJWTExpired(%q) = %v, want %v", tt.token, got, tt.expired)
+		}
+	}
+}
+
+// A cache that can't be written stays as it was, with nothing left next to it, and a
+// cache folder that can't be created is reported
+func TestCacheWriteFailure(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Getuid() == 0 {
+		t.Skip("file permissions don't stop writing here")
+	}
+	path := useTempCache(t, "")
+	captureStdout(t, func() { saveTokenCache("a@example.com", "authA", "refreshA", "appA", false) })
+	before, _ := os.ReadFile(path)
+	dir := filepath.Dir(path)
+	if err := os.Chmod(dir, 0500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0700) })
+
+	out := captureStdout(t, func() { saveTokenCache("a@example.com", "authB", "refreshB", "appB", true) })
+	if after, _ := os.ReadFile(path); !bytes.Equal(before, after) || !strings.Contains(out, "Failed to write tokens.json") {
+		t.Errorf("cache changed, or the failure not reported:\n%s", out)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 {
+		t.Errorf("files left in the cache folder: %v", entries)
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	if err := os.Chmod(home, 0500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(home, 0700) })
+	if out := captureStdout(t, func() { saveTokenCache("a@example.com", "authA", "refreshA", "appA", true) }); !strings.Contains(out, "Failed to create the cache folder") {
+		t.Errorf("failure not reported:\n%s", out)
 	}
 }

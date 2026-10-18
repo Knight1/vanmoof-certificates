@@ -284,3 +284,29 @@ func TestCertificateDuplicateFields(t *testing.T) {
 		t.Errorf("valid = %v, signature verified = %v, errors %q", res.Valid, res.SignatureVerified, res.Errors)
 	}
 }
+
+// The public key a certificate has to be for may have a 0x00 prefix (33 bytes); one that
+// isn't base64, or too short, is an error
+func TestVerifyPublicKey(t *testing.T) {
+	key := make([]byte, 32)
+	key[0] = 1
+	b64 := base64.StdEncoding.EncodeToString
+	tests := []struct {
+		expected string
+		verified bool
+		err      string // start of the error, or "" for none
+	}{
+		{b64(key), true, ""},
+		{b64(append([]byte{0}, key...)), true, ""},
+		{b64(make([]byte, 32)), false, "Public key mismatch"},
+		{"not base64!", false, "Error decoding expected public key"},
+		{b64([]byte{1, 2, 3}), false, "Public key too short"},
+	}
+	for _, tt := range tests {
+		r := certResult{publicKey: key}
+		verifyPublicKey(&r, tt.expected)
+		if r.pubKeyVerified != tt.verified || (tt.err == "") != (len(r.errors) == 0) || (tt.err != "" && !strings.HasPrefix(r.errors[0], tt.err)) {
+			t.Errorf("%q: verified %v, errors %q", tt.expected, r.pubKeyVerified, r.errors)
+		}
+	}
+}

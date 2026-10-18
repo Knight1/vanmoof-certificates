@@ -1,6 +1,9 @@
 package vanmoof
 
-import "testing"
+import (
+	"encoding/base64"
+	"testing"
+)
 
 func TestLooksLikeFrameNumber(t *testing.T) {
 	tests := []struct {
@@ -87,5 +90,29 @@ func TestValidateUUID(t *testing.T) {
 	}
 	if validateUUID(make([]byte, 15)) {
 		t.Error("validateUUID accepts 15 bytes")
+	}
+}
+
+func TestIsValidPublicKey(t *testing.T) {
+	b64 := base64.StdEncoding.EncodeToString
+	key := make([]byte, 32)
+	tests := []struct {
+		s                 string
+		base64, publicKey bool
+	}{
+		{"", false, false},
+		{"not base64!", false, false},
+		{"AAAA", true, false},
+		{b64(key), true, true},
+		{b64(append([]byte{0}, key...)), true, true}, // with a 0x00 prefix
+		{b64(append([]byte{1}, key...)), true, false},
+		{b64(key[:31]), true, false},
+		{" " + b64(key), false, false},                            // main trims it first
+		{base64.RawStdEncoding.EncodeToString(key), false, false}, // without padding
+	}
+	for _, tt := range tests {
+		if IsValidBase64(tt.s) != tt.base64 || IsValidEd25519PublicKey(tt.s) != tt.publicKey {
+			t.Errorf("%q: base64 %v, public key %v; want %v, %v", tt.s, IsValidBase64(tt.s), IsValidEd25519PublicKey(tt.s), tt.base64, tt.publicKey)
+		}
 	}
 }

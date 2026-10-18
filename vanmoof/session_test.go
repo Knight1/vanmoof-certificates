@@ -226,3 +226,30 @@ func TestSessionConcurrentUse(t *testing.T) {
 		t.Errorf("app token renewed %d times, want once", n)
 	}
 }
+
+// RequestCertificate returns the certificate in VanMoof's answer, or else why there's none
+func TestRequestCertificateResponses(t *testing.T) {
+	_, publicKey, _ := GenerateED25519()
+	tests := []struct {
+		body, want string
+		err        string // part of the error, or "" for none
+	}{
+		{`{"certificate":"Q0VSVA=="}`, "Q0VSVA==", ""},
+		{`{"err":"Bike not found"}`, "", "no certificate: \"Bike not found\""},
+		{`{"err":{"code":404}}`, "", `no certificate: {"code":404}`},
+		{`{"certificate":""}`, "", "missing 'certificate'"},
+		{`{}`, "", "missing 'certificate'"},
+		{`not JSON`, "", "failed to parse"},
+	}
+	for _, tt := range tests {
+		api := http.DefaultTransport
+		http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return httpResponse(r, http.StatusOK, tt.body), nil
+		})
+		cert, err := testSession().RequestCertificate(fakeSA5, publicKey)
+		http.DefaultTransport = api
+		if cert != tt.want || (err == nil) != (tt.err == "") || (err != nil && !strings.Contains(err.Error(), tt.err)) {
+			t.Errorf("%s: RequestCertificate = %q, %v; want %q, %q", tt.body, cert, err, tt.want, tt.err)
+		}
+	}
+}

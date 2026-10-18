@@ -69,3 +69,23 @@ func TestSelectBikes(t *testing.T) {
 		t.Errorf("selectBikes(ask, \"1, 42\") = %q, %v; want BBBBBB00001AA once", frameNumbers(got), err)
 	}
 }
+
+func TestBikeModel(t *testing.T) {
+	tests := []struct {
+		profile, model   string
+		usesCertificates bool
+	}{
+		{"ELECTRIFIED_2022", "SA5", true},
+		{"ELECTRIFIED_2025", "S6", true},
+		{"ELECTRIFIED_2023_TRACK1", "S4/X4", false},
+		{"ELECTRIFIED_2018", "S2/X2", false},
+		{"ELECTRIFIED_2099", "ELECTRIFIED_2099", false}, // unknown: shown as it is
+		{"", "", false},
+	}
+	for _, tt := range tests {
+		b := Bike{BleProfile: tt.profile}
+		if b.Model() != tt.model || b.UsesCertificates() != tt.usesCertificates {
+			t.Errorf("%q: model %q, uses certificates %v", tt.profile, b.Model(), b.UsesCertificates())
+		}
+	}
+}
