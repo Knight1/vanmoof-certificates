@@ -300,7 +300,8 @@ func requestCertificates(bikes []BikeData, customerUUID, appToken, bikeFilter, p
 		fmt.Println()
 	}
 
-	// Process each selected bike and create certificate
+	// Process each selected bike and create certificate, counting the ones that fail
+	failed := 0
 	for _, bike := range selectedBikes {
 		if bike.BikeID != 0 {
 			fmt.Printf("Bike ID: %s\n", RedactID(fmt.Sprint(bike.BikeID)))
@@ -320,6 +321,7 @@ func requestCertificates(bikes []BikeData, customerUUID, appToken, bikeFilter, p
 		certResp, err := createCertificate(bike.FrameNumber, pubKeyB64, appToken, debug)
 		if err != nil {
 			fmt.Printf("Failed to create certificate: %v\n", ScrubText(err.Error()))
+			failed++
 			continue
 		}
 
@@ -327,11 +329,13 @@ func requestCertificates(bikes []BikeData, customerUUID, appToken, bikeFilter, p
 		var respData map[string]interface{}
 		if err := json.Unmarshal([]byte(certResp), &respData); err != nil {
 			fmt.Printf("Failed to parse certificate response: %v\n", ScrubText(err.Error()))
+			failed++
 			continue
 		}
 
 		if _, hasErr := respData["err"]; hasErr {
 			fmt.Printf("Certificate error: %v\n", redactJSON(certResp))
+			failed++
 			continue
 		}
 
@@ -342,10 +346,16 @@ func requestCertificates(bikes []BikeData, customerUUID, appToken, bikeFilter, p
 		cert, ok := respData["certificate"].(string)
 		if !ok {
 			fmt.Println("Certificate response missing 'certificate' field")
+			failed++
 			continue
 		}
 		fmt.Println("Parsing certificate...")
-		checkCertificate(cert, pubKeyB64, &bike, customerUUID, bikes, debug)
+		if !checkCertificate(cert, pubKeyB64, &bike, customerUUID, bikes, debug) {
+			failed++
+		}
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d of %d certificate(s) failed", failed, len(selectedBikes))
 	}
 	return nil
 }

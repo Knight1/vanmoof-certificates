@@ -11,34 +11,34 @@ import (
 )
 
 // ProcessCertificate parses and checks a certificate given with -cert, against the
-// optional -pubkey and -framenumber.
-func ProcessCertificate(certStr, expectedPubKeyStr, frameNumber string, debug bool) {
+// optional -pubkey and -framenumber. It reports whether the certificate is valid.
+func ProcessCertificate(certStr, expectedPubKeyStr, frameNumber string, debug bool) bool {
 	var expectedBike *BikeData
 	if frameNumber != "" {
 		expectedBike = &BikeData{FrameNumber: frameNumber}
 	}
-	checkCertificate(certStr, expectedPubKeyStr, expectedBike, "", nil, debug)
+	return checkCertificate(certStr, expectedPubKeyStr, expectedBike, "", nil, debug)
 }
 
 // checkCertificate parses a certificate and checks it against the expected public key,
 // bike and user ID, each skipped if empty. expectedBike is the bike the certificate was
 // requested for, or the one given with -framenumber. bikes are the account's bikes, to report
-// which one the certificate matches.
-func checkCertificate(certStr, expectedPubKeyStr string, expectedBike *BikeData, expectedUserID string, bikes []BikeData, debug bool) {
+// which one the certificate matches. It reports whether the certificate is valid.
+func checkCertificate(certStr, expectedPubKeyStr string, expectedBike *BikeData, expectedUserID string, bikes []BikeData, debug bool) bool {
 	if certStr == "" {
 		fmt.Println("Error: Certificate string is empty")
-		return
+		return false
 	}
 
 	certData, err := base64.StdEncoding.DecodeString(certStr)
 	if err != nil {
 		fmt.Println("Error decoding certificate:", err)
-		return
+		return false
 	}
 
 	if len(certData) < 134 {
 		fmt.Println("Error: Certificate is too short")
-		return
+		return false
 	}
 
 	// Parse certificate into result struct
@@ -74,6 +74,7 @@ func checkCertificate(certStr, expectedPubKeyStr string, expectedBike *BikeData,
 	} else {
 		printCompact(r)
 	}
+	return len(r.errors) == 0
 }
 
 // parseCertificate extracts and validates all fields from raw certificate bytes

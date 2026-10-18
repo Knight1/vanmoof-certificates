@@ -50,7 +50,9 @@ func ShowKeys(email, mode, bikeFilter, pubkey string, debug, noCache bool) error
 		debugPrintBikeProfiles(customerData.Data.Bikes)
 	}
 
-	printStaticKeys(customerData.Data.BikeDetails, bikeFilter, authToken, debug)
+	if err := printStaticKeys(customerData.Data.BikeDetails, bikeFilter, authToken, debug); err != nil {
+		return err
+	}
 
 	if mode != ShowKeysAll {
 		return nil
@@ -62,11 +64,11 @@ func ShowKeys(email, mode, bikeFilter, pubkey string, debug, noCache bool) error
 
 // printStaticKeys prints the BLE encryption key (or bike message status) of the
 // account's static (non-certificate) bikes matching bikeFilter.
-func printStaticKeys(details []BikeDetail, bikeFilter, authToken string, debug bool) {
+func printStaticKeys(details []BikeDetail, bikeFilter, authToken string, debug bool) error {
 	candidates := filterKeyBikes(details)
 	if len(candidates) == 0 {
 		fmt.Println("No static bikes found (S5/A5 and S6 use certificates and have no BLE key)")
-		return
+		return nil
 	}
 
 	// Reuse the regular bike selection (-bikes all / IDs / frame numbers / ask)
@@ -76,12 +78,11 @@ func printStaticKeys(details []BikeDetail, bikeFilter, authToken string, debug b
 	}
 	selected, err := selectBikes(list, bikeFilter)
 	if err != nil {
-		fmt.Printf("Error selecting bikes: %v\n", ScrubText(err.Error()))
-		return
+		return fmt.Errorf("failed to select bikes: %w", err)
 	}
 	if len(selected) == 0 {
 		fmt.Println("No bikes selected")
-		return
+		return nil
 	}
 
 	for _, sel := range selected {
@@ -125,4 +126,5 @@ func printStaticKeys(details []BikeDetail, bikeFilter, authToken string, debug b
 			break
 		}
 	}
+	return nil
 }

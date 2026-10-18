@@ -3,16 +3,19 @@
 ## Installation
 
 ```console
-git clone https://github.com/Knight1/vanmoof-ble.git
-go build -mod=vendor -ldflags "-w -d"
+git clone https://github.com/Knight1/vanmoof-certificates.git
+cd vanmoof-certificates
+CGO_ENABLED=0 go build -mod=vendor -ldflags "-w -d"
 ```
+
+This builds a static binary (`-d` needs cgo off). On Windows, build with `go build -mod=vendor -ldflags "-w"`.
 
 ## Flags
 
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-email` | VanMoof email address | Prompt if not provided |
-| `-bikes` | Bikes to process: 'all', IDs (comma-separated), or 'ask' | `all` |
+| `-bikes` | Bikes to process: 'all', bike IDs or frame numbers (comma-separated), or 'ask' | `all` |
 | `-show-keys` | Show BLE encryption keys instead of requesting certificates: `static` (only the keys) or `all` (keys, plus certificates for the certificate bikes) | - |
 | `-debug` | Enable debug output (tokens and keys stay hidden) | `false` |
 | `-redact` | Hide secrets and personal data in all output, to share it in an issue or pull request | `false` |
@@ -25,9 +28,17 @@ go build -mod=vendor -ldflags "-w -d"
 | `-genkey` | Generate Ed25519 key pair and exit | - |
 | `-version` | Print version information | - |
 
+## Exit Status
+
+| Status | Meaning |
+|--------|---------|
+| `0` | Success, also when there was nothing to do (e.g. no supported bikes) |
+| `1` | Something failed: logging in, the VanMoof API, a certificate request, or a certificate check (`Certificate INVALID`) |
+| `2` | Invalid flags or flag values |
+
 ## Requirements
 
-- Go 1.24 or later
+- Go 1.25 or later. Builds use at least Go 1.27.2, for its security fixes; an older `go` downloads it automatically
 - VanMoof account with registered SA5/S6 bike(s), or shared bike access (guest invitations)
 
 ## Example Output

@@ -77,6 +77,13 @@ func ValidateFrameNumber(frameNumber string) bool {
 	return matched
 }
 
+// LooksLikeFrameNumber reports whether s could be a frame number of any generation, for
+// picking bikes with -bikes. Unlike ValidateFrameNumber it accepts more than the SA5/S6
+// formats, since an unknown one does no harm there: it just matches none of the bikes.
+func LooksLikeFrameNumber(s string) bool {
+	return anyFrameNumberRegexp.MatchString(s)
+}
+
 func validateAndShowJWT(tokenString string) {
 	fmt.Println("\n[DEBUG] JWT Token Analysis:")
 

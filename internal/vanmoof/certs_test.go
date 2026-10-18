@@ -153,13 +153,18 @@ func TestProcessCertificateVerdict(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			var valid bool
 			out := captureStdout(t, func() {
 				if tt.bike != nil {
-					checkCertificate(tt.cert, "", tt.bike, "", []BikeData{*tt.bike}, false)
+					valid = checkCertificate(tt.cert, "", tt.bike, "", []BikeData{*tt.bike}, false)
 				} else {
-					ProcessCertificate(tt.cert, "", tt.frameNumber, false)
+					valid = ProcessCertificate(tt.cert, "", tt.frameNumber, false)
 				}
 			})
+			// What it reports (and so the exit status) has to match what it prints
+			if want := !strings.HasPrefix(tt.verdict, "Certificate INVALID"); valid != want {
+				t.Errorf("reported valid = %v, want %v", valid, want)
+			}
 			if !strings.HasPrefix(out, tt.verdict) {
 				t.Errorf("output starts %q, want %q", strings.SplitN(out, "\n", 2)[0], tt.verdict)
 			}

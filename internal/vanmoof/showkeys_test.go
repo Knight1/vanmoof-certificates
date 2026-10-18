@@ -1,6 +1,32 @@
 package vanmoof
 
-import "testing"
+import (
+	"os"
+	"strings"
+	"testing"
+)
+
+// Failing to pick bikes (here: no answer to -bikes ask) is an error, not just a message
+func TestShowKeysReportsSelectionError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("VANMOOF_PASSWORD", leakPassword)
+	fakeVanMoof(t)
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	stdin := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = stdin })
+
+	captureStdout(t, func() { err = ShowKeys(leakEmail, ShowKeysStatic, "ask", "", false, true) })
+	if err == nil || !strings.Contains(err.Error(), "failed to select bikes") {
+		t.Errorf("err = %v, want failed to select bikes", err)
+	}
+}
 
 func detail(id int, profile, key string) BikeDetail {
 	d := BikeDetail{BikeID: id, BleProfile: profile}
