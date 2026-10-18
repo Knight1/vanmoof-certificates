@@ -1,0 +1,2 @@
+# Text files are committed and checked out with LF line endings, on Windows too
+* text=auto eol=lf
