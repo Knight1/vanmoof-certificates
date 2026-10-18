@@ -99,8 +99,9 @@ func doHTTPRequest(method, url string, body io.Reader, headers map[string]string
 		fmt.Printf("[DEBUG] Response body: %s\n", redactJSON(string(respBody)))
 	}
 
-	// Check for HTTP errors
-	if resp.StatusCode >= 400 {
+	// Anything but a success is an error, a redirect too: it isn't followed (see above),
+	// so its body isn't the response asked for
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		body := string(respBody)
 		if len(body) > 500 {
 			body = body[:500] + "... (truncated)"

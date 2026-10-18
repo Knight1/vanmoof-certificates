@@ -29,7 +29,8 @@ type AppTokenResponse struct {
 	Token string `json:"token"`
 }
 
-// httpError is the error doHTTPRequest returns for an HTTP error response (status >= 400)
+// httpError is the error doHTTPRequest returns for a response that isn't a success (2xx),
+// such as an error or a redirect
 type httpError struct {
 	statusCode int
 	body       string // truncated to 500 bytes

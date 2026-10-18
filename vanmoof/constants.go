@@ -7,8 +7,8 @@ const (
 	apiKey = "fcb38d47-f14b-30cf-843b-26283f6a5819"
 
 	// Frame number validation patterns for different bike models
-	// SA5 (S5/A5): 6 letters + 5 digits + 2 letters (e.g. SVTBKL00063OA), some 5 + 6 like S6
-	// S6: 5 letters + 6 digits + 2 letters (e.g. TVSEF300106TA)
+	// SA5 (S5/A5): 6 letters + 5 digits + 2 letters (e.g. SVTBKLdddddOA), some 5 + 6 like S6
+	// S6: 5 letters + 6 digits + 2 letters (e.g. TVSEFddddddTA)
 	frameNumberPattern = `^[A-Z]{5,6}\d{5,6}[A-Z]{2}$`
 
 	apiBaseURL             = "https://api.vanmoof-api.com/v8"

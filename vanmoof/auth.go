@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 )
@@ -34,6 +35,9 @@ func authenticate(email, password string, debug bool) (string, string, error) {
 	if err := json.Unmarshal(body, &authResp); err != nil {
 		return "", "", err
 	}
+	if authResp.Token == "" {
+		return "", "", errors.New("authentication returned empty token")
+	}
 
 	return authResp.Token, authResp.RefreshToken, nil
 }
@@ -59,6 +63,9 @@ func refreshAuthToken(refreshToken string, debug bool) (string, string, error) {
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return "", "", err
 	}
+	if resp.Token == "" {
+		return "", "", errors.New("token refresh returned empty token")
+	}
 
 	return resp.Token, resp.RefreshToken, nil
 }
@@ -77,6 +84,9 @@ func getApplicationToken(authToken string, debug bool) (string, error) {
 	if err := json.Unmarshal(body, &appTokenResp); err != nil {
 		return "", err
 	}
+	if appTokenResp.Token == "" {
+		return "", errors.New("application token request returned empty token")
+	}
 
 	// Validate and decode JWT in debug mode
 	if debug {
@@ -92,8 +102,8 @@ func getSharedVehicles(riderUUID, appToken string, debug bool) ([]VehicleAccess,
 		"Authorization": "Bearer " + appToken,
 	}
 
-	url := fmt.Sprintf(vehicleRegistryBaseURL+"/external/riders/%s/vehicles", url.PathEscape(riderUUID))
-	body, err := doHTTPRequest("GET", url, nil, headers, debug)
+	endpoint := fmt.Sprintf(vehicleRegistryBaseURL+"/external/riders/%s/vehicles", url.PathEscape(riderUUID))
+	body, err := doHTTPRequest("GET", endpoint, nil, headers, debug)
 	if err != nil {
 		return nil, err
 	}

@@ -3,6 +3,7 @@ package vanmoof
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -47,5 +48,40 @@ func TestRequestCertificatesReportsFailures(t *testing.T) {
 	captureStdout(t, func() { err = requestCertificates([]Bike{good}, "", testSession(), "all", "", false) })
 	if err != nil {
 		t.Errorf("err = %v for a valid certificate", err)
+	}
+}
+
+// A token response without a token is an error, so no empty token is used or cached:
+// logging in goes on to the next way, as when the server rejects a token
+func TestEmptyTokensAreErrors(t *testing.T) {
+	useTempCache(t, "")
+	t.Setenv("VANMOOF_PASSWORD", leakPassword)
+	fakeVanMoof(t)
+	captureStdout(t, func() { saveTokenCache(leakEmail, leakAuthToken, leakRefresh, expiredJWT(), false) })
+	// 200 OK, but without a token
+	failRequests(t, http.StatusOK, "/v8/authenticate", "/v8/token", "/v8/getApplicationToken")
+
+	if _, _, err := authenticate(leakEmail, leakPassword, false); err == nil {
+		t.Error("authenticate: no error")
+	}
+	if _, _, err := refreshAuthToken(leakRefresh, false); err == nil {
+		t.Error("refreshAuthToken: no error")
+	}
+	if _, err := getApplicationToken(leakAuthToken, false); err == nil {
+		t.Error("getApplicationToken: no error")
+	}
+
+	// The command line tool, renewing the cached app token
+	var tokens Tokens
+	var err error
+	captureStdout(t, func() { tokens, _, err = resolveTokens(leakEmail, "", false, false, false) })
+	if err == nil {
+		t.Errorf("resolveTokens = %+v, want an error", tokens)
+	}
+
+	// The library, renewing expired tokens
+	s := Resume(Tokens{AuthToken: expiredJWT(), AppToken: expiredJWT(), RefreshToken: leakRefresh})
+	if _, err := s.UserID(); !errors.Is(err, ErrLoginRequired) {
+		t.Errorf("UserID: err = %v, want ErrLoginRequired", err)
 	}
 }

@@ -35,9 +35,6 @@ func passwordLogin(email, password string, debug bool) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	if authToken == "" {
-		return nil, errors.New("authentication returned empty token")
-	}
 
 	if debug {
 		fmt.Printf("[DEBUG] Auth token received: %s\n", debugSecret(authToken[:min(20, len(authToken))]+"..."))
@@ -46,9 +43,6 @@ func passwordLogin(email, password string, debug bool) (*Session, error) {
 	appToken, err := getApplicationToken(authToken, debug)
 	if err != nil {
 		return nil, err
-	}
-	if appToken == "" {
-		return nil, errors.New("application token request returned empty token")
 	}
 	return &Session{tokens: Tokens{AuthToken: authToken, AppToken: appToken, RefreshToken: refreshToken}, debug: debug}, nil
 }
@@ -192,7 +186,7 @@ func (s *Session) renew(old Tokens, authRejected bool) (Tokens, error) {
 
 	t := s.tokens
 	if !authRejected && !isJWTExpired(t.AuthToken) {
-		if appToken, err := getApplicationToken(t.AuthToken, s.debug); err == nil && appToken != "" {
+		if appToken, err := getApplicationToken(t.AuthToken, s.debug); err == nil {
 			t.AppToken = appToken
 			s.tokens = t
 			return t, nil
@@ -203,11 +197,11 @@ func (s *Session) renew(old Tokens, authRejected bool) (Tokens, error) {
 		return Tokens{}, ErrLoginRequired
 	}
 	authToken, refreshToken, err := refreshAuthToken(t.RefreshToken, s.debug)
-	if err != nil || authToken == "" {
+	if err != nil {
 		return Tokens{}, loginRequired(err)
 	}
 	appToken, err := getApplicationToken(authToken, s.debug)
-	if err != nil || appToken == "" {
+	if err != nil {
 		return Tokens{}, loginRequired(err)
 	}
 
@@ -220,10 +214,7 @@ func (s *Session) renew(old Tokens, authRejected bool) (Tokens, error) {
 	return t, nil
 }
 
-// loginRequired returns ErrLoginRequired, wrapping err with it if there is one
+// loginRequired wraps err, why the tokens couldn't be renewed, with ErrLoginRequired
 func loginRequired(err error) error {
-	if err == nil {
-		return ErrLoginRequired
-	}
 	return fmt.Errorf("%w: %w", ErrLoginRequired, err)
 }
