@@ -140,7 +140,7 @@ var (
 	// harmlessFields are kept even with -redact: they're needed to debug, and identify nobody
 	harmlessFields = map[string]bool{
 		"bleprofile": true, "ble_profile": true, "messagesviable": true, "role": true, "sku": true,
-		"status": true, "code": true,
+		"status": true, "code": true, "model": true, "expires": true,
 		"alg": true, "typ": true, "kid": true, "exp": true, "iat": true, "nbf": true, "iss": true, "aud": true, // JWT
 	}
 	// messageFields hold error messages, kept with -redact apart from personal data in them
@@ -148,7 +148,7 @@ var (
 	// idFields hold identifiers, of which -redact keeps only the shape
 	idFields = map[string]bool{
 		"id": true, "bikeid": true, "bike_id": true, "vehicle_id": true,
-		"framenumber": true, "frameserial": true, "mainecuserial": true,
+		"framenumber": true, "frame_number": true, "frameserial": true, "mainecuserial": true,
 	}
 )
 

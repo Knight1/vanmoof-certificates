@@ -37,7 +37,9 @@ func TestRequestCertificatesReportsFailures(t *testing.T) {
 	wrong := Bike{BikeID: 3, FrameNumber: "BBBBBB00003AA", BleProfile: "ELECTRIFIED_2022"}
 
 	var err error
-	out := captureStdout(t, func() { err = requestCertificates([]Bike{refused, wrong, good}, "", testSession(), "all", "", false) })
+	out := captureStdout(t, func() {
+		err = requestCertificates([]Bike{refused, wrong, good}, "", testSession(), &savedAccount{}, Options{BikeFilter: "all"})
+	})
 	if err == nil || err.Error() != "2 of 3 certificate(s) failed" {
 		t.Errorf("err = %v, want 2 of 3 certificate(s) failed", err)
 	}
@@ -45,7 +47,9 @@ func TestRequestCertificatesReportsFailures(t *testing.T) {
 		t.Errorf("the valid certificate wasn't processed after the failed ones:\n%s", out)
 	}
 
-	captureStdout(t, func() { err = requestCertificates([]Bike{good}, "", testSession(), "all", "", false) })
+	captureStdout(t, func() {
+		err = requestCertificates([]Bike{good}, "", testSession(), &savedAccount{}, Options{BikeFilter: "all"})
+	})
 	if err != nil {
 		t.Errorf("err = %v for a valid certificate", err)
 	}

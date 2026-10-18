@@ -18,7 +18,7 @@ func ProcessCertificate(certStr, expectedPubKeyStr, frameNumber string, debug bo
 	if frameNumber != "" {
 		expect.Bike = &Bike{FrameNumber: frameNumber}
 	}
-	return checkCertificate(certStr, expect, debug)
+	return checkCertificate(certStr, expect, debug).Valid
 }
 
 // CheckCertificate parses a base64 certificate, as Session.RequestCertificate returns it,
@@ -37,14 +37,14 @@ func (r CertificateResult) AccessLevel() string {
 	return getRoleDescription(r.Role)
 }
 
-// checkCertificate checks a certificate like CheckCertificate, and prints the result.
-// expect.Bike is the bike the certificate was requested for, or the one given with
-// -framenumber. It reports whether the certificate is valid.
-func checkCertificate(certStr string, expect Expect, debug bool) bool {
+// checkCertificate checks a certificate like CheckCertificate, prints the result, and
+// returns it. expect.Bike is the bike the certificate was requested for, or the one given
+// with -framenumber.
+func checkCertificate(certStr string, expect Expect, debug bool) CertificateResult {
 	r, certData, err := analyzeCertificate(certStr, expect)
 	if err != nil {
 		fmt.Printf("Error: %s\n", printable(err.Error()))
-		return false
+		return CertificateResult{Errors: []string{err.Error()}}
 	}
 
 	// Output
@@ -57,7 +57,7 @@ func checkCertificate(certStr string, expect Expect, debug bool) bool {
 	} else {
 		printCompact(r)
 	}
-	return len(r.errors) == 0
+	return r.result(certData)
 }
 
 // analyzeCertificate decodes, parses and checks a certificate against expect. It only

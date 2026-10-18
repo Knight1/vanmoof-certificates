@@ -167,6 +167,7 @@ func fetchCustomerData(authToken string, debug bool) (*CustomerData, error) {
 	if err := json.Unmarshal(body, &customerData); err != nil {
 		return nil, err
 	}
+	customerData.raw = body
 
 	return &customerData, nil
 }

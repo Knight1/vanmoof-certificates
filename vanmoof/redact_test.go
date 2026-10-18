@@ -121,7 +121,7 @@ func TestOutputEscapesControlCharacters(t *testing.T) {
 		return &http.Response{StatusCode: http.StatusBadRequest, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("bad\x1b[2Jrequest")), Request: r}, nil
 	})
 	bikes := []Bike{{BikeID: 1, Name: "My\x1b[31m bike\u202e", FrameNumber: "BBBBBB00001AA", BleProfile: "ELECTRIFIED_2022"}}
-	out := captureStdout(t, func() { requestCertificates(bikes, "", testSession(), "all", "", false) })
+	out := captureStdout(t, func() { requestCertificates(bikes, "", testSession(), &savedAccount{}, Options{BikeFilter: "all"}) })
 	if hasRaw(out) || !strings.Contains(out, `HTTP 400: bad\x1b[2Jrequest`) {
 		t.Errorf("output: %q", out)
 	}
@@ -264,11 +264,11 @@ func runEverything(t *testing.T) (out string, certs, pubKeys []string) {
 
 	out = captureStdout(t, func() {
 		for range 2 {
-			if err := GetCert(leakEmail, "all", "", true, false); err != nil {
+			if err := GetCert(leakEmail, Options{BikeFilter: "all", Debug: true}); err != nil {
 				t.Errorf("GetCert: %v", err)
 			}
 		}
-		if err := ShowKeys(leakEmail, ShowKeysAll, "all", "", true, false); err != nil {
+		if err := ShowKeys(leakEmail, ShowKeysAll, Options{BikeFilter: "all", Debug: true}); err != nil {
 			t.Errorf("ShowKeys: %v", err)
 		}
 		ProcessCertificate((*certsP)[0], (*pubKeysP)[0], leakOtherFrame, true)

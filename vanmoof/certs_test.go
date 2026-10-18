@@ -164,7 +164,7 @@ func TestProcessCertificateVerdict(t *testing.T) {
 			var valid bool
 			out := captureStdout(t, func() {
 				if tt.bike != nil {
-					valid = checkCertificate(tt.cert, Expect{Bike: tt.bike, Bikes: []Bike{*tt.bike}}, false)
+					valid = checkCertificate(tt.cert, Expect{Bike: tt.bike, Bikes: []Bike{*tt.bike}}, false).Valid
 				} else {
 					valid = ProcessCertificate(tt.cert, "", tt.frameNumber, false)
 				}

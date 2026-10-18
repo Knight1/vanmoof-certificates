@@ -17,7 +17,7 @@ func TestShowKeysReportsSelectionError(t *testing.T) {
 	setStdin(t, "")
 
 	var err error
-	captureStdout(t, func() { err = ShowKeys(leakEmail, ShowKeysStatic, "ask", "", false, true) })
+	captureStdout(t, func() { err = ShowKeys(leakEmail, ShowKeysStatic, Options{BikeFilter: "ask", NoCache: true}) })
 	if err == nil || !strings.Contains(err.Error(), "failed to select bikes") {
 		t.Errorf("err = %v, want failed to select bikes", err)
 	}
@@ -33,7 +33,7 @@ func TestShowKeysAllAskWithPipedInput(t *testing.T) {
 	setStdin(t, "1\n1\n")
 
 	var err error
-	out := captureStdout(t, func() { err = ShowKeys(leakEmail, ShowKeysAll, "ask", "", false, true) })
+	out := captureStdout(t, func() { err = ShowKeys(leakEmail, ShowKeysAll, Options{BikeFilter: "ask", NoCache: true}) })
 	if err != nil || !strings.Contains(out, "bleSecret: ") || !strings.Contains(out, "Certificate valid: ") {
 		t.Errorf("err = %v, output:\n%s", err, out)
 	}
@@ -57,7 +57,7 @@ func TestShowKeysWarnsAboutFailedLookups(t *testing.T) {
 	})
 
 	var err error
-	out := captureStdout(t, func() { err = ShowKeys(leakEmail, ShowKeysAll, "all", "", false, true) })
+	out := captureStdout(t, func() { err = ShowKeys(leakEmail, ShowKeysAll, Options{BikeFilter: "all", NoCache: true}) })
 	for _, want := range []string{
 		"WARNING: Couldn't check for pending bike sharing invitations: HTTP 500",
 		"bikeMessage: couldn't check (HTTP 500",

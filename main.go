@@ -28,7 +28,9 @@ func main() {
 	debug := flag.Bool("debug", false, "Enable debug output (tokens and keys stay hidden, see -show-everything)")
 	redact := flag.Bool("redact", false, "Hide secrets and personal data in all output, e.g. to share it in an issue")
 	showEverything := flag.Bool("show-everything", false, "With -debug, also show the tokens and keys it hides (never share this output)")
-	noCache := flag.Bool("no-cache", false, "Do not read or write token cache")
+	newKey := flag.Bool("new-key", false, "Request the certificates for a new key pair, which replaces the saved one")
+	showSaved := flag.Bool("show-saved", false, "Show what the cache holds for the account: key pair, certificates, BLE keys, bike messages and customer data")
+	noCache := flag.Bool("no-cache", false, "Do not read or write the cache (tokens, key pair, certificates, BLE keys, bike messages, customer data)")
 	sudo := flag.Bool("sudo", false, "Skip all validation checks")
 	flag.Parse()
 
@@ -53,8 +55,8 @@ func main() {
 		if bikesShown != "all" && bikesShown != "ask" {
 			bikesShown = vanmoof.RedactID(bikesShown)
 		}
-		fmt.Printf("[DEBUG] Flags: version=%v, genkey=%v, cert='%s', pubkey='%s', framenumber='%s', email='%s', bikes='%s', show-keys='%s', sudo=%v, redact=%v, show-everything=%v\n",
-			*version, *genkey, vanmoof.Redact(*cert), vanmoof.Redact(*pubkey), vanmoof.RedactID(*frameNumber), vanmoof.Redact(*email), bikesShown, *showKeys, *sudo, *redact, *showEverything)
+		fmt.Printf("[DEBUG] Flags: version=%v, genkey=%v, cert='%s', pubkey='%s', framenumber='%s', email='%s', bikes='%s', show-keys='%s', new-key=%v, show-saved=%v, no-cache=%v, sudo=%v, redact=%v, show-everything=%v\n",
+			*version, *genkey, vanmoof.Redact(*cert), vanmoof.Redact(*pubkey), vanmoof.RedactID(*frameNumber), vanmoof.Redact(*email), bikesShown, *showKeys, *newKey, *showSaved, *noCache, *sudo, *redact, *showEverything)
 	}
 
 	if *version {
@@ -84,6 +86,21 @@ func main() {
 			fmt.Println("Error: -show-keys cannot be combined with -cert")
 			os.Exit(exitUsage)
 		}
+	}
+
+	if *newKey {
+		if *pubkey != "" {
+			fmt.Println("Error: -new-key and -pubkey cannot be combined")
+			os.Exit(exitUsage)
+		}
+		if *cert != "" || *showKeys == vanmoof.ShowKeysStatic || *showSaved {
+			fmt.Println("Error: -new-key only works when requesting certificates")
+			os.Exit(exitUsage)
+		}
+	}
+	if *showSaved && (*cert != "" || *showKeys != "" || *pubkey != "" || *noCache) {
+		fmt.Println("Error: -show-saved cannot be combined with -cert, -show-keys, -pubkey or -no-cache")
+		os.Exit(exitUsage)
 	}
 
 	// Validate cert if provided
@@ -149,17 +166,26 @@ func main() {
 			os.Exit(exitUsage)
 		}
 
-		if *showKeys != "" {
-			// ShowKeys itself requests certificates too in "all" mode, reusing the
-			// authentication and customer data it already fetched for the keys.
-			if err := vanmoof.ShowKeys(emailInput, *showKeys, *bikes, *pubkey, *debug, *noCache); err != nil {
+		if *showSaved {
+			if err := vanmoof.ShowSaved(emailInput, *debug); err != nil {
 				fmt.Printf("Error: %v\n", vanmoof.ScrubText(err.Error()))
 				os.Exit(exitFailure)
 			}
 			return
 		}
 
-		if err := vanmoof.GetCert(emailInput, *bikes, *pubkey, *debug, *noCache); err != nil {
+		opts := vanmoof.Options{BikeFilter: *bikes, PublicKey: *pubkey, NewKey: *newKey, Debug: *debug, NoCache: *noCache}
+		if *showKeys != "" {
+			// ShowKeys itself requests certificates too in "all" mode, reusing the
+			// authentication and customer data it already fetched for the keys.
+			if err := vanmoof.ShowKeys(emailInput, *showKeys, opts); err != nil {
+				fmt.Printf("Error: %v\n", vanmoof.ScrubText(err.Error()))
+				os.Exit(exitFailure)
+			}
+			return
+		}
+
+		if err := vanmoof.GetCert(emailInput, opts); err != nil {
 			fmt.Printf("Error: %v\n", vanmoof.ScrubText(err.Error()))
 			os.Exit(exitFailure)
 		}

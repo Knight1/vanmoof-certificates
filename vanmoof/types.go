@@ -73,6 +73,7 @@ type CustomerData struct {
 		// BikeDetails carries the per-bike BLE key, which getCustomerData does not put in Bikes
 		BikeDetails []BikeDetail `json:"bikeDetails"`
 	} `json:"data"`
+	raw json.RawMessage // the response as received, which the cache keeps
 }
 
 // Vehicle Registry API response types (for shared bikes on S5/S6)
@@ -168,4 +169,42 @@ type CertificateResult struct {
 	PublicKey   []byte // the 32 byte Ed25519 public key it's for
 	Signature   []byte // Ed25519 signature of Payload
 	Payload     []byte // the CBOR encoded fields above
+}
+
+// Options are the command line flags that GetCert and ShowKeys use
+type Options struct {
+	BikeFilter string // -bikes: "all", bike IDs or frame numbers, or "ask"
+	PublicKey  string // -pubkey: request the certificates for this key, not the saved key pair
+	NewKey     bool   // -new-key: request them for a new key pair, which replaces the saved one
+	Debug      bool   // -debug
+	NoCache    bool   // -no-cache: don't read or write the cache
+}
+
+// savedAccount is what the cache keeps of an account's key pair and bikes (bikes.json)
+type savedAccount struct {
+	Key   *savedKeyPair `json:"key,omitempty"` // the key pair certificates are requested for
+	Bikes []savedBike   `json:"bikes,omitempty"`
+}
+
+// savedKeyPair is a base64 Ed25519 key pair, as GenerateED25519 makes it
+type savedKeyPair struct {
+	PrivateKey string    `json:"private_key"`
+	PublicKey  string    `json:"public_key"`
+	Created    time.Time `json:"created,omitzero"`
+}
+
+// savedBike is what the cache keeps of a bike: its latest valid certificate along with the
+// key pair it's for, or its BLE key and the bike messages waiting for it
+type savedBike struct {
+	FrameNumber  string        `json:"frame_number"`
+	BikeID       int           `json:"bike_id,omitempty"`
+	Name         string        `json:"name,omitempty"`
+	Model        string        `json:"model,omitempty"`
+	Certificate  string        `json:"certificate,omitempty"`
+	Expires      time.Time     `json:"expires,omitzero"`      // the certificate's expiry
+	PublicKey    string        `json:"public_key,omitempty"`  // the key the certificate is for
+	PrivateKey   string        `json:"private_key,omitempty"` // its private key, unless it was given with -pubkey
+	BLEKey       string        `json:"ble_key,omitempty"`
+	BikeMessages []BikeMessage `json:"bike_messages,omitempty"`
+	Updated      time.Time     `json:"updated,omitzero"`
 }

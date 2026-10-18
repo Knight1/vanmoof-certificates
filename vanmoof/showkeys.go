@@ -33,9 +33,11 @@ func filterKeyBikes(details []BikeDetail) []BikeDetail {
 // ShowKeys prints the BLE encryption key of the account's static (non-certificate) bikes.
 // In "all" mode it additionally requests certificates for the certificate-based bikes
 // (SA5/S6), reusing the authentication and customer data already fetched for the keys
-// instead of fetching them a second time.
-func ShowKeys(email, mode, bikeFilter, pubkey string, debug, noCache bool) error {
-	s, customerData, err := login(email, debug, noCache)
+// instead of fetching them a second time. The keys, bike messages and certificates are
+// saved in the cache.
+func ShowKeys(email, mode string, opts Options) error {
+	debug := opts.Debug
+	s, customerData, err := login(email, debug, opts.NoCache)
 	if err != nil {
 		return err
 	}
@@ -49,23 +51,23 @@ func ShowKeys(email, mode, bikeFilter, pubkey string, debug, noCache bool) error
 		debugPrintBikeProfiles(customerData.Data.Bikes)
 	}
 
-	if err := printStaticKeys(customerData.Data.BikeDetails, bikeFilter, tokens.AuthToken, debug); err != nil {
-		return err
+	account := loadAccount(email, opts)
+	account.setBLEKeys(customerData.Data.BikeDetails)
+	err = printStaticKeys(customerData.Data.BikeDetails, tokens.AuthToken, &account, opts)
+	if err == nil && mode == ShowKeysAll {
+		bikes := mergeSharedVehicles(customerData.Data.Bikes, customerData.Data.UUID, tokens.AppToken, debug)
+		err = requestCertificates(bikes, customerData.Data.UUID, s, &account, opts)
 	}
-
-	if mode != ShowKeysAll {
-		return nil
-	}
-
-	bikes := mergeSharedVehicles(customerData.Data.Bikes, customerData.Data.UUID, tokens.AppToken, debug)
-	err = requestCertificates(bikes, customerData.Data.UUID, s, bikeFilter, pubkey, debug)
-	cacheRenewedTokens(email, tokens, s, debug, noCache)
+	saveAccount(email, account, opts)
+	cacheRenewedTokens(email, tokens, s, debug, opts.NoCache)
 	return err
 }
 
 // printStaticKeys prints the BLE encryption key (or bike message status) of the
-// account's static (non-certificate) bikes matching bikeFilter.
-func printStaticKeys(details []BikeDetail, bikeFilter, authToken string, debug bool) error {
+// account's static (non-certificate) bikes matching -bikes, and records the bike messages
+// in account.
+func printStaticKeys(details []BikeDetail, authToken string, account *savedAccount, opts Options) error {
+	debug := opts.Debug
 	candidates := filterKeyBikes(details)
 	if len(candidates) == 0 {
 		fmt.Println("No static bikes found (S5/A5 and S6 use certificates and have no BLE key)")
@@ -77,7 +79,7 @@ func printStaticKeys(details []BikeDetail, bikeFilter, authToken string, debug b
 	for i, d := range candidates {
 		list[i] = Bike{Name: d.Name, BikeID: d.BikeID, FrameNumber: d.FrameNumber, BleProfile: d.BleProfile}
 	}
-	selected, err := selectBikes(list, bikeFilter)
+	selected, err := selectBikes(list, opts.BikeFilter)
 	if err != nil {
 		return fmt.Errorf("failed to select bikes: %w", err)
 	}
@@ -112,6 +114,9 @@ func printStaticKeys(details []BikeDetail, bikeFilter, authToken string, debug b
 					fmt.Printf("bikeMessage: %d message(s) waiting for delivery over BLE\n", len(messages))
 				} else {
 					fmt.Println("bikeMessage: none waiting")
+				}
+				if err == nil {
+					account.setBikeMessages(d, messages)
 				}
 			}
 			if debug {

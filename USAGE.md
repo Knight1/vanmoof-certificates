@@ -23,7 +23,9 @@ puts it into `$(go env GOPATH)/bin`.
 | `-debug` | Enable debug output (tokens and keys stay hidden) | `false` |
 | `-redact` | Hide secrets and personal data in all output, to share it in an issue or pull request | `false` |
 | `-show-everything` | With `-debug`, also show the tokens and keys it hides. Never share this output | `false` |
-| `-no-cache` | Do not read or write token cache | `false` |
+| `-new-key` | Request the certificates for a new key pair, which replaces the saved one (see [Cache](#cache)) | `false` |
+| `-show-saved` | Show what the cache holds for the account: key pair, certificates, BLE keys, bike messages and customer data | `false` |
+| `-no-cache` | Do not read or write the cache (tokens, key pair, certificates, BLE keys, bike messages, customer data) | `false` |
 | `-sudo` | Skip all validation checks | `false` |
 | `-cert` | Base64 encoded certificate to parse | - |
 | `-pubkey` | Base64 encoded public key (optional) | - |
@@ -62,6 +64,9 @@ Parsing certificate...
 Certificate valid: LLLLLLDDDDDLL, Owner, expires 2026-01-06 04:02:30 CET, bike matched, pubkey ok, user ok
 ```
 
+Later runs request the certificates for the same key pair, and say so above it:
+`Using the saved key pair (-new-key makes a new one)` (see [Cache](#cache)).
+
 ## Usage
 
 ### Interactive Mode
@@ -77,9 +82,32 @@ This will:
 2. Use cached tokens if available, otherwise prompt for your password (hidden input)
 3. Fetch all owned SA5/S6 bikes and shared bikes (guest access) and generate certificates
 
-### Token Caching
+### Cache
 
-Tokens are cached in `~/.vanmoof-certificates/tokens.json` (file permissions `0600`). Multiple accounts are supported — each email's tokens are stored independently. On subsequent runs, the tool will:
+The tool keeps what it gets in `~/.vanmoof-certificates` (file permissions `0600`), for each account (email address) separately:
+
+| File | What it holds |
+|------|---------------|
+| `tokens.json` | The tokens, to log in without the password |
+| `bikes.json` | The key pair the certificates are requested for, and for each bike its latest valid certificate (with the key pair it's for), its BLE key (S4 and older), and the bike messages `-show-keys` found waiting for it |
+| `customer_data.json` | The account's `getCustomerData` response |
+
+The certificates are requested for the saved key pair, so a BLE app needs its private key
+only once. `-new-key` makes a new key pair, which replaces the saved one, and requests the
+certificates for it:
+
+```console
+./vanmoof-certificates -email user@vanmoof.com -new-key
+```
+
+`-show-saved` shows what's saved for the account, keys included, without contacting
+VanMoof. Add `-redact` to hide the keys and personal data:
+
+```console
+./vanmoof-certificates -email user@vanmoof.com -show-saved
+```
+
+With the cached tokens, on subsequent runs, the tool will:
 1. Reuse the app token if it and the auth token are still valid (~2 hours)
 2. Refresh the app token using the auth token if needed (~1 year validity)
 3. Use the refresh token if the auth token has expired (storing the new refresh token if the server issues one)
@@ -87,24 +115,26 @@ Tokens are cached in `~/.vanmoof-certificates/tokens.json` (file permissions `06
 
 Cached tokens are only checked for expiry locally. If the server rejects them before they expire (e.g. after a password change), the tool logs in again, with the refresh token first and then the password, and replaces them in the cache.
 
-To encrypt the token cache, set the `VANMOOF_CACHE_KEY` environment variable:
+`bikes.json` holds your private key and BLE keys: anyone who has them can unlock your
+bikes. To encrypt the cache, set the `VANMOOF_CACHE_KEY` environment variable:
 
 ```console
 export VANMOOF_CACHE_KEY="your-secret-passphrase"
 ./vanmoof-certificates -email user@vanmoof.com
 ```
 
-This encrypts the cache file with AES-256-GCM (PBKDF2-SHA256 key derivation, 600k iterations). Without the env var, the cache is stored as plain JSON, which the tool points out when it creates the file. An existing unencrypted cache is encrypted the first time the tool runs with the variable set, and one encrypted by an earlier version (100k iterations) is re-encrypted the first time it's read. The cache file is replaced in one step, so an interrupted run can't leave it half-written.
+This encrypts the cache files with AES-256-GCM (PBKDF2-SHA256 key derivation, 600k iterations). Without the env var, they're stored as plain JSON, which the tool points out when it creates each file. An existing unencrypted file is encrypted the first time the tool runs with the variable set, and one encrypted by an earlier version (100k iterations) is re-encrypted the first time it's read. Each file is replaced in one step, so an interrupted run can't leave it half-written.
 
-If the cache can't be read (it's encrypted and `VANMOOF_CACHE_KEY` is missing or wrong, or the file is corrupt), the tool warns, logs in without it and leaves the file as it is, so no account's tokens are lost. Set the right key again, or delete the file to start over.
+If a cache file can't be read (it's encrypted and `VANMOOF_CACHE_KEY` is missing or wrong, or the file is corrupt), the tool warns, carries on without it (logging in with the password, or making a new key pair) and leaves the file as it is, so no account's data is lost. Set the right key again, or delete the file to start over.
 
-To disable token caching entirely:
+To neither read nor write the cache, so that every run also makes a new key pair:
 
 ```console
 ./vanmoof-certificates -email user@vanmoof.com -no-cache
 ```
 
-To remove the cached tokens of all accounts, delete `~/.vanmoof-certificates/tokens.json`.
+To remove the cached tokens of all accounts, delete `~/.vanmoof-certificates/tokens.json`;
+to remove everything the tool has saved, delete the whole folder.
 
 
 ### Command-Line Mode
@@ -117,13 +147,13 @@ Provide email via flag (and optionally set `VANMOOF_PASSWORD` environment variab
 
 #### Request a certificate with your own public key
 
-If you want to use your own Ed25519 public key (instead of generating a new one), supply it with the `-pubkey` flag:
+If you want to use your own Ed25519 public key (instead of the tool's saved key pair), supply it with the `-pubkey` flag:
 
 ```console
 ./vanmoof-certificates -email user@vanmoof.com -pubkey <BASE64_PUBKEY>
 ```
 
-This will request a certificate for your bike(s) using the provided public key. No private key will be generated or printed in this mode.
+This will request a certificate for your bike(s) using the provided public key. No private key will be generated or printed in this mode, and the saved key pair stays as it is; the certificates are saved without a private key.
 
 ### Select Specific Bikes
 
@@ -204,8 +234,8 @@ Enable debug output to see detailed API requests and responses:
 
 Debug output hides secrets: tokens, the refresh token, BLE keys and bike messages
 in API responses. It still contains personal data, such as your email address,
-names and frame numbers, and the regular output, such as a generated private key
-or a `-show-keys` BLE key.
+names and frame numbers, and the regular output, such as the private key, a
+`-show-keys` BLE key, or what `-show-saved` shows.
 
 To share output, for example in an issue or pull request, add `-redact`. It hides
 secrets and personal data in all output, including the private key, BLE keys and
@@ -268,11 +298,11 @@ Privkey = <base64-encoded-private-key>
 Pubkey = <base64-encoded-public-key>
 ```
 
-You can then use the public key when requesting certificates from the API by providing it via the tool, and save both keys for later use.
+You can then use the public key when requesting certificates from the API by providing it via the tool, and save both keys for later use. The tool doesn't keep this key pair in its cache.
 
 ### Manually Generate Ed25519 Key Pair
 
-If you want to use the same unlock key every time you request a new Certificate you need to generate your own Ed25519 key pair instead of using the tool's automatic generation. The easiest method is to use the `-genkey` flag (see above), or you can use one of these alternative methods:
+The tool uses its saved key pair for every certificate (see [Cache](#cache)). To use a key pair of your own instead, for example one that never leaves your device, generate it with the `-genkey` flag (see above) or one of these alternative methods, and pass its public key with `-pubkey`:
 
 **Using OpenSSL:**
 ```console
@@ -300,12 +330,13 @@ instead and get the results as values: see [Using it in Go](#using-it-in-go).
 ### Run it without prompts
 
 - Pass `-email`, and the password in `VANMOOF_PASSWORD`. After the first login the
-  token cache logs in without it (see [Token Caching](#token-caching)); in throwaway
-  environments, such as CI, add `-no-cache`.
+  cache logs in without it (see [Cache](#cache)); in throwaway environments, such as
+  CI, add `-no-cache`.
 - Pick bikes with `-bikes` (IDs or frame numbers), not `ask`.
-- Use your own key pair: create it once with `-genkey`, keep the private key safe, and
-  request certificates with `-pubkey`. Every certificate then works with that private
-  key, and the output contains no private key.
+- The certificates are all requested for the saved key pair, so they work with the same
+  private key. To keep the private key out of the tool and its output, create a key
+  pair once with `-genkey`, keep the private key safe, and request certificates with
+  `-pubkey`.
 
 If it needs the password but has neither `VANMOOF_PASSWORD` nor a terminal to ask on,
 it exits with status `1` instead of waiting.
@@ -364,7 +395,7 @@ if ./vanmoof-certificates -cert "$CERTIFICATE" -pubkey "$PUBKEY" -framenumber "$
 fi
 ```
 
-The output contains your certificate, and without `-pubkey` also a new private key:
+The output contains your certificate, and without `-pubkey` also the private key:
 keep it out of shared logs. `-redact` hides both, so use it only for output you want
 to share, not when you need the certificate.
 
@@ -419,7 +450,7 @@ func main() {
 }
 ```
 
-- `Login` never prompts and doesn't use the tool's token cache. To log in again later
+- `Login` never prompts and doesn't use the tool's cache. To log in again later
   without the password, save `s.Tokens()` and continue with `vanmoof.Resume(tokens)`.
   The session renews its tokens when they expire, so save them again after using it.
   Once it can't renew them, its methods return `vanmoof.ErrLoginRequired` (check with

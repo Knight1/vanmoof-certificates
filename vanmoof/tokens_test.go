@@ -202,7 +202,7 @@ func TestTokenCacheCorruptNotOverwritten(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := loadAllTokenCaches(false); err == nil {
+	if _, err := tokenCache.loadAll(false); err == nil {
 		t.Error("truncated cache file loaded without an error")
 	}
 	saveTokenCache("a@example.com", "authA2", "refreshA2", "appA2", false)

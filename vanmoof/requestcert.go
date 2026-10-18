@@ -129,6 +129,7 @@ func login(email string, debug, noCache bool) (*Session, *CustomerData, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get customer data: %w", err)
 	}
+	saveCustomerData(email, customerData, debug, noCache)
 
 	return &Session{tokens: tokens, userID: customerData.Data.UUID, debug: debug}, customerData, nil
 }
@@ -140,12 +141,15 @@ func cacheRenewedTokens(email string, before Tokens, s *Session, debug, noCache 
 	}
 }
 
-func GetCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
+// GetCert requests and checks certificates for the account's certificate bikes (S5/A5 and
+// S6), and saves them in the cache, along with the key pair and BLE keys
+func GetCert(email string, opts Options) error {
+	debug := opts.Debug
 	if debug {
 		fmt.Println("[DEBUG] Starting authentication...")
 	}
 
-	s, customerData, err := login(email, debug, noCache)
+	s, customerData, err := login(email, debug, opts.NoCache)
 	if err != nil {
 		return err
 	}
@@ -167,8 +171,11 @@ func GetCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 
 	bikes = mergeSharedVehicles(bikes, customerUUID, tokens.AppToken, debug)
 
-	err = requestCertificates(bikes, customerUUID, s, bikeFilter, pubkey, debug)
-	cacheRenewedTokens(email, tokens, s, debug, noCache)
+	account := loadAccount(email, opts)
+	account.setBLEKeys(customerData.Data.BikeDetails)
+	err = requestCertificates(bikes, customerUUID, s, &account, opts)
+	saveAccount(email, account, opts)
+	cacheRenewedTokens(email, tokens, s, debug, opts.NoCache)
 	return err
 }
 
@@ -255,7 +262,10 @@ func addSharedBikes(bikes []Bike, sharedVehicles []VehicleAccess) []Bike {
 // lets the user pick which to process, and requests + parses a certificate for each.
 // It is shared by GetCert and ShowKeys (in "all" mode), which fetch the account's
 // bikes once and pass them in here rather than each fetching them separately.
-func requestCertificates(bikes []Bike, customerUUID string, s *Session, bikeFilter, pubkey string, debug bool) error {
+// The certificates are for account's key pair, or a new one, and the valid ones are
+// recorded in account.
+func requestCertificates(bikes []Bike, customerUUID string, s *Session, account *savedAccount, opts Options) error {
+	debug := opts.Debug
 	// Filter for supported (certificate) bikes only
 	var supported []Bike
 	for _, bike := range bikes {
@@ -270,7 +280,7 @@ func requestCertificates(bikes []Bike, customerUUID string, s *Session, bikeFilt
 	}
 
 	// Filter bikes based on user selection
-	selectedBikes, err := selectBikes(supported, bikeFilter)
+	selectedBikes, err := selectBikes(supported, opts.BikeFilter)
 	if err != nil {
 		return err
 	}
@@ -282,16 +292,19 @@ func requestCertificates(bikes []Bike, customerUUID string, s *Session, bikeFilt
 
 	var privKeyB64, pubKeyB64 string
 
-	if pubkey != "" {
-		pubKeyB64 = pubkey
+	if opts.PublicKey != "" {
+		pubKeyB64 = opts.PublicKey
 		if debug {
 			fmt.Printf("[DEBUG] Using supplied public key for certificate requests: %s\n", Redact(pubKeyB64))
 		}
 	} else {
-		var genErr error
-		privKeyB64, pubKeyB64, genErr = GenerateED25519()
-		if genErr != nil {
-			return genErr
+		keys, saved, err := account.keyPair(opts.NewKey)
+		if err != nil {
+			return err
+		}
+		privKeyB64, pubKeyB64 = keys.PrivateKey, keys.PublicKey
+		if saved {
+			fmt.Println("Using the saved key pair (-new-key makes a new one)")
 		}
 		fmt.Printf("Privkey = %s\n", Redact(privKeyB64))
 		fmt.Printf("Pubkey = %s\n", Redact(pubKeyB64))
@@ -344,9 +357,12 @@ func requestCertificates(bikes []Bike, customerUUID string, s *Session, bikeFilt
 			continue
 		}
 		fmt.Println("Parsing certificate...")
-		if !checkCertificate(cert, Expect{PublicKey: pubKeyB64, Bike: &bike, UserID: customerUUID, Bikes: bikes}, debug) {
+		res := checkCertificate(cert, Expect{PublicKey: pubKeyB64, Bike: &bike, UserID: customerUUID, Bikes: bikes}, debug)
+		if !res.Valid {
 			failed++
+			continue
 		}
+		account.setCertificate(bike, cert, res.Expires, pubKeyB64, privKeyB64)
 	}
 	if failed > 0 {
 		return fmt.Errorf("%d of %d certificate(s) failed", failed, len(selectedBikes))

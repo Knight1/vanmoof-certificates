@@ -17,8 +17,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-const tokenCacheDir = ".vanmoof-certificates"
-const tokenCacheFile = "tokens.json"
+// cacheDir is the cache's folder in the home directory
+const cacheDir = ".vanmoof-certificates"
 const saltSize = 16
 const nonceSize = 12
 
@@ -33,13 +33,27 @@ const (
 	maxPBKDF2Iterations    = 10_000_000
 )
 
+// cacheFile is one of the cache's files: a JSON object with an entry of type T for each
+// account (email address), encrypted with VANMOOF_CACHE_KEY if it's set
+type cacheFile[T any] struct {
+	name string // the file's name in cacheDir
+	what string // what it holds, for messages
+}
+
+var tokenCache = cacheFile[Tokens]{name: "tokens.json", what: "tokens"}
+
 // tokenCachePath returns the full path to the token cache file
 func tokenCachePath() (string, error) {
+	return tokenCache.path()
+}
+
+// path returns the file's full path
+func (c cacheFile[T]) path() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, tokenCacheDir, tokenCacheFile), nil
+	return filepath.Join(home, cacheDir, c.name), nil
 }
 
 // getCacheKey returns the encryption key from VANMOOF_CACHE_KEY env var, or empty if unset
@@ -111,15 +125,15 @@ func decrypt(data []byte, passphrase string) ([]byte, error) {
 	return gcm.Open(nil, nil, data[saltSize:], header)
 }
 
-// loadAllTokenCaches loads the full cache map from disk. With no cache file yet it
-// returns a nil map and no error. A cache file that exists but can't be read, decrypted
-// or parsed is an error instead, so callers don't overwrite it: it may hold other
-// accounts' tokens, or be encrypted with a different VANMOOF_CACHE_KEY.
-func loadAllTokenCaches(debug bool) (map[string]Tokens, error) {
-	path, err := tokenCachePath()
+// loadAll loads all accounts' entries from disk. With no file yet it returns a nil map and
+// no error. A file that exists but can't be read, decrypted or parsed is an error instead,
+// so callers don't overwrite it: it may hold other accounts' entries, or be encrypted with
+// a different VANMOOF_CACHE_KEY.
+func (c cacheFile[T]) loadAll(debug bool) (map[string]T, error) {
+	path, err := c.path()
 	if err != nil {
 		if debug {
-			fmt.Printf("[DEBUG] Token cache path error: %v\n", ScrubText(err.Error()))
+			fmt.Printf("[DEBUG] Cache path error: %v\n", ScrubText(err.Error()))
 		}
 		return nil, nil
 	}
@@ -127,7 +141,7 @@ func loadAllTokenCaches(debug bool) (map[string]Tokens, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		if debug {
-			fmt.Printf("[DEBUG] No token cache found: %v\n", ScrubText(err.Error()))
+			fmt.Printf("[DEBUG] No %s cached yet: %v\n", c.what, ScrubText(err.Error()))
 		}
 		return nil, nil
 	}
@@ -137,15 +151,15 @@ func loadAllTokenCaches(debug bool) (map[string]Tokens, error) {
 
 	key := getCacheKey()
 
-	// An unencrypted (plain JSON) cache is used as is. If VANMOOF_CACHE_KEY has been
-	// set since it was written, it's encrypted right away, keeping every account.
-	var plainMap map[string]Tokens
+	// An unencrypted (plain JSON) file is used as is. If VANMOOF_CACHE_KEY has been set
+	// since it was written, it's encrypted right away, keeping every account.
+	var plainMap map[string]T
 	if err := json.Unmarshal(data, &plainMap); err == nil {
 		if key != "" && plainMap != nil {
 			if debug {
-				fmt.Println("[DEBUG] Encrypting the unencrypted token cache with VANMOOF_CACHE_KEY")
+				fmt.Printf("[DEBUG] Encrypting the unencrypted %s with VANMOOF_CACHE_KEY\n", c.name)
 			}
-			saveAllTokenCaches(plainMap, debug)
+			c.saveAll(plainMap, debug)
 		}
 		return plainMap, nil
 	}
@@ -159,46 +173,46 @@ func loadAllTokenCaches(debug bool) (map[string]Tokens, error) {
 		return nil, fmt.Errorf("can't decrypt %s: wrong VANMOOF_CACHE_KEY, or the file is corrupt (delete it to start over)", path)
 	}
 	if debug {
-		fmt.Println("[DEBUG] Token cache decrypted")
+		fmt.Printf("[DEBUG] %s decrypted\n", c.name)
 	}
 
-	var cacheMap map[string]Tokens
-	if err := json.Unmarshal(plaintext, &cacheMap); err != nil {
+	var entries map[string]T
+	if err := json.Unmarshal(plaintext, &entries); err != nil {
 		return nil, fmt.Errorf("%s is corrupt (delete it to start over): %w", path, err)
 	}
 
 	// Encrypted by an earlier version, with the weaker key derivation: upgrade it now
 	if !hasCacheHeader(data) {
 		if debug {
-			fmt.Println("[DEBUG] Re-encrypting the token cache with the current key derivation")
+			fmt.Printf("[DEBUG] Re-encrypting %s with the current key derivation\n", c.name)
 		}
-		saveAllTokenCaches(cacheMap, debug)
+		c.saveAll(entries, debug)
 	}
 
-	return cacheMap, nil
+	return entries, nil
 }
 
-// saveAllTokenCaches writes the full cache map to disk
-func saveAllTokenCaches(cacheMap map[string]Tokens, debug bool) {
-	path, err := tokenCachePath()
+// saveAll writes all accounts' entries to disk
+func (c cacheFile[T]) saveAll(entries map[string]T, debug bool) {
+	path, err := c.path()
 	if err != nil {
 		if debug {
-			fmt.Printf("[DEBUG] Token cache path error: %v\n", ScrubText(err.Error()))
+			fmt.Printf("[DEBUG] Cache path error: %v\n", ScrubText(err.Error()))
 		}
 		return
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		if debug {
-			fmt.Printf("[DEBUG] Failed to create token cache dir: %v\n", ScrubText(err.Error()))
+			fmt.Printf("[DEBUG] Failed to create the cache folder: %v\n", ScrubText(err.Error()))
 		}
 		return
 	}
 
-	data, err := json.MarshalIndent(cacheMap, "", "  ")
+	data, err := json.MarshalIndent(entries, "", "  ")
 	if err != nil {
 		if debug {
-			fmt.Printf("[DEBUG] Token cache marshal error: %v\n", ScrubText(err.Error()))
+			fmt.Printf("[DEBUG] %s marshal error: %v\n", c.name, ScrubText(err.Error()))
 		}
 		return
 	}
@@ -209,30 +223,30 @@ func saveAllTokenCaches(cacheMap map[string]Tokens, debug bool) {
 		encrypted, err := encrypt(data, key)
 		if err != nil {
 			if debug {
-				fmt.Printf("[DEBUG] Token cache encryption failed: %v\n", ScrubText(err.Error()))
+				fmt.Printf("[DEBUG] %s encryption failed: %v\n", c.name, ScrubText(err.Error()))
 			}
 			return
 		}
 		data = encrypted
 		if debug {
-			fmt.Println("[DEBUG] Token cache encrypted")
+			fmt.Printf("[DEBUG] %s encrypted\n", c.name)
 		}
 	}
 
 	_, statErr := os.Stat(path)
 	if err := writeFileAtomic(path, data); err != nil {
 		if debug {
-			fmt.Printf("[DEBUG] Failed to write token cache: %v\n", ScrubText(err.Error()))
+			fmt.Printf("[DEBUG] Failed to write %s: %v\n", c.name, ScrubText(err.Error()))
 		}
 		return
 	}
 
 	if debug {
-		fmt.Println("[DEBUG] Token cache saved to disk")
+		fmt.Printf("[DEBUG] %s saved\n", c.name)
 	}
-	// Said once, when the cache is created, rather than on every run
+	// Said once, when the file is created, rather than on every run
 	if key == "" && errors.Is(statErr, os.ErrNotExist) {
-		fmt.Printf("Note: tokens are cached unencrypted in %s: set VANMOOF_CACHE_KEY to encrypt them, or use -no-cache\n", ScrubText(path))
+		fmt.Printf("Note: %s are cached unencrypted in %s: set VANMOOF_CACHE_KEY to encrypt them, or use -no-cache\n", c.what, ScrubText(path))
 	}
 }
 
@@ -259,51 +273,51 @@ func writeFileAtomic(path string, data []byte) error {
 	return os.Rename(tmp.Name(), path)
 }
 
-// loadTokenCache loads cached tokens from disk for the given email
-func loadTokenCache(email string, debug bool) *Tokens {
-	cacheMap, err := loadAllTokenCaches(debug)
+// load returns the account's entry, and whether there is one. A file it can't use is
+// reported, and treated as empty.
+func (c cacheFile[T]) load(email string, debug bool) (T, bool) {
+	entries, err := c.loadAll(debug)
 	if err != nil {
-		fmt.Printf("WARNING: Token cache not used: %v\n", ScrubText(err.Error()))
-		return nil
+		fmt.Printf("WARNING: Cached %s not used: %v\n", c.what, ScrubText(err.Error()))
 	}
-	if cacheMap == nil {
-		return nil
-	}
-
-	cached, ok := cacheMap[email]
-	if !ok {
-		if debug {
-			fmt.Printf("[DEBUG] No cached tokens for %s\n", Redact(email))
-		}
-		return nil
-	}
-
+	entry, ok := entries[email]
 	if debug {
-		fmt.Printf("[DEBUG] Loaded token cache for %s\n", Redact(email))
+		if ok {
+			fmt.Printf("[DEBUG] Loaded the cached %s for %s\n", c.what, Redact(email))
+		} else if err == nil {
+			fmt.Printf("[DEBUG] No cached %s for %s\n", c.what, Redact(email))
+		}
 	}
-	return &cached
+	return entry, ok
 }
 
-// saveTokenCache saves tokens to disk for the given email, preserving other accounts.
-// A cache file that can't be read is left alone rather than overwritten.
-func saveTokenCache(email, authToken, refreshToken, appToken string, debug bool) {
-	// Load existing cache to preserve other accounts
-	cacheMap, err := loadAllTokenCaches(debug)
+// save saves the account's entry, keeping the other accounts'. A file that can't be read
+// is left alone rather than overwritten.
+func (c cacheFile[T]) save(email string, entry T, debug bool) {
+	entries, err := c.loadAll(debug)
 	if err != nil {
-		fmt.Println("WARNING: New tokens not cached, so the token cache isn't overwritten")
+		fmt.Printf("WARNING: New %s not cached, so %s isn't overwritten\n", c.what, c.name)
 		return
 	}
-	if cacheMap == nil {
-		cacheMap = make(map[string]Tokens)
+	if entries == nil {
+		entries = make(map[string]T)
 	}
+	entries[email] = entry
+	c.saveAll(entries, debug)
+}
 
-	cacheMap[email] = Tokens{
-		AuthToken:    authToken,
-		AppToken:     appToken,
-		RefreshToken: refreshToken,
+// loadTokenCache loads cached tokens from disk for the given email
+func loadTokenCache(email string, debug bool) *Tokens {
+	tokens, ok := tokenCache.load(email, debug)
+	if !ok {
+		return nil
 	}
+	return &tokens
+}
 
-	saveAllTokenCaches(cacheMap, debug)
+// saveTokenCache saves tokens to disk for the given email, preserving other accounts
+func saveTokenCache(email, authToken, refreshToken, appToken string, debug bool) {
+	tokenCache.save(email, Tokens{AuthToken: authToken, AppToken: appToken, RefreshToken: refreshToken}, debug)
 }
 
 // isJWTExpired checks if a JWT token is expired (with 60s buffer)
