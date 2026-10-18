@@ -185,7 +185,7 @@ func debugPrintBikeProfiles(bikes []BikeData) {
 		if model == "" {
 			model = "unknown"
 		}
-		fmt.Printf("[DEBUG]   %s: %s (%s)\n", RedactID(b.FrameNumber), b.BleProfile, model)
+		fmt.Printf("[DEBUG]   %s: %s (%s)\n", RedactID(b.FrameNumber), printable(b.BleProfile), model)
 	}
 }
 
@@ -197,7 +197,7 @@ func debugPrintVehicleAccessProfiles(vehicles []VehicleAccess) {
 		if model == "" {
 			model = "unknown"
 		}
-		fmt.Printf("[DEBUG]   %s: %s (%s)\n", RedactID(v.VehicleID), v.BleProfile, model)
+		fmt.Printf("[DEBUG]   %s: %s (%s)\n", RedactID(v.VehicleID), printable(v.BleProfile), model)
 	}
 }
 
@@ -206,9 +206,7 @@ func debugPrintVehicleAccessProfiles(vehicles []VehicleAccess) {
 func warnPendingInvitations(authToken string, debug bool) {
 	pendingInvitations, err := getBikeSharingInvitations(authToken, debug)
 	if err != nil {
-		if debug {
-			fmt.Printf("[DEBUG] Failed to check sharing invitations: %v\n", ScrubText(err.Error()))
-		}
+		fmt.Printf("WARNING: Couldn't check for pending bike sharing invitations: %v\n", ScrubText(err.Error()))
 		return
 	}
 	if pendingInvitations > 0 {
@@ -221,9 +219,8 @@ func warnPendingInvitations(authToken string, debug bool) {
 func mergeSharedVehicles(bikes []BikeData, customerUUID, appToken string, debug bool) []BikeData {
 	sharedVehicles, err := getSharedVehicles(customerUUID, appToken, debug)
 	if err != nil {
-		if debug {
-			fmt.Printf("[DEBUG] Failed to fetch shared vehicles: %v\n", ScrubText(err.Error()))
-		}
+		// Not fatal, the owned bikes still work, but without this a guest only sees no bikes
+		fmt.Printf("WARNING: Couldn't look up the bikes shared with you: %v\n", ScrubText(err.Error()))
 		return bikes
 	}
 	if debug {
@@ -312,7 +309,7 @@ func requestCertificates(bikes []BikeData, customerUUID, appToken, bikeFilter, p
 		if model == "" {
 			model = bike.BleProfile
 		}
-		fmt.Printf("Model: %s\n", model)
+		fmt.Printf("Model: %s\n", printable(model))
 
 		if debug {
 			fmt.Printf("[DEBUG] Creating certificate for %s\n", RedactID(bike.FrameNumber))

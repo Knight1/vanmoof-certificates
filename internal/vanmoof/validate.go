@@ -102,12 +102,12 @@ func validateAndShowJWT(tokenString string) {
 	// Show header and claims/payload, which -redact hides apart from harmless fields
 	header, _ := redactValue(token.Header, "", false)
 	if headerJSON, err := json.MarshalIndent(header, "[DEBUG]   ", "  "); err == nil {
-		fmt.Printf("[DEBUG] JWT Header:\n%s\n", string(headerJSON))
+		fmt.Printf("[DEBUG] JWT Header:\n%s\n", printableLines(string(headerJSON)))
 	}
 	if claims, ok := token.Claims.(jwt.MapClaims); ok {
 		payload, _ := redactValue(map[string]interface{}(claims), "", false)
 		if claimsJSON, err := json.MarshalIndent(payload, "[DEBUG]   ", "  "); err == nil {
-			fmt.Printf("[DEBUG] JWT Payload:\n%s\n", string(claimsJSON))
+			fmt.Printf("[DEBUG] JWT Payload:\n%s\n", printableLines(string(claimsJSON)))
 		}
 	}
 

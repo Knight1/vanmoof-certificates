@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,9 +19,19 @@ import (
 
 const tokenCacheDir = ".vanmoof-certificates"
 const tokenCacheFile = "tokens.json"
-const pbkdf2Iterations = 100_000
 const saltSize = 16
 const nonceSize = 12
+
+// An encrypted cache starts with cacheMagic and the PBKDF2 iteration count (4 bytes, big
+// endian), which GCM authenticates along with the ciphertext. Caches written before this
+// header existed have none and used 100,000 iterations; they're re-encrypted when read.
+const (
+	cacheMagic             = "VMC2"
+	cacheHeaderSize        = len(cacheMagic) + 4
+	pbkdf2Iterations       = 600_000 // OWASP's recommendation for PBKDF2-HMAC-SHA256
+	legacyPBKDF2Iterations = 100_000
+	maxPBKDF2Iterations    = 10_000_000
+)
 
 // tokenCachePath returns the full path to the token cache file
 func tokenCachePath() (string, error) {
@@ -36,22 +47,27 @@ func getCacheKey() string {
 	return os.Getenv("VANMOOF_CACHE_KEY")
 }
 
+// newCacheCipher returns AES-256-GCM with a key derived from passphrase
+func newCacheCipher(passphrase string, salt []byte, iterations int) (cipher.AEAD, error) {
+	key := pbkdf2.Key([]byte(passphrase), salt, iterations, 32, sha256.New)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	return cipher.NewGCM(block)
+}
+
 // encrypt encrypts plaintext with AES-256-GCM using a key derived from passphrase
-// Format: [16 bytes salt][12 bytes nonce][ciphertext + GCM tag]
+// Format: [header][16 bytes salt][12 bytes nonce][ciphertext + GCM tag]
 func encrypt(plaintext []byte, passphrase string) ([]byte, error) {
+	header := binary.BigEndian.AppendUint32([]byte(cacheMagic), pbkdf2Iterations)
+
 	salt := make([]byte, saltSize)
 	if _, err := rand.Read(salt); err != nil {
 		return nil, err
 	}
 
-	key := pbkdf2.Key([]byte(passphrase), salt, pbkdf2Iterations, 32, sha256.New)
-
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-
-	gcm, err := cipher.NewGCM(block)
+	gcm, err := newCacheCipher(passphrase, salt, pbkdf2Iterations)
 	if err != nil {
 		return nil, err
 	}
@@ -61,18 +77,31 @@ func encrypt(plaintext []byte, passphrase string) ([]byte, error) {
 		return nil, err
 	}
 
-	ciphertext := gcm.Seal(nil, nonce, plaintext, nil)
-
-	// salt + nonce + ciphertext
-	result := make([]byte, 0, saltSize+nonceSize+len(ciphertext))
+	// header + salt + nonce + ciphertext
+	result := make([]byte, 0, cacheHeaderSize+saltSize+nonceSize+len(plaintext)+gcm.Overhead())
+	result = append(result, header...)
 	result = append(result, salt...)
 	result = append(result, nonce...)
-	result = append(result, ciphertext...)
-	return result, nil
+	return gcm.Seal(result, nonce, plaintext, header), nil
 }
 
-// decrypt decrypts data produced by encrypt
+// hasCacheHeader reports whether encrypted cache data is in the current format
+func hasCacheHeader(data []byte) bool {
+	return len(data) >= cacheHeaderSize && string(data[:len(cacheMagic)]) == cacheMagic
+}
+
+// decrypt decrypts data produced by encrypt, or by its earlier version without header
 func decrypt(data []byte, passphrase string) ([]byte, error) {
+	iterations, header := legacyPBKDF2Iterations, []byte(nil)
+	if hasCacheHeader(data) {
+		header, data = data[:cacheHeaderSize], data[cacheHeaderSize:]
+		n := binary.BigEndian.Uint32(header[len(cacheMagic):])
+		if n == 0 || n > maxPBKDF2Iterations {
+			return nil, fmt.Errorf("unsupported key derivation iteration count %d", n)
+		}
+		iterations = int(n)
+	}
+
 	if len(data) < saltSize+nonceSize+aes.BlockSize {
 		return nil, fmt.Errorf("encrypted data too short")
 	}
@@ -81,19 +110,12 @@ func decrypt(data []byte, passphrase string) ([]byte, error) {
 	nonce := data[saltSize : saltSize+nonceSize]
 	ciphertext := data[saltSize+nonceSize:]
 
-	key := pbkdf2.Key([]byte(passphrase), salt, pbkdf2Iterations, 32, sha256.New)
-
-	block, err := aes.NewCipher(key)
+	gcm, err := newCacheCipher(passphrase, salt, iterations)
 	if err != nil {
 		return nil, err
 	}
 
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-
-	return gcm.Open(nil, nonce, ciphertext, nil)
+	return gcm.Open(nil, nonce, ciphertext, header)
 }
 
 // loadAllTokenCaches loads the full cache map from disk. With no cache file yet it
@@ -152,6 +174,14 @@ func loadAllTokenCaches(debug bool) (map[string]CachedTokens, error) {
 		return nil, fmt.Errorf("%s is corrupt (delete it to start over): %w", path, err)
 	}
 
+	// Encrypted by an earlier version, with the weaker key derivation: upgrade it now
+	if !hasCacheHeader(data) {
+		if debug {
+			fmt.Println("[DEBUG] Re-encrypting the token cache with the current key derivation")
+		}
+		saveAllTokenCaches(cacheMap, debug)
+	}
+
 	return cacheMap, nil
 }
 
@@ -181,7 +211,8 @@ func saveAllTokenCaches(cacheMap map[string]CachedTokens, debug bool) {
 	}
 
 	// Encrypt if cache key is set
-	if key := getCacheKey(); key != "" {
+	key := getCacheKey()
+	if key != "" {
 		encrypted, err := encrypt(data, key)
 		if err != nil {
 			if debug {
@@ -195,7 +226,8 @@ func saveAllTokenCaches(cacheMap map[string]CachedTokens, debug bool) {
 		}
 	}
 
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	_, statErr := os.Stat(path)
+	if err := writeFileAtomic(path, data); err != nil {
 		if debug {
 			fmt.Printf("[DEBUG] Failed to write token cache: %v\n", ScrubText(err.Error()))
 		}
@@ -205,6 +237,33 @@ func saveAllTokenCaches(cacheMap map[string]CachedTokens, debug bool) {
 	if debug {
 		fmt.Println("[DEBUG] Token cache saved to disk")
 	}
+	// Said once, when the cache is created, rather than on every run
+	if key == "" && errors.Is(statErr, os.ErrNotExist) {
+		fmt.Printf("Note: tokens are cached unencrypted in %s: set VANMOOF_CACHE_KEY to encrypt them, or use -no-cache\n", ScrubText(path))
+	}
+}
+
+// writeFileAtomic writes data to a new file next to path (mode 0600), then renames it
+// over path: path holds either the old or the new data, even if the write fails halfway.
+func writeFileAtomic(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name()) // fails harmlessly once renamed
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 // loadTokenCache loads cached tokens from disk for the given email

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"os"
@@ -137,15 +136,13 @@ func main() {
 	if *cert == "" {
 		emailInput := *email
 		if emailInput == "" {
-			reader := bufio.NewReader(os.Stdin)
 			fmt.Print("Enter VanMoof email: ")
 			var err error
-			emailInput, err = reader.ReadString('\n')
+			emailInput, err = vanmoof.ReadLine()
 			if err != nil {
 				fmt.Printf("Error reading email: %v\n", err)
 				os.Exit(exitFailure)
 			}
-			emailInput = strings.TrimSpace(emailInput)
 		}
 
 		if !*sudo && !vanmoof.IsValidEmail(emailInput) {

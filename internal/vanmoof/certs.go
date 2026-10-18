@@ -69,7 +69,7 @@ func checkCertificate(certStr, expectedPubKeyStr string, expectedBike *BikeData,
 		printVerbose(r, certData, expectedPubKeyStr, expectedBike, expectedUserID, bikes)
 		validateCertificateSignature(r.signature, certData[64:], debug, perBikeKey)
 		for _, n := range r.notes {
-			fmt.Printf("  Info: %s\n", n)
+			fmt.Printf("  Info: %s\n", printable(n))
 		}
 	} else {
 		printCompact(r)
@@ -318,15 +318,15 @@ func printCompact(r certResult) {
 	} else {
 		fmt.Printf("Certificate INVALID: %d error(s), %d warning(s)\n", len(r.errors), len(r.warnings))
 		for _, e := range r.errors {
-			fmt.Printf("  ✗ %s\n", e)
+			fmt.Printf("  ✗ %s\n", printable(e))
 		}
 	}
 	// Warnings never make a certificate invalid, but are always shown
 	for _, w := range r.warnings {
-		fmt.Printf("  ⚠ %s\n", w)
+		fmt.Printf("  ⚠ %s\n", printable(w))
 	}
 	for _, n := range r.notes {
-		fmt.Printf("  Note: %s\n", n)
+		fmt.Printf("  Note: %s\n", printable(n))
 	}
 }
 
@@ -356,10 +356,10 @@ func printVerbose(r certResult, certData []byte, expectedPubKeyStr string, expec
 		fmt.Printf("✓ Certificate structure is valid\n")
 	} else {
 		for _, e := range r.errors {
-			fmt.Printf("✗ %s\n", e)
+			fmt.Printf("✗ %s\n", printable(e))
 		}
 		for _, w := range r.warnings {
-			fmt.Printf("⚠ %s\n", w)
+			fmt.Printf("⚠ %s\n", printable(w))
 		}
 	}
 

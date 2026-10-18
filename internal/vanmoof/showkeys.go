@@ -106,9 +106,7 @@ func printStaticKeys(details []BikeDetail, bikeFilter, authToken string, debug b
 			if d.Key.EncryptionKey == "" && !isCertOnlyProfile(d.BleProfile) {
 				messages, err := getBikeMessages(d.BikeID, authToken, debug)
 				if err != nil {
-					if debug {
-						fmt.Printf("[DEBUG] Failed to check bike messages: %v\n", ScrubText(err.Error()))
-					}
+					fmt.Printf("bikeMessage: couldn't check (%v)\n", ScrubText(err.Error()))
 				} else if len(messages) > 0 {
 					fmt.Printf("bikeMessage: %d message(s) waiting for delivery over BLE\n", len(messages))
 				} else {
@@ -120,7 +118,7 @@ func printStaticKeys(details []BikeDetail, bikeFilter, authToken string, debug b
 				if model == "" {
 					model = "unknown"
 				}
-				fmt.Printf("[DEBUG] bleProfile: %s (%s)\n", d.BleProfile, model)
+				fmt.Printf("[DEBUG] bleProfile: %s (%s)\n", printable(d.BleProfile), model)
 			}
 			fmt.Println()
 			break

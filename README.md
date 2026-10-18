@@ -18,7 +18,7 @@ Pull Requests are welcome! ❤️
 - Create and parse bike certificates
 - Show the BLE encryption key of S2/S3/S4 and older bikes (`-show-keys`), including a check for a pending key delivery over BLE (`getBikeMessages`) when no key is available yet
 - Interactive or command-line bike selection (by ID or frame number, of any generation)
-- Exit status for scripts: `1` if anything failed, including an invalid certificate, `2` for invalid flags
+- Exit status for scripts: `1` if logging in or a certificate failed (including an invalid one), `2` for invalid flags
 - Debug mode for troubleshooting, with `-redact` to share its output without secrets or personal data
 
 ## Usage & Installation

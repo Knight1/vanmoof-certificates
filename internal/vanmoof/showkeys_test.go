@@ -1,7 +1,8 @@
 package vanmoof
 
 import (
-	"os"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -13,18 +14,62 @@ func TestShowKeysReportsSelectionError(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("VANMOOF_PASSWORD", leakPassword)
 	fakeVanMoof(t)
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.Close()
-	stdin := os.Stdin
-	os.Stdin = r
-	t.Cleanup(func() { os.Stdin = stdin })
+	setStdin(t, "")
 
+	var err error
 	captureStdout(t, func() { err = ShowKeys(leakEmail, ShowKeysStatic, "ask", "", false, true) })
 	if err == nil || !strings.Contains(err.Error(), "failed to select bikes") {
 		t.Errorf("err = %v, want failed to select bikes", err)
+	}
+}
+
+// Both -bikes ask prompts of -show-keys all can be answered from piped input
+func TestShowKeysAllAskWithPipedInput(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("VANMOOF_PASSWORD", leakPassword)
+	fakeVanMoof(t)
+	setStdin(t, "1\n1\n")
+
+	var err error
+	out := captureStdout(t, func() { err = ShowKeys(leakEmail, ShowKeysAll, "ask", "", false, true) })
+	if err != nil || !strings.Contains(out, "bleSecret: ") || !strings.Contains(out, "Certificate valid: ") {
+		t.Errorf("err = %v, output:\n%s", err, out)
+	}
+}
+
+// A failed optional lookup is shown even without -debug, and the rest still works
+func TestShowKeysWarnsAboutFailedLookups(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("VANMOOF_PASSWORD", leakPassword)
+	fakeVanMoof(t)
+	api := http.DefaultTransport
+	http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		for _, p := range []string{"/v8/getBikeSharingInvitations", "/external/riders/", "/v8/getBikeMessages/"} {
+			if strings.HasPrefix(r.URL.Path, p) {
+				return &http.Response{StatusCode: http.StatusInternalServerError, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"error":"down"}`)), Request: r}, nil
+			}
+		}
+		return api.RoundTrip(r)
+	})
+
+	var err error
+	out := captureStdout(t, func() { err = ShowKeys(leakEmail, ShowKeysAll, "all", "", false, true) })
+	for _, want := range []string{
+		"WARNING: Couldn't check for pending bike sharing invitations: HTTP 500",
+		"bikeMessage: couldn't check (HTTP 500",
+		"WARNING: Couldn't look up the bikes shared with you: HTTP 500",
+		"Certificate valid: " + leakSA5Frame,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+	if err != nil {
+		t.Errorf("err = %v, but the owned bike's certificate worked", err)
 	}
 }
 

@@ -33,8 +33,10 @@ This builds a static binary (`-d` needs cgo off). On Windows, build with `go bui
 | Status | Meaning |
 |--------|---------|
 | `0` | Success, also when there was nothing to do (e.g. no supported bikes) |
-| `1` | Something failed: logging in, the VanMoof API, a certificate request, or a certificate check (`Certificate INVALID`) |
+| `1` | Something failed: logging in, getting your bikes, a certificate request, or a certificate check (`Certificate INVALID`) |
 | `2` | Invalid flags or flag values |
+
+Optional lookups (bikes shared with you, pending sharing invitations, bike messages) don't change the exit status: if one fails, the tool prints a warning and carries on.
 
 ## Requirements
 
@@ -91,7 +93,7 @@ export VANMOOF_CACHE_KEY="your-secret-passphrase"
 ./vanmoof-certificates -email user@vanmoof.com
 ```
 
-This encrypts the cache file with AES-256-GCM (PBKDF2-SHA256 key derivation, 100k iterations). Without the env var, the cache is stored as plain JSON. An existing unencrypted cache is encrypted the first time the tool runs with the variable set.
+This encrypts the cache file with AES-256-GCM (PBKDF2-SHA256 key derivation, 600k iterations). Without the env var, the cache is stored as plain JSON, which the tool points out when it creates the file. An existing unencrypted cache is encrypted the first time the tool runs with the variable set, and one encrypted by an earlier version (100k iterations) is re-encrypted the first time it's read. The cache file is replaced in one step, so an interrupted run can't leave it half-written.
 
 If the cache can't be read (it's encrypted and `VANMOOF_CACHE_KEY` is missing or wrong, or the file is corrupt), the tool warns, logs in without it and leaves the file as it is, so no account's tokens are lost. Set the right key again, or delete the file to start over.
 
@@ -244,6 +246,9 @@ With optional public key and frame number verification:
 
 Certificates the tool requests itself are always checked against the bike they were requested for.
 
+Control characters in a certificate (or in names and messages from the API) are shown
+escaped, e.g. `\x1b`, so a crafted certificate can't change how the result looks.
+
 ### Generate Ed25519 Key Pair
 
 Generate a new Ed25519 key pair and exit (useful for creating keys to reuse):
@@ -302,8 +307,8 @@ it exits with status `1` instead of waiting.
 
 ### Read the result
 
-The exit status is `0` if every certificate was obtained and is valid, `1` if anything
-failed, and `2` for invalid flags (see [Exit Status](#exit-status)). Errors go to
+The exit status is `0` if every certificate was obtained and is valid, `1` if not (or
+logging in failed), and `2` for invalid flags (see [Exit Status](#exit-status)). Errors go to
 standard output, like everything else.
 
 For each bike, the line after `Certificate:` is VanMoof's JSON response, and its

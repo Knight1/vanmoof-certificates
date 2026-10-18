@@ -1,10 +1,32 @@
 package vanmoof
 
 import (
-	"os"
+	"bufio"
 	"strings"
 	"testing"
 )
+
+// setStdin makes the prompts read input, for the duration of the test
+func setStdin(t *testing.T, input string) {
+	t.Helper()
+	old := stdin
+	stdin = bufio.NewReader(strings.NewReader(input))
+	t.Cleanup(func() { stdin = old })
+}
+
+// All prompts read from one reader: separate readers would each buffer the piped input,
+// leaving none for the next prompt
+func TestReadLineSharedByPrompts(t *testing.T) {
+	setStdin(t, "user@example.com\n 1, 2 \n3")
+	for _, want := range []string{"user@example.com", "1, 2", "3"} {
+		if got, err := ReadLine(); err != nil || got != want {
+			t.Errorf("ReadLine() = %q, %v; want %q", got, err, want)
+		}
+	}
+	if _, err := ReadLine(); err == nil {
+		t.Error("ReadLine() after the end of the input didn't fail")
+	}
+}
 
 func frameNumbers(bikes []BikeData) string {
 	var frames []string
@@ -39,17 +61,9 @@ func TestSelectBikes(t *testing.T) {
 	}
 
 	// Interactively, numbers are list positions first: "1" and "42" are the same bike here
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.WriteString("1, 42\n")
-	w.Close()
-	stdin := os.Stdin
-	os.Stdin = r
-	t.Cleanup(func() { os.Stdin = stdin })
-
+	setStdin(t, "1, 42\n")
 	var got []BikeData
+	var err error
 	captureStdout(t, func() { got, err = selectBikes(bikes, "ask") })
 	if err != nil || frameNumbers(got) != "BBBBBB00001AA" {
 		t.Errorf("selectBikes(ask, \"1, 42\") = %q, %v; want BBBBBB00001AA once", frameNumbers(got), err)

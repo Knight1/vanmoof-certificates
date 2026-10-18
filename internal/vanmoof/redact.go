@@ -8,12 +8,16 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Output redaction, set once from the command line with SetRedaction:
 //   - by default, debug output hides secrets such as tokens and BLE keys
 //   - -redact hides secrets and personal data in all output, so it can be shared
 //   - -show-everything hides nothing, for debugging locally
+//
+// Whatever the mode, the functions here also return their text through printable, so
+// text from a certificate, the API or another user can't take over the terminal.
 var (
 	redactOutput   bool
 	showEverything bool
@@ -33,16 +37,53 @@ func Redact(s string) string {
 	if redactOutput && s != "" {
 		return redacted
 	}
-	return s
+	return printable(s)
 }
 
 // RedactID hides an identifier, such as a frame number or bike ID, with -redact. Only
 // its shape is kept (letters as L, digits as D), which is enough to debug its format.
 func RedactID(s string) string {
 	if !redactOutput {
+		return printable(s)
+	}
+	return printable(idShape(s))
+}
+
+// printable escapes control characters (such as the escape sequences that move the
+// cursor or change colors), bidi overrides that reorder text, and invalid UTF-8, so
+// untrusted text prints as what it is instead of changing the output around it.
+func printable(s string) string {
+	if !strings.ContainsFunc(s, needsEscape) {
 		return s
 	}
-	return idShape(s)
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r == utf8.RuneError:
+			b.WriteRune(utf8.RuneError)
+		case unicode.IsControl(r):
+			fmt.Fprintf(&b, `\x%02x`, r)
+		case unicode.Is(unicode.Bidi_Control, r):
+			fmt.Fprintf(&b, `\u%04x`, r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// printableLines is printable for multi-line text, such as indented JSON: it keeps the
+// line breaks
+func printableLines(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = printable(line)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func needsEscape(r rune) bool {
+	return r == utf8.RuneError || unicode.IsControl(r) || unicode.Is(unicode.Bidi_Control, r)
 }
 
 func idShape(s string) string {
@@ -62,7 +103,7 @@ func debugSecret(s string) string {
 	if (redactOutput || !showEverything) && s != "" {
 		return redacted
 	}
-	return s
+	return printable(s)
 }
 
 var (
@@ -84,7 +125,7 @@ var (
 // and (keeping their shape) frame numbers and IDs.
 func ScrubText(s string) string {
 	if !redactOutput {
-		return s
+		return printable(s)
 	}
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		s = strings.ReplaceAll(s, home, "~")
@@ -92,7 +133,7 @@ func ScrubText(s string) string {
 	for _, p := range scrubPatterns {
 		s = p.ReplaceAllString(s, redacted)
 	}
-	return idPattern.ReplaceAllStringFunc(s, idShape)
+	return printable(idPattern.ReplaceAllStringFunc(s, idShape))
 }
 
 var (
@@ -137,7 +178,7 @@ func redactJSON(doc string) string {
 	}
 	v, changed := redactValue(v, "", false)
 	if !changed {
-		return doc
+		return printable(doc)
 	}
 	var out bytes.Buffer
 	enc := json.NewEncoder(&out)
@@ -145,7 +186,7 @@ func redactJSON(doc string) string {
 	if err := enc.Encode(v); err != nil {
 		return redacted
 	}
-	return strings.TrimSuffix(out.String(), "\n")
+	return printable(strings.TrimSuffix(out.String(), "\n"))
 }
 
 // redactValue redacts the decoded JSON value v of field key (lower case), recursively.

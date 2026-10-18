@@ -2,10 +2,25 @@ package vanmoof
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 )
+
+// stdin is shared by every prompt: with piped input, a reader per prompt would buffer
+// the lines meant for the next one, which would then find the input already used up.
+var stdin = bufio.NewReader(os.Stdin)
+
+// ReadLine reads a line from standard input, without the spaces around it
+func ReadLine() (string, error) {
+	line, err := stdin.ReadString('\n')
+	if err != nil && !(errors.Is(err, io.EOF) && line != "") {
+		return "", err
+	}
+	return strings.TrimSpace(line), nil
+}
 
 func selectBikes(bikes []BikeData, filter string) ([]BikeData, error) {
 	if filter == "all" {
@@ -25,13 +40,12 @@ func selectBikes(bikes []BikeData, filter string) ([]BikeData, error) {
 			}
 		}
 
-		reader := bufio.NewReader(os.Stdin)
 		fmt.Print("\nEnter bike numbers to process (comma-separated, or 'all'): ")
-		input, err := reader.ReadString('\n')
+		input, err := ReadLine()
 		if err != nil {
 			return nil, fmt.Errorf("failed to read input: %w", err)
 		}
-		filter = strings.TrimSpace(input)
+		filter = input
 
 		if filter == "all" {
 			return bikes, nil

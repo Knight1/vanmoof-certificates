@@ -82,6 +82,50 @@ func TestScrubText(t *testing.T) {
 	}
 }
 
+func TestPrintable(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"LEAKYA12345ZZ", "LEAKYA12345ZZ"},
+		{"Bike\x1b[2K\rCertificate valid", `Bike\x1b[2K\x0dCertificate valid`},
+		{"evil\u202eknab", `evil\u202eknab`},
+		{"tab\tnew\nline", `tab\x09new\x0aline`},
+		{"bad \xff byte", "bad � byte"},
+		{"Grüße 🚲", "Grüße 🚲"},
+	}
+	for _, tt := range tests {
+		if got := printable(tt.in); got != tt.want {
+			t.Errorf("printable(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+// Control characters from a certificate or the API don't reach the terminal as such:
+// they'd let a crafted certificate rewrite "Certificate INVALID" into something else
+func TestOutputEscapesControlCharacters(t *testing.T) {
+	hasRaw := func(out string) bool {
+		return strings.ContainsFunc(out, func(r rune) bool { return r != '\n' && needsEscape(r) })
+	}
+
+	fields := testCertFields("AAAAAA00001AA")
+	fields["f"] = "AAAAAA00001AA\x1b[2K\rCertificate valid"
+	cert := testCert(t, nil, fields)
+	for _, debug := range []bool{false, true} {
+		if out := captureStdout(t, func() { ProcessCertificate(cert, "", "", debug) }); hasRaw(out) {
+			t.Errorf("debug=%v: output has raw control characters: %q", debug, out)
+		}
+	}
+
+	old := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = old })
+	http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusBadRequest, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("bad\x1b[2Jrequest")), Request: r}, nil
+	})
+	bikes := []BikeData{{BikeID: 1, Name: "My\x1b[31m bike\u202e", FrameNumber: "BBBBBB00001AA", BleProfile: "ELECTRIFIED_2022"}}
+	out := captureStdout(t, func() { requestCertificates(bikes, "", "app", "all", "", false) })
+	if hasRaw(out) || !strings.Contains(out, `HTTP 400: bad\x1b[2Jrequest`) {
+		t.Errorf("output: %q", out)
+	}
+}
+
 // Values of the fake VanMoof account. Each is unique, to find any of them in the output.
 const (
 	leakEmail      = "leak.user@example.com"

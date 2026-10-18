@@ -67,10 +67,10 @@ func doHTTPRequest(method, url string, body io.Reader, headers map[string]string
 
 		// Display rate limit headers in human-readable format
 		if limit := resp.Header.Get("x-ratelimit-limit"); limit != "" {
-			fmt.Printf("[DEBUG] Rate Limit: %s requests\n", limit)
+			fmt.Printf("[DEBUG] Rate Limit: %s requests\n", printable(limit))
 		}
 		if remaining := resp.Header.Get("x-ratelimit-remaining"); remaining != "" {
-			fmt.Printf("[DEBUG] Rate Limit Remaining: %s requests\n", remaining)
+			fmt.Printf("[DEBUG] Rate Limit Remaining: %s requests\n", printable(remaining))
 		}
 		if reset := resp.Header.Get("x-ratelimit-reset"); reset != "" {
 			if resetTime, err := parseResetTime(reset); err == nil {
@@ -78,7 +78,7 @@ func doHTTPRequest(method, url string, body io.Reader, headers map[string]string
 					resetTime.Format("2006-01-02 15:04:05 MST"),
 					time.Until(resetTime).Round(time.Second))
 			} else {
-				fmt.Printf("[DEBUG] Rate Limit Reset: %s\n", reset)
+				fmt.Printf("[DEBUG] Rate Limit Reset: %s\n", printable(reset))
 			}
 		}
 	}
