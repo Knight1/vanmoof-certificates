@@ -188,20 +188,20 @@ func fakeVanMoof(t *testing.T) (certs, pubKeys *[]string) {
 	certs, pubKeys = new([]string), new([]string)
 	ca := trustTestCA(t)
 	userID, _ := hex.DecodeString(strings.ReplaceAll(leakUUID, "-", ""))
-	customerData, _ := json.Marshal(map[string]interface{}{"data": map[string]interface{}{
+	customerData, _ := json.Marshal(map[string]any{"data": map[string]any{
 		"uuid": leakUUID, "name": leakName, "email": leakEmail, "phone": leakPhone,
-		"bikes": []map[string]interface{}{
+		"bikes": []map[string]any{
 			{"id": leakSA5ID, "name": leakSA5Name, "frameNumber": leakSA5Frame, "frameSerial": leakSA5Frame, "mainEcuSerial": leakECU, "bleProfile": "ELECTRIFIED_2022"},
 			{"id": leakS3ID, "name": leakS3Name, "frameNumber": leakS3Frame, "bleProfile": "ELECTRIFIED_2021"},
 			{"id": leakS2ID, "name": leakS2Name, "frameNumber": leakS2Frame, "bleProfile": "ELECTRIFIED_2018"},
 		},
-		"bikeDetails": []map[string]interface{}{
+		"bikeDetails": []map[string]any{
 			{"id": leakSA5ID, "name": leakSA5Name, "frameNumber": leakSA5Frame, "macAddress": leakMAC, "bleProfile": "ELECTRIFIED_2022", "key": map[string]string{"encryptionKey": leakBLEKey, "passcode": leakPasscode}},
 			{"id": leakS3ID, "name": leakS3Name, "frameNumber": leakS3Frame, "macAddress": leakMAC2, "bleProfile": "ELECTRIFIED_2021", "key": map[string]string{"encryptionKey": leakBLEKey, "passcode": leakPasscode}},
 			{"id": leakS2ID, "name": leakS2Name, "frameNumber": leakS2Frame, "macAddress": leakMAC3, "bleProfile": "ELECTRIFIED_2018", "key": map[string]string{"encryptionKey": ""}},
 		},
 	}})
-	vehicles, _ := json.Marshal(map[string]interface{}{"rider_id": leakUUID, "vehicle_access": []map[string]interface{}{{
+	vehicles, _ := json.Marshal(map[string]any{"rider_id": leakUUID, "vehicle_access": []map[string]any{{
 		"vehicle_id": leakS6Frame, "role": "guest", "rider_name": leakRiderName, "rider_email": leakEmail, "name": leakSharedName,
 		"ble_profile": "ELECTRIFIED_2025", "ble_id": leakMAC3, "owner_id": leakOwnerUUID, "owner_name": leakOwnerName, "owner_email": leakOwnerEmail,
 	}}})
@@ -263,7 +263,7 @@ func runEverything(t *testing.T) (out string, certs, pubKeys []string) {
 	certsP, pubKeysP := fakeVanMoof(t)
 
 	out = captureStdout(t, func() {
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			if err := GetCert(leakEmail, "all", "", true, false); err != nil {
 				t.Errorf("GetCert: %v", err)
 			}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 )
 
@@ -14,9 +15,7 @@ func apiHeaders(extra map[string]string) map[string]string {
 	headers := map[string]string{
 		"Api-Key": apiKey,
 	}
-	for k, v := range extra {
-		headers[k] = v
-	}
+	maps.Copy(headers, extra)
 	return headers
 }
 

@@ -172,7 +172,7 @@ func isSecretField(key string) bool {
 func redactJSON(doc string) string {
 	dec := json.NewDecoder(strings.NewReader(doc))
 	dec.UseNumber()
-	var v interface{}
+	var v any
 	if !json.Valid([]byte(doc)) || dec.Decode(&v) != nil {
 		return ScrubText(doc)
 	}
@@ -191,17 +191,17 @@ func redactJSON(doc string) string {
 
 // redactValue redacts the decoded JSON value v of field key (lower case), recursively.
 // inSecret is set within a secret field. It reports whether it hid anything.
-func redactValue(v interface{}, key string, inSecret bool) (interface{}, bool) {
+func redactValue(v any, key string, inSecret bool) (any, bool) {
 	inSecret = inSecret || isSecretField(key)
 	changed := false
 	switch val := v.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		for k, fv := range val {
 			nv, c := redactValue(fv, strings.ToLower(k), inSecret)
 			val[k], changed = nv, changed || c
 		}
 		return val, changed
-	case []interface{}:
+	case []any:
 		for i, ev := range val {
 			nv, c := redactValue(ev, key, inSecret)
 			val[i], changed = nv, changed || c

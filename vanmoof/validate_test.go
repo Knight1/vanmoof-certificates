@@ -72,7 +72,7 @@ func TestIsValidEmail(t *testing.T) {
 }
 
 func TestValidateUUID(t *testing.T) {
-	for version := 0; version < 16; version++ {
+	for version := range 16 {
 		uuid := make([]byte, 16)
 		uuid[6], uuid[8] = byte(version<<4), 0x80 // the variant of RFC 9562 (10xx)
 		if got, want := validateUUID(uuid), version >= 1 && version <= 8; got != want {

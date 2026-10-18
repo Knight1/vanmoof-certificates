@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -40,14 +41,29 @@ func TestTokenCacheEncryptionFormat(t *testing.T) {
 // only salt, nonce and ciphertext
 func legacyEncrypt(t *testing.T, plaintext []byte, passphrase string) []byte {
 	t.Helper()
-	salt, nonce := make([]byte, saltSize), make([]byte, nonceSize)
+	salt := make([]byte, saltSize)
 	rand.Read(salt)
-	rand.Read(nonce)
 	gcm, err := newCacheCipher(passphrase, salt, legacyPBKDF2Iterations)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return gcm.Seal(append(append([]byte{}, salt...), nonce...), nonce, plaintext, nil)
+	return gcm.Seal(salt, nil, plaintext, nil) // salt, nonce, ciphertext
+}
+
+// Caches that earlier versions of the tool wrote still decrypt: in the current format, and
+// in the one from before its header
+func TestTokenCacheEarlierVersionsDecrypt(t *testing.T) {
+	const plaintext = `{"a@example.com":{"auth_token":"authA"}}`
+	caches := map[string]string{
+		"current": "564d4332000927c0c6105658d01dbcc457637dae4df1297f2d6f2b7d698a8044fdc3fe70c3d22ab09132345c6f87515d94aee6f5e2f45ba2e2a684254b14bc832019f0f342d13cb948200d92bf3dbe8c55b8ae9c56c1e878b69dd61a",
+		"legacy":  "194bd48e80545179cdf6401a619b4c200e18e3b594d7be01aa4d7f089ad7f81be295312b06d969ec2c64d1f4277533680d529b8f1d4d8e27ad2a30a4b6358c0516cd1b2410da90a48c0ca03f2717ba70efd20898",
+	}
+	for format, cache := range caches {
+		data, _ := hex.DecodeString(cache)
+		if got, err := decrypt(data, "secret"); err != nil || string(got) != plaintext {
+			t.Errorf("%s format: decrypt = %q, %v", format, got, err)
+		}
+	}
 }
 
 func TestTokenCacheLegacyFormatUpgraded(t *testing.T) {

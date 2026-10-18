@@ -163,7 +163,7 @@ func parseCertificate(certData []byte, bikes []Bike) certResult {
 
 	cborPayload := certData[64:]
 
-	var rawMap map[interface{}]interface{}
+	var rawMap map[any]any
 	if err := certDecMode.Unmarshal(cborPayload, &rawMap); err != nil {
 		r.errors = append(r.errors, fmt.Sprintf("CBOR parse error: %v", err))
 		return r
@@ -282,7 +282,7 @@ func parseCertificate(certData []byte, bikes []Bike) certResult {
 // uintField returns the value of the certificate's field key, which has to be an unsigned
 // integer that fits in bits, or else records why it isn't one. A bigger number isn't cut
 // off to fit: an expiry in 2162 would show as one in 2026, and role 0x107 as an owner.
-func uintField(r *certResult, key string, value interface{}, bits int) (uint64, bool) {
+func uintField(r *certResult, key string, value any, bits int) (uint64, bool) {
 	v, ok := value.(uint64)
 	switch {
 	case !ok:

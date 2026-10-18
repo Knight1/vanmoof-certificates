@@ -116,8 +116,7 @@ func main() {
 
 	// Validate bikes parameter
 	if *bikes != "all" && *bikes != "ask" {
-		bikeIDs := strings.Split(*bikes, ",")
-		for _, id := range bikeIDs {
+		for id := range strings.SplitSeq(*bikes, ",") {
 			id = strings.TrimSpace(id)
 			if id == "" {
 				fmt.Println("Error: Empty bike ID in bikes list")

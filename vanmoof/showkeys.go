@@ -1,6 +1,9 @@
 package vanmoof
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // Modes for ShowKeys
 const (
@@ -9,12 +12,7 @@ const (
 )
 
 func isCertOnlyProfile(profile string) bool {
-	for _, p := range certOnlyBleProfiles {
-		if p == profile {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(certOnlyBleProfiles, profile)
 }
 
 // filterKeyBikes skips certificate-only bikes (S5/A5, S6), which have no BLE key.

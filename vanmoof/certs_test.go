@@ -48,10 +48,10 @@ func TestIsS6Certificate(t *testing.T) {
 }
 
 // testCertFields returns the payload fields of a well-formed certificate for frame
-func testCertFields(frame string) map[string]interface{} {
+func testCertFields(frame string) map[string]any {
 	userID := make([]byte, 16)
 	userID[6], userID[8] = 0x40, 0x80 // UUID v4 version and variant bits
-	return map[string]interface{}{
+	return map[string]any{
 		"i": uint64(123456),
 		"f": frame,
 		"b": frame,
@@ -64,7 +64,7 @@ func testCertFields(frame string) map[string]interface{} {
 
 // testCert encodes fields into a base64 certificate, signed with key, or with a random
 // signature if key is nil
-func testCert(t *testing.T, key ed25519.PrivateKey, fields map[string]interface{}) string {
+func testCert(t *testing.T, key ed25519.PrivateKey, fields map[string]any) string {
 	t.Helper()
 	payload, err := cbor.Marshal(fields)
 	if err != nil {
@@ -80,8 +80,8 @@ func signedCert(t *testing.T, key ed25519.PrivateKey, payload []byte) string {
 	signature := make([]byte, ed25519.SignatureSize)
 	if key != nil {
 		signature = ed25519.Sign(key, payload)
-	} else if _, err := rand.Read(signature); err != nil {
-		t.Fatal(err)
+	} else {
+		rand.Read(signature)
 	}
 	return base64.StdEncoding.EncodeToString(append(signature, payload...))
 }

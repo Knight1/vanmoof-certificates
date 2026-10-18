@@ -3,6 +3,7 @@ package vanmoof
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
@@ -14,7 +15,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"golang.org/x/crypto/pbkdf2"
 )
 
 const tokenCacheDir = ".vanmoof-certificates"
@@ -47,14 +47,18 @@ func getCacheKey() string {
 	return os.Getenv("VANMOOF_CACHE_KEY")
 }
 
-// newCacheCipher returns AES-256-GCM with a key derived from passphrase
+// newCacheCipher returns AES-256-GCM with a key derived from passphrase. It handles the
+// nonce itself: Seal puts a random one before the ciphertext, where Open reads it from.
 func newCacheCipher(passphrase string, salt []byte, iterations int) (cipher.AEAD, error) {
-	key := pbkdf2.Key([]byte(passphrase), salt, iterations, 32, sha256.New)
+	key, err := pbkdf2.Key(sha256.New, passphrase, salt, iterations, 32)
+	if err != nil {
+		return nil, err
+	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
-	return cipher.NewGCM(block)
+	return cipher.NewGCMWithRandomNonce(block)
 }
 
 // encrypt encrypts plaintext with AES-256-GCM using a key derived from passphrase
@@ -63,26 +67,18 @@ func encrypt(plaintext []byte, passphrase string) ([]byte, error) {
 	header := binary.BigEndian.AppendUint32([]byte(cacheMagic), pbkdf2Iterations)
 
 	salt := make([]byte, saltSize)
-	if _, err := rand.Read(salt); err != nil {
-		return nil, err
-	}
+	rand.Read(salt) // never fails
 
 	gcm, err := newCacheCipher(passphrase, salt, pbkdf2Iterations)
 	if err != nil {
 		return nil, err
 	}
 
-	nonce := make([]byte, nonceSize)
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, err
-	}
-
-	// header + salt + nonce + ciphertext
-	result := make([]byte, 0, cacheHeaderSize+saltSize+nonceSize+len(plaintext)+gcm.Overhead())
+	// header + salt, then Seal adds the nonce and ciphertext
+	result := make([]byte, 0, cacheHeaderSize+saltSize+gcm.Overhead()+len(plaintext))
 	result = append(result, header...)
 	result = append(result, salt...)
-	result = append(result, nonce...)
-	return gcm.Seal(result, nonce, plaintext, header), nil
+	return gcm.Seal(result, nil, plaintext, header), nil
 }
 
 // hasCacheHeader reports whether encrypted cache data is in the current format
@@ -106,16 +102,13 @@ func decrypt(data []byte, passphrase string) ([]byte, error) {
 		return nil, fmt.Errorf("encrypted data too short")
 	}
 
-	salt := data[:saltSize]
-	nonce := data[saltSize : saltSize+nonceSize]
-	ciphertext := data[saltSize+nonceSize:]
-
-	gcm, err := newCacheCipher(passphrase, salt, iterations)
+	gcm, err := newCacheCipher(passphrase, data[:saltSize], iterations)
 	if err != nil {
 		return nil, err
 	}
 
-	return gcm.Open(nil, nonce, ciphertext, header)
+	// nonce + ciphertext
+	return gcm.Open(nil, nil, data[saltSize:], header)
 }
 
 // loadAllTokenCaches loads the full cache map from disk. With no cache file yet it

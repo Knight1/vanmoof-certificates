@@ -85,9 +85,8 @@ func selectBikes(bikes []Bike, filter string) ([]Bike, error) {
 			selected = append(selected, bikes[i])
 		}
 	}
-	parts := strings.Split(filter, ",")
 
-	for _, part := range parts {
+	for part := range strings.SplitSeq(filter, ",") {
 		part = strings.TrimSpace(part)
 
 		numericID, isNumeric := ParseBikeID(part)

@@ -320,7 +320,7 @@ func requestCertificates(bikes []Bike, customerUUID string, s *Session, bikeFilt
 		}
 
 		// Check if response contains an error
-		var respData map[string]interface{}
+		var respData map[string]any
 		if err := json.Unmarshal([]byte(certResp), &respData); err != nil {
 			fmt.Printf("Failed to parse certificate response: %v\n", ScrubText(err.Error()))
 			failed++

@@ -105,7 +105,7 @@ func validateAndShowJWT(tokenString string) {
 		fmt.Printf("[DEBUG] JWT Header:\n%s\n", printableLines(string(headerJSON)))
 	}
 	if claims, ok := token.Claims.(jwt.MapClaims); ok {
-		payload, _ := redactValue(map[string]interface{}(claims), "", false)
+		payload, _ := redactValue(map[string]any(claims), "", false)
 		if claimsJSON, err := json.MarshalIndent(payload, "[DEBUG]   ", "  "); err == nil {
 			fmt.Printf("[DEBUG] JWT Payload:\n%s\n", printableLines(string(claimsJSON)))
 		}
