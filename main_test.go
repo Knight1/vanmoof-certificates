@@ -206,6 +206,26 @@ func TestRunGenkey(t *testing.T) {
 	}
 }
 
+// -generate writes a self-signed certificate from a config file, and fails on a bad config
+func TestRunGenerate(t *testing.T) {
+	priv, pub, err := vanmoof.GenerateED25519()
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := fmt.Sprintf(`{"signing_key":%q,"public_key":%q,"afm":"BBBBBB00001AA","role":"Owner","user_uuid":"00000000-0000-4000-8000-000000000001","validity_days":30}`, priv, pub)
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if status, out := runTool(t, "-generate", path, "-debug"); status != 0 || !strings.Contains(out, "Certificate:") {
+		t.Errorf("status %d:\n%s", status, out)
+	}
+	if status, out := runTool(t, "-generate", filepath.Join(t.TempDir(), "nope.json")); status != exitFailure || !strings.Contains(out, "Error: ") {
+		t.Errorf("missing config: status %d:\n%s", status, out)
+	}
+}
+
 // broken fails to read or write anything
 type broken struct{}
 
@@ -419,7 +439,8 @@ func FuzzRun(f *testing.F) {
 	for _, line := range []string{"-version", "-h", "-genkey -redact", "-cert AAAA", "-show-keys maybe", "-invitations accept=1,2",
 		"-bikes 1,,2", "-debug -redact -show-everything", "-show-saved", "-cert \x1b[2J", "-show-keys \x1b[2J -debug",
 		"-framenumber BBBBBB00001AA -cert QUFB", "-sudo -cert garbage", "-debug -bikes LEAKY12345ZZ", "-new-key -pubkey x",
-		"-cleartext-keys -no-cache", "-allow-unknown-revocation -debug", "--", "-email= -debug", "-bikes ask -debug", "-invitations decline=\xe2\x80\xae"} {
+		"-cleartext-keys -no-cache", "-allow-unknown-revocation -debug", "--", "-email= -debug", "-bikes ask -debug", "-invitations decline=\xe2\x80\xae",
+		"-generate /nonexistent/config.json"} {
 		f.Add(line)
 	}
 	f.Fuzz(func(t *testing.T, line string) {

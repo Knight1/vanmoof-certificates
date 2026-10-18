@@ -32,6 +32,7 @@ func run(args []string) int {
 	flags.SetOutput(escaped{os.Stderr})
 	version := flags.Bool("version", false, "Print version information")
 	genkey := flags.Bool("genkey", false, "Generate Ed25519 key pair and exit")
+	generate := flags.String("generate", "", "Generate a self-signed certificate from a JSON config file and exit (advanced: only for a bike whose firmware you've changed to trust your own signing key; see USAGE.md)")
 	cert := flags.String("cert", "", "Base64 encoded certificate string")
 	pubkey := flags.String("pubkey", "", "Base64 encoded public key string (optional)")
 	frameNumber := flags.String("framenumber", "", "Frame number to verify the -cert certificate against (optional)")
@@ -78,8 +79,8 @@ func run(args []string) int {
 		if bikesShown != "all" && bikesShown != "ask" {
 			bikesShown = vanmoof.RedactID(bikesShown)
 		}
-		fmt.Printf("[DEBUG] Flags: version=%v, genkey=%v, cert='%s', pubkey='%s', framenumber='%s', email='%s', bikes='%s', show-keys='%s', new-key=%v, show-saved=%v, invitations='%s', cleartext-keys=%v, no-cache=%v, allow-unknown-revocation=%v, sudo=%v, redact=%v, show-everything=%v\n",
-			*version, *genkey, vanmoof.Redact(*cert), vanmoof.Redact(*pubkey), vanmoof.RedactID(*frameNumber), vanmoof.Redact(*email), bikesShown, vanmoof.ScrubText(*showKeys), *newKey, *showSaved, vanmoof.ScrubText(*invitations), *cleartextKeys, *noCache, *allowUnknownRevocation, *sudo, *redact, *showEverything)
+		fmt.Printf("[DEBUG] Flags: version=%v, genkey=%v, generate='%s', cert='%s', pubkey='%s', framenumber='%s', email='%s', bikes='%s', show-keys='%s', new-key=%v, show-saved=%v, invitations='%s', cleartext-keys=%v, no-cache=%v, allow-unknown-revocation=%v, sudo=%v, redact=%v, show-everything=%v\n",
+			*version, *genkey, vanmoof.ScrubText(*generate), vanmoof.Redact(*cert), vanmoof.Redact(*pubkey), vanmoof.RedactID(*frameNumber), vanmoof.Redact(*email), bikesShown, vanmoof.ScrubText(*showKeys), *newKey, *showSaved, vanmoof.ScrubText(*invitations), *cleartextKeys, *noCache, *allowUnknownRevocation, *sudo, *redact, *showEverything)
 	}
 
 	if *version {
@@ -96,6 +97,15 @@ func run(args []string) int {
 		}
 		fmt.Printf("Privkey = %s\n", vanmoof.Redact(privKeyB64))
 		fmt.Printf("Pubkey = %s\n", vanmoof.Redact(pubKeyB64))
+		return 0
+	}
+
+	// Generate a self-signed certificate from a config file, needing no account or network
+	if *generate != "" {
+		if err := vanmoof.GenerateCert(*generate, *debug); err != nil {
+			fmt.Printf("Error: %v\n", vanmoof.ScrubText(err.Error()))
+			return exitFailure
+		}
 		return 0
 	}
 

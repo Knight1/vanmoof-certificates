@@ -34,6 +34,7 @@ puts it into `$(go env GOPATH)/bin`.
 | `-pubkey` | Base64 encoded public key (optional) | - |
 | `-framenumber` | Frame number to verify a `-cert` certificate against (optional) | - |
 | `-genkey` | Generate Ed25519 key pair and exit | - |
+| `-generate` | Generate a self-signed certificate from a JSON config file and exit (advanced, see [Generate your own certificate](#generate-your-own-certificate-advanced)) | - |
 | `-version` | Print version information | - |
 
 ## Exit Status
@@ -401,6 +402,65 @@ openssl pkey -in private.pem -traditional -outform DER 2>/dev/null | tail -c 64 
 openssl pkey -in public.pem -pubin -outform DER | tail -c 32 | base64
 ```
 
+### Generate your own certificate (advanced)
+
+> **This is for a bike whose module firmware you have changed to trust your own signing
+> key.** A stock VanMoof bike trusts only VanMoof's signing key and ignores a certificate
+> from here. It needs an opened bike module and reflashed firmware; on an untouched bike it
+> does nothing.
+
+Normally VanMoof's CA signs the certificates (with `-email`, above). `-generate` instead
+signs one with a key of your own, so you run your own CA for a bike you've reflashed to
+trust it. It uses no account and no network:
+
+```console
+./vanmoof-certificates -generate config.json
+```
+
+The config is a JSON file:
+
+```json
+{
+  "signing_key": "<base64 Ed25519 private key that signs, e.g. from -genkey>",
+  "public_key": "<base64 Ed25519 public key to authorize; the signing key's own if left out>",
+  "afm": "SVTBKL00000OA",
+  "abm": "SVTBKL00000OA",
+  "role": "Owner",
+  "user_uuid": "11111111-1111-4111-8111-111111111111",
+  "validity_days": 7
+}
+```
+
+| Field | What it is |
+|-------|------------|
+| `signing_key` | The Ed25519 private key that signs the certificate: the 64-byte key `-genkey` prints, or a 32-byte seed. The bike's firmware has to trust its public half. Keep it secret |
+| `public_key` | The Ed25519 public key the certificate authorizes, which then unlocks the bike. Defaults to `signing_key`'s own public half, to authorize your own key |
+| `afm` | The frame module (AFM), normally the frame number |
+| `abm` | The bike module (ABM). Defaults to `afm` |
+| `role` | The access level: a name (`Owner`, `Guest`, `Bike Doctor`, `Bike Hunter`, `QA Engineer`, `R&D Engineer`) or a number (`7`, `0x42`); see [Access Levels](README.md#access-levels-role-field) |
+| `user_uuid` | The user's UUID, hyphenated or not |
+| `validity_days` | Days from now until it expires. Use `expires` instead for an exact time (RFC 3339, e.g. `2027-01-02T15:04:05Z`) |
+| `id` | The certificate's ID; a random one if left out |
+
+It prints the fields it put in and the certificate:
+
+```
+Generated a self-signed certificate (it works only on a bike whose firmware trusts your signing key):
+  AFM (frame module):   SVTBKL00000OA
+  ABM (bike module):    SVTBKL00000OA
+  Access level:         Owner
+  ...
+Certificate:
+<base64 certificate>
+```
+
+The certificate is a secret, like a private key: with the authorized private key it unlocks
+the bike. `-redact` hides it (along with the keys and frame numbers), so generate the one
+you'll use **without** `-redact`, and add it only to share the output.
+
+`-cert` checks a certificate from here against VanMoof's signing key, so it reports the
+signature as not VanMoof's. That's expected: your bike checks it against your key.
+
 ## Using it from Scripts and Other Programs
 
 Other programs use the tool by running it: the exit status says whether everything
@@ -542,6 +602,10 @@ func main() {
   set in `vanmoof.Expect`: the public key, the bike, and the user (`s.UserID()`). `Valid`
   is false if a check failed, and `Errors` says why. No S6 signing key is known yet, so
   for an S6, `SignatureVerified` is false and `Notes` says so.
+- `GenerateCertificate` goes the other way: it signs a certificate with a key of your own,
+  for a bike whose firmware you've changed to trust that key rather than VanMoof's (see
+  [Generate your own certificate](#generate-your-own-certificate-advanced)). A stock bike
+  ignores it.
 - `s.Invitations()` returns the pending bike sharing invitations, and
   `s.AcceptInvitation(guid)` and `s.DeclineInvitation(guid)` respond to one. Accepting
   returns the bike that's now shared with you.
