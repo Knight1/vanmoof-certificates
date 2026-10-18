@@ -33,6 +33,12 @@ func main() {
 	sudo := flag.Bool("sudo", false, "Skip all validation checks")
 	flag.Parse()
 
+	// Spaces around a value, e.g. from copying it, aren't part of it. Trimming here means
+	// the validation below checks exactly what's used.
+	for _, s := range []*string{cert, pubkey, frameNumber, email} {
+		*s = strings.TrimSpace(*s)
+	}
+
 	if *redact && *showEverything {
 		fmt.Println("Error: -redact and -show-everything cannot be combined")
 		os.Exit(exitUsage)
@@ -118,8 +124,7 @@ func main() {
 				fmt.Println("Error: Empty bike ID in bikes list")
 				os.Exit(exitUsage)
 			}
-			var numericID uint32
-			if _, err := fmt.Sscanf(id, "%d", &numericID); err != nil {
+			if _, ok := vanmoof.ParseBikeID(id); !ok {
 				// Any generation's frame number, not just SA5/S6: -show-keys picks older bikes
 				if !*sudo && !vanmoof.LooksLikeFrameNumber(id) {
 					fmt.Printf("Error: Invalid bike ID '%s' in bikes list. Must be a numeric ID or frame number\n", vanmoof.RedactID(id))

@@ -146,6 +146,8 @@ This will request a certificate for your bike(s) using the provided public key. 
 
 This will display your owned and shared bikes and prompt you to select which ones to process.
 
+Each bike is processed once, even if it's listed twice, e.g. by ID and by frame number.
+
 ### Show BLE Encryption Keys
 
 Bikes older than the S5 (S2/S3/S4 and earlier) authenticate over BLE with a key
@@ -278,3 +280,80 @@ openssl pkey -in private.pem -traditional -outform DER 2>/dev/null | tail -c 64 
 # Extract the raw 32-byte public key from DER format
 openssl pkey -in public.pem -pubin -outform DER | tail -c 32 | base64
 ```
+
+## Using it from Scripts and Other Programs
+
+Other programs use the tool by running it: the exit status says whether everything
+worked, and the output contains the certificate. The Go code is in `internal/`, so
+other Go modules can't import it.
+
+### Run it without prompts
+
+- Pass `-email`, and the password in `VANMOOF_PASSWORD`. After the first login the
+  token cache logs in without it (see [Token Caching](#token-caching)); in throwaway
+  environments, such as CI, add `-no-cache`.
+- Pick bikes with `-bikes` (IDs or frame numbers), not `ask`.
+- Use your own key pair: create it once with `-genkey`, keep the private key safe, and
+  request certificates with `-pubkey`. Every certificate then works with that private
+  key, and the output contains no private key.
+
+If it needs the password but has neither `VANMOOF_PASSWORD` nor a terminal to ask on,
+it exits with status `1` instead of waiting.
+
+### Read the result
+
+The exit status is `0` if every certificate was obtained and is valid, `1` if anything
+failed, and `2` for invalid flags (see [Exit Status](#exit-status)). Errors go to
+standard output, like everything else.
+
+For each bike, the line after `Certificate:` is VanMoof's JSON response, and its
+`certificate` field holds the certificate:
+
+```
+Bike ID: 1337
+Name: My bike
+Frame number: LLLLLLDDDDDLL
+Model: SA5
+Certificate:
+{"certificate":"BASE64_ENCODED_CERTIFICATE"}
+Parsing certificate...
+Certificate valid: LLLLLLDDDDDLL, Owner, expires 2026-01-06 04:02:30 CET, bike matched, pubkey ok, user ok
+```
+
+Check the exit status rather than parsing the `Certificate valid` line, and leave out
+`-debug`: it adds a lot of output, including personal data.
+
+Shell, with [jq](https://jqlang.org/):
+
+```sh
+out=$(VANMOOF_PASSWORD="$PASSWORD" ./vanmoof-certificates -email user@vanmoof.com -bikes 1337 -pubkey "$PUBKEY") || exit 1
+certificate=$(printf '%s\n' "$out" | awk 'previous == "Certificate:" { print; exit } { previous = $0 }' | jq -r .certificate)
+```
+
+Python:
+
+```python
+import json, os, subprocess
+
+result = subprocess.run(
+    ["./vanmoof-certificates", "-email", "user@vanmoof.com", "-bikes", "1337", "-pubkey", pubkey],
+    env={**os.environ, "VANMOOF_PASSWORD": password},
+    capture_output=True, text=True,
+)
+if result.returncode != 0:
+    raise RuntimeError(f"vanmoof-certificates exited with {result.returncode}:\n{result.stdout}")
+lines = result.stdout.splitlines()
+certificate = json.loads(lines[lines.index("Certificate:") + 1])["certificate"]
+```
+
+To check a certificate you already have, use the exit status of `-cert`:
+
+```sh
+if ./vanmoof-certificates -cert "$CERTIFICATE" -pubkey "$PUBKEY" -framenumber "$FRAME_NUMBER"; then
+    echo "valid"
+fi
+```
+
+The output contains your certificate, and without `-pubkey` also a new private key:
+keep it out of shared logs. `-redact` hides both, so use it only for output you want
+to share, not when you need the certificate.

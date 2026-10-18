@@ -8,24 +8,21 @@ import (
 	"fmt"
 	"net/mail"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// IsValidEmail validates an email address
+// IsValidEmail reports whether email is a bare email address, such as user@example.com:
+// it's used as is to log in, so a display name, comment or spaces around it don't count.
 func IsValidEmail(email string) bool {
-	email = strings.TrimSpace(email)
-	if email == "" {
-		return false
-	}
-	_, err := mail.ParseAddress(email)
-	return err == nil
+	addr, err := mail.ParseAddress(email)
+	return err == nil && addr.Address == email
 }
 
 // IsValidBase64 validates a base64 string
 func IsValidBase64(s string) bool {
-	s = strings.TrimSpace(s)
 	if s == "" {
 		return false
 	}
@@ -35,7 +32,6 @@ func IsValidBase64(s string) bool {
 
 // IsValidEd25519PublicKey validates an Ed25519 public key
 func IsValidEd25519PublicKey(pubkey string) bool {
-	pubkey = strings.TrimSpace(pubkey)
 	if pubkey == "" {
 		return false
 	}
@@ -75,6 +71,13 @@ func ValidateFrameNumber(frameNumber string) bool {
 	}
 
 	return matched
+}
+
+// ParseBikeID parses s as a bike's numeric API ID. Only digits count: fmt.Sscanf would
+// also read "123abc" as bike 123.
+func ParseBikeID(s string) (int, bool) {
+	id, err := strconv.ParseUint(s, 10, 31) // 31 bits fit an int everywhere
+	return int(id), err == nil
 }
 
 // LooksLikeFrameNumber reports whether s could be a frame number of any generation, for

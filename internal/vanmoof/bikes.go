@@ -38,23 +38,27 @@ func selectBikes(bikes []BikeData, filter string) ([]BikeData, error) {
 		}
 	}
 
-	// Parse comma-separated bike IDs, frame numbers, or indices (interactive only)
+	// Parse comma-separated bike IDs, frame numbers, or indices (interactive only).
+	// A bike given more than once, or both by ID and frame number, is selected once.
 	var selected []BikeData
+	seen := make(map[int]bool)
+	add := func(i int) {
+		if !seen[i] {
+			seen[i] = true
+			selected = append(selected, bikes[i])
+		}
+	}
 	parts := strings.Split(filter, ",")
 
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 
-		var numericID int
-		isNumeric := false
-		if _, err := fmt.Sscanf(part, "%d", &numericID); err == nil {
-			isNumeric = true
-		}
+		numericID, isNumeric := ParseBikeID(part)
 
 		if isNumeric && interactive {
 			// In interactive mode, treat as 1-based list index
 			if numericID > 0 && numericID <= len(bikes) {
-				selected = append(selected, bikes[numericID-1])
+				add(numericID - 1)
 				continue
 			}
 		}
@@ -64,18 +68,18 @@ func selectBikes(bikes []BikeData, filter string) ([]BikeData, error) {
 			// shared/guest bikes get when merged in (they have no numeric ID), so
 			// treat it as "no match" rather than matching every shared bike.
 			if numericID != 0 {
-				for _, bike := range bikes {
+				for i, bike := range bikes {
 					if bike.BikeID == numericID {
-						selected = append(selected, bike)
+						add(i)
 						break
 					}
 				}
 			}
 		} else {
 			// Match by frame number (for shared bikes)
-			for _, bike := range bikes {
+			for i, bike := range bikes {
 				if bike.FrameNumber == part {
-					selected = append(selected, bike)
+					add(i)
 					break
 				}
 			}

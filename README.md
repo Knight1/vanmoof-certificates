@@ -22,7 +22,7 @@ Pull Requests are welcome! ❤️
 - Debug mode for troubleshooting, with `-redact` to share its output without secrets or personal data
 
 ## Usage & Installation
-See [USAGE.md](USAGE.md)
+See [USAGE.md](USAGE.md), which also covers [using it from scripts and other programs](USAGE.md#using-it-from-scripts-and-other-programs)
 
 ## Certificate Structure
 
