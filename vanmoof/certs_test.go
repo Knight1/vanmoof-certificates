@@ -87,7 +87,7 @@ func signedCert(t *testing.T, key ed25519.PrivateKey, payload []byte) string {
 }
 
 // trustTestCA adds a throwaway CA key to knownCAKeys for the duration of the test
-func trustTestCA(t *testing.T) ed25519.PrivateKey {
+func trustTestCA(t testing.TB) ed25519.PrivateKey {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -308,5 +308,44 @@ func TestVerifyPublicKey(t *testing.T) {
 		if r.pubKeyVerified != tt.verified || (tt.err == "") != (len(r.errors) == 0) || (tt.err != "" && !strings.HasPrefix(r.errors[0], tt.err)) {
 			t.Errorf("%q: verified %v, errors %q", tt.expected, r.pubKeyVerified, r.errors)
 		}
+	}
+}
+
+// Debug output describes the certificate in full: which of the account's bikes it's for
+// (or that it's for none), and how its signature was checked
+func TestPrintVerbose(t *testing.T) {
+	ca := trustTestCA(t)
+	sa5 := Bike{BikeID: 42, Name: "Mine", FrameNumber: "BBBBBB00001AA", FrameSerial: "BBBBBB00001AA", BleProfile: "ELECTRIFIED_2022"}
+	other := Bike{BikeID: 43, Name: "Other", FrameNumber: "BBBBBB00009AA", BleProfile: "ELECTRIFIED_2022"}
+	pub := make([]byte, 32)
+	pub[0] = 1
+	fields := testCertFields(sa5.FrameNumber)
+	fields["p"] = pub
+	signed, unsigned := testCert(t, ca, fields), testCert(t, nil, fields)
+	expect := Expect{PublicKey: base64.StdEncoding.EncodeToString(pub), Bike: &sa5, Bikes: []Bike{sa5, other}}
+
+	tests := []struct {
+		name   string
+		cert   string
+		expect Expect
+		want   []string
+	}{
+		{"for one of the account's bikes", signed, expect, []string{
+			"✓ Certificate matches one of your bikes", "Matched Bike ID: 42", "✓ Bike ID Verified: 42",
+			"✓ Success: Public Key matches", "✓ Signature VALID with CA key"}},
+		{"for none of them", signed, Expect{Bikes: []Bike{other}}, []string{
+			"✗ Certificate does NOT match any of your bikes", "Your bikes: BBBBBB00009AA (ID: 43)"}},
+		{"not signed by VanMoof", unsigned, expect, []string{"✗ Signature validation failed with all known CA keys"}},
+		{"for another key", signed, Expect{PublicKey: base64.StdEncoding.EncodeToString(make([]byte, 32))}, []string{"✗ Warning: Key mismatch detected."}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := captureStdout(t, func() { checkCertificate(tt.cert, tt.expect, true) })
+			for _, want := range tt.want {
+				if !strings.Contains(out, want) {
+					t.Errorf("output lacks %q:\n%s", want, out)
+				}
+			}
+		})
 	}
 }

@@ -274,3 +274,23 @@ func TestCacheWriteFailure(t *testing.T) {
 		t.Errorf("failure not reported:\n%s", out)
 	}
 }
+
+// Any passphrase encrypts the cache, and only the same one decrypts it
+func TestCacheEncryptionPassphrases(t *testing.T) {
+	plaintext := []byte(`{"a@example.com":{"auth_token":"authA"}}`)
+	for _, passphrase := range []string{"x", "pässwörd ✓", strings.Repeat("long", 1000), " leading and trailing ", "\x00\xff"} {
+		t.Run(fmt.Sprintf("%.10q", passphrase), func(t *testing.T) {
+			t.Parallel() // each derives the key three times, which takes a while
+			data, err := encrypt(plaintext, passphrase)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, err := decrypt(data, passphrase); err != nil || !bytes.Equal(got, plaintext) {
+				t.Errorf("decrypt = %q, %v", got, err)
+			}
+			if _, err := decrypt(data, passphrase+"!"); err == nil {
+				t.Error("decrypted with another passphrase")
+			}
+		})
+	}
+}

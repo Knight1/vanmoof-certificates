@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/fxamacker/cbor/v2"
 
@@ -49,11 +51,21 @@ func TestMain(m *testing.M) {
 }
 
 // runTool runs the tool with args, and returns its exit status and output (standard
-// output and error)
+// output and error). It fails the test if the tool tried to reach VanMoof.
 func runTool(t *testing.T, args ...string) (int, string) {
 	t.Helper()
-	defer vanmoof.SetRedaction(false, false)
 	before := requests.Load()
+	status, out := runOutput(t, args)
+	if requests.Load() != before {
+		t.Errorf("%q tried to reach VanMoof", args)
+	}
+	return status, out
+}
+
+// runOutput is runTool without failing the test if the tool tried to reach VanMoof
+func runOutput(t *testing.T, args []string) (int, string) {
+	t.Helper()
+	defer vanmoof.SetRedaction(false, false)
 
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -69,10 +81,6 @@ func runTool(t *testing.T, args ...string) (int, string) {
 	status := run(args)
 	os.Stdout, os.Stderr = stdout, stderr
 	w.Close()
-
-	if requests.Load() != before {
-		t.Errorf("%q tried to reach VanMoof", args)
-	}
 	return status, <-out
 }
 
@@ -130,6 +138,7 @@ func TestRun(t *testing.T) {
 		{"-redact with -show-everything", []string{"-debug", "-redact", "-show-everything"}, 2, "cannot be combined"},
 		{"-show-everything without -debug", []string{"-show-everything"}, 2, "only works with -debug"},
 		{"invalid -show-keys", []string{"-show-keys", "some", "-email", email}, 2, "Invalid -show-keys value"},
+		{"invalid -show-keys, escaped", []string{"-show-keys", "\x1b[2J", "-email", email}, 2, `Invalid -show-keys value '\x1b[2J'`},
 		{"-show-keys with -cert", []string{"-show-keys", "all", "-cert", s6}, 2, "-show-keys cannot be combined with -cert"},
 		{"-new-key with -pubkey", []string{"-new-key", "-pubkey", pubKey, "-email", email}, 2, "-new-key and -pubkey cannot be combined"},
 		{"-new-key with -cert", []string{"-new-key", "-cert", s6}, 2, "-new-key only works when requesting certificates"},
@@ -186,4 +195,41 @@ func TestRunDebugFlagsRedacted(t *testing.T) {
 			t.Errorf("output contains %q:\n%s", s, out)
 		}
 	}
+}
+
+// unescaped reports whether output has invalid UTF-8, a bidi override, or a control
+// character other than a line break or a tab (the usage has tabs)
+func unescaped(output string) bool {
+	return !utf8.ValidString(output) || strings.ContainsFunc(output, func(r rune) bool {
+		return r != '\n' && r != '\t' && (unicode.IsControl(r) || unicode.Is(unicode.Bidi_Control, r))
+	})
+}
+
+// Whatever the command line, the tool exits with 0, 1 or 2 without a panic, and its output
+// has nothing for a terminal to interpret. It never waits for input: the email address is
+// given, and the password set. What needs VanMoof fails, as requests do here.
+func FuzzRun(f *testing.F) {
+	for _, line := range []string{"-version", "-h", "-genkey -redact", "-cert AAAA", "-show-keys maybe", "-invitations accept=1,2",
+		"-bikes 1,,2", "-debug -redact -show-everything", "-show-saved", "-cert \x1b[2J", "-show-keys \x1b[2J -debug",
+		"-framenumber BBBBBB00001AA -cert QUFB", "-sudo -cert garbage", "-debug -bikes LEAKY12345ZZ", "-new-key -pubkey x",
+		"-cleartext-keys -no-cache", "--", "-email= -debug", "-bikes ask -debug", "-invitations decline=\xe2\x80\xae"} {
+		f.Add(line)
+	}
+	f.Fuzz(func(t *testing.T, line string) {
+		t.Setenv("VANMOOF_PASSWORD", "password")
+		args := []string{"-email", "fuzz@example.com"}
+		for arg := range strings.SplitSeq(line, " ") {
+			if name, _, _ := strings.Cut(strings.TrimLeft(arg, "-"), "="); strings.HasPrefix(arg, "-") && name == "email" {
+				continue // without one it would ask
+			}
+			args = append(args, arg)
+		}
+		status, out := runOutput(t, args)
+		if status < 0 || status > 2 {
+			t.Errorf("run(%q) = %d", args, status)
+		}
+		if unescaped(out) {
+			t.Errorf("run(%q) output not escaped: %q", args, out)
+		}
+	})
 }

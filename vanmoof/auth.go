@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net/url"
 )
 
 // apiHeaders builds common VanMoof API headers with the Api-Key included.
@@ -101,8 +100,11 @@ func getSharedVehicles(riderUUID, appToken string, debug bool) ([]VehicleAccess,
 		"Authorization": "Bearer " + appToken,
 	}
 
-	endpoint := fmt.Sprintf(vehicleRegistryBaseURL+"/external/riders/%s/vehicles", url.PathEscape(riderUUID))
-	body, err := doHTTPRequest("GET", endpoint, nil, headers, debug)
+	segment, err := pathSegment(riderUUID)
+	if err != nil {
+		return nil, err
+	}
+	body, err := doHTTPRequest("GET", vehicleRegistryBaseURL+"/external/riders/"+segment+"/vehicles", nil, headers, debug)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +141,11 @@ func acceptBikeSharingInvitation(guid, authToken string, debug bool) (Bike, erro
 		"Authorization": "Bearer " + authToken,
 	})
 
-	body, err := doHTTPRequest("POST", apiBaseURL+"/acceptBikeSharingInvitation/"+url.PathEscape(guid), nil, headers, debug)
+	segment, err := pathSegment(guid)
+	if err != nil {
+		return Bike{}, err
+	}
+	body, err := doHTTPRequest("POST", apiBaseURL+"/acceptBikeSharingInvitation/"+segment, nil, headers, debug)
 	if err != nil {
 		return Bike{}, err
 	}
@@ -165,7 +171,11 @@ func declineBikeSharingInvitation(guid, authToken string, debug bool) error {
 		"Authorization": "Bearer " + authToken,
 	})
 
-	body, err := doHTTPRequest("POST", apiBaseURL+"/declineBikeSharingInvitation/"+url.PathEscape(guid), nil, headers, debug)
+	segment, err := pathSegment(guid)
+	if err != nil {
+		return err
+	}
+	body, err := doHTTPRequest("POST", apiBaseURL+"/declineBikeSharingInvitation/"+segment, nil, headers, debug)
 	if err != nil {
 		return err
 	}

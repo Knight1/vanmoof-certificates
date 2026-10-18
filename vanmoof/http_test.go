@@ -81,3 +81,17 @@ func TestNoAnswer(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+// An ID in a request URL is one path segment, and an empty one, "." or ".." is refused
+func TestPathSegment(t *testing.T) {
+	for id, want := range map[string]string{"BBBBBB00001AA": "BBBBBB00001AA", "a/b": "a%2Fb", "a?b#c": "a%3Fb%23c", "%2e%2e": "%252e%252e", "...": "..."} {
+		if got, err := pathSegment(id); got != want || err != nil {
+			t.Errorf("pathSegment(%q) = %q, %v; want %q", id, got, err, want)
+		}
+	}
+	for _, id := range []string{"", ".", ".."} {
+		if _, err := pathSegment(id); err == nil {
+			t.Errorf("pathSegment(%q): no error", id)
+		}
+	}
+}

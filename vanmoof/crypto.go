@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"net/url"
 )
 
 // GenerateED25519 generates an Ed25519 key pair in base64: the 64 byte private key (seed
@@ -40,8 +39,11 @@ func createCertificate(bikeID, pubKey, appToken string, debug bool) (string, err
 		"Content-Type":  "application/json",
 	}
 
-	endpoint := fmt.Sprintf(bikeApiBaseURL+"/bikes/%s/create_certificate", url.PathEscape(bikeID))
-	body, err := doHTTPRequest("POST", endpoint, bytes.NewBuffer(reqBody), headers, debug)
+	segment, err := pathSegment(bikeID)
+	if err != nil {
+		return "", err
+	}
+	body, err := doHTTPRequest("POST", bikeApiBaseURL+"/bikes/"+segment+"/create_certificate", bytes.NewBuffer(reqBody), headers, debug)
 	if err != nil {
 		return "", err
 	}

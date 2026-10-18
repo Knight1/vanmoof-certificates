@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
@@ -18,6 +19,15 @@ func (e *httpError) Error() string {
 func isUnauthorized(err error) bool {
 	var httpErr *httpError
 	return errors.As(err, &httpErr) && httpErr.statusCode == http.StatusUnauthorized
+}
+
+// pathSegment returns id, such as a frame number, escaped as one segment of a URL path. An
+// empty ID, "." or ".." isn't one: the request would go to another endpoint.
+func pathSegment(id string) (string, error) {
+	if id == "" || id == "." || id == ".." {
+		return "", fmt.Errorf("invalid ID %q for a request", id)
+	}
+	return url.PathEscape(id), nil
 }
 
 // parseResetTime parses the x-ratelimit-reset header value (Unix timestamp) into a time.Time

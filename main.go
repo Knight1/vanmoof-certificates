@@ -4,9 +4,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"strings"
+	"unicode"
 
 	"github.com/Knight1/vanmoof-certificates/vanmoof"
 )
@@ -24,6 +26,7 @@ func main() {
 // run runs the tool with the command line arguments args, and returns its exit status
 func run(args []string) int {
 	flags := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	flags.SetOutput(escaped{os.Stderr})
 	version := flags.Bool("version", false, "Print version information")
 	genkey := flags.Bool("genkey", false, "Generate Ed25519 key pair and exit")
 	cert := flags.String("cert", "", "Base64 encoded certificate string")
@@ -71,7 +74,7 @@ func run(args []string) int {
 			bikesShown = vanmoof.RedactID(bikesShown)
 		}
 		fmt.Printf("[DEBUG] Flags: version=%v, genkey=%v, cert='%s', pubkey='%s', framenumber='%s', email='%s', bikes='%s', show-keys='%s', new-key=%v, show-saved=%v, invitations='%s', cleartext-keys=%v, no-cache=%v, sudo=%v, redact=%v, show-everything=%v\n",
-			*version, *genkey, vanmoof.Redact(*cert), vanmoof.Redact(*pubkey), vanmoof.RedactID(*frameNumber), vanmoof.Redact(*email), bikesShown, *showKeys, *newKey, *showSaved, vanmoof.ScrubText(*invitations), *cleartextKeys, *noCache, *sudo, *redact, *showEverything)
+			*version, *genkey, vanmoof.Redact(*cert), vanmoof.Redact(*pubkey), vanmoof.RedactID(*frameNumber), vanmoof.Redact(*email), bikesShown, vanmoof.ScrubText(*showKeys), *newKey, *showSaved, vanmoof.ScrubText(*invitations), *cleartextKeys, *noCache, *sudo, *redact, *showEverything)
 	}
 
 	if *version {
@@ -94,7 +97,7 @@ func run(args []string) int {
 	// Validate show-keys if provided
 	if *showKeys != "" {
 		if *showKeys != vanmoof.ShowKeysStatic && *showKeys != vanmoof.ShowKeysAll {
-			fmt.Printf("Error: Invalid -show-keys value '%s'. Must be '%s' or '%s'\n", *showKeys, vanmoof.ShowKeysStatic, vanmoof.ShowKeysAll)
+			fmt.Printf("Error: Invalid -show-keys value '%s'. Must be '%s' or '%s'\n", vanmoof.ScrubText(*showKeys), vanmoof.ShowKeysStatic, vanmoof.ShowKeysAll)
 			return exitUsage
 		}
 		if *cert != "" {
@@ -239,4 +242,28 @@ func run(args []string) int {
 		return exitFailure
 	}
 	return 0
+}
+
+// escaped writes to w with control characters (but line breaks and tabs), bidi overrides
+// and invalid UTF-8 escaped: the flag package quotes a mistyped flag as it is
+type escaped struct{ w io.Writer }
+
+func (e escaped) Write(p []byte) (int, error) {
+	var b strings.Builder
+	for _, r := range string(p) {
+		switch {
+		case r == '\n' || r == '\t':
+			b.WriteRune(r)
+		case unicode.IsControl(r):
+			fmt.Fprintf(&b, `\x%02x`, r)
+		case unicode.Is(unicode.Bidi_Control, r):
+			fmt.Fprintf(&b, `\u%04x`, r)
+		default:
+			b.WriteRune(r) // invalid UTF-8 as U+FFFD
+		}
+	}
+	if _, err := io.WriteString(e.w, b.String()); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
