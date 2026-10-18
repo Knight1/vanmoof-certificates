@@ -123,6 +123,42 @@ func (s *Session) RequestCertificate(bike Bike, publicKey string) (string, error
 	return data.Certificate, nil
 }
 
+// Invitations returns the account's pending invitations to share someone else's bike
+func (s *Session) Invitations() ([]Invitation, error) {
+	var invitations []Invitation
+	err := s.call(false, func(t Tokens) error {
+		var err error
+		invitations, err = getBikeSharingInvitations(t.AuthToken, s.debug)
+		return err
+	})
+	return invitations, err
+}
+
+// AcceptInvitation accepts the invitation with guid (Invitation.GUID), and returns the
+// bike it shares with the account
+func (s *Session) AcceptInvitation(guid string) (Bike, error) {
+	if guid == "" {
+		return Bike{}, errors.New("no invitation GUID")
+	}
+	var bike Bike
+	err := s.call(false, func(t Tokens) error {
+		var err error
+		bike, err = acceptBikeSharingInvitation(guid, t.AuthToken, s.debug)
+		return err
+	})
+	return bike, err
+}
+
+// DeclineInvitation declines the invitation with guid (Invitation.GUID)
+func (s *Session) DeclineInvitation(guid string) error {
+	if guid == "" {
+		return errors.New("no invitation GUID")
+	}
+	return s.call(false, func(t Tokens) error {
+		return declineBikeSharingInvitation(guid, t.AuthToken, s.debug)
+	})
+}
+
 // certificateResponse requests a certificate and returns VanMoof's raw response, which
 // the command line tool prints
 func (s *Session) certificateResponse(bike Bike, publicKey string) (string, error) {

@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -64,7 +65,7 @@ func TestCacheSavesEverything(t *testing.T) {
 	t.Setenv("VANMOOF_PASSWORD", leakPassword)
 	_, pubKeys := fakeVanMoof(t)
 
-	key := printedPrivateKey(getCert(t, Options{BikeFilter: "all"}))
+	key := printedPrivateKey(getCert(t, Options{BikeFilter: "all", CleartextKeys: true}))
 	account, _ := bikeCache.load(leakEmail, false)
 	if account.Key == nil || key == "" || account.Key.PrivateKey != key {
 		t.Fatalf("printed private key %q, saved key pair %+v", key, account.Key)
@@ -84,7 +85,7 @@ func TestCacheSavesEverything(t *testing.T) {
 
 	// The next run uses the saved key pair
 	requested := len(*pubKeys)
-	out := getCert(t, Options{BikeFilter: "all"})
+	out := getCert(t, Options{BikeFilter: "all", CleartextKeys: true})
 	if !strings.Contains(out, "Using the saved key pair") || printedPrivateKey(out) != key {
 		t.Errorf("saved key pair not used:\n%s", out)
 	}
@@ -95,7 +96,7 @@ func TestCacheSavesEverything(t *testing.T) {
 	}
 
 	// -new-key makes a new key pair, which replaces the saved one along with the certificates
-	newKey := printedPrivateKey(getCert(t, Options{BikeFilter: "all", NewKey: true}))
+	newKey := printedPrivateKey(getCert(t, Options{BikeFilter: "all", NewKey: true, CleartextKeys: true}))
 	account, _ = bikeCache.load(leakEmail, false)
 	if newKey == "" || newKey == key || account.Key.PrivateKey != newKey {
 		t.Errorf("-new-key: printed %q, saved %+v", newKey, account.Key)
@@ -105,7 +106,7 @@ func TestCacheSavesEverything(t *testing.T) {
 	}
 
 	// The bike messages -show-keys finds
-	captureStdout(t, func() { ShowKeys(leakEmail, ShowKeysStatic, Options{BikeFilter: "all"}) })
+	captureStdout(t, func() { ShowKeys(leakEmail, ShowKeysStatic, Options{BikeFilter: "all", CleartextKeys: true}) })
 	account, _ = bikeCache.load(leakEmail, false)
 	if b := savedBikeOf(account, leakS2Frame); b == nil || len(b.BikeMessages) != 1 || b.BikeMessages[0].Content != leakMessage {
 		t.Errorf("bike messages not saved: %+v", b)
@@ -154,7 +155,7 @@ func TestNoCacheSavesNothing(t *testing.T) {
 		t.Errorf("cache folder created with -no-cache: %v", err)
 	}
 
-	saved := printedPrivateKey(getCert(t, Options{BikeFilter: "all"}))
+	saved := printedPrivateKey(getCert(t, Options{BikeFilter: "all", CleartextKeys: true}))
 	before := cacheFiles(t, dir)
 	key := printedPrivateKey(getCert(t, Options{BikeFilter: "all", NoCache: true}))
 	if key == "" || key == saved || key == first {
@@ -189,8 +190,8 @@ func TestShowSaved(t *testing.T) {
 	t.Setenv("VANMOOF_PASSWORD", leakPassword)
 	certs, pubKeys := fakeVanMoof(t)
 	captureStdout(t, func() {
-		GetCert(leakEmail, Options{BikeFilter: "all"})
-		ShowKeys(leakEmail, ShowKeysStatic, Options{BikeFilter: "all"})
+		GetCert(leakEmail, Options{BikeFilter: "all", CleartextKeys: true})
+		ShowKeys(leakEmail, ShowKeysStatic, Options{BikeFilter: "all", CleartextKeys: true})
 	})
 	account, _ := bikeCache.load(leakEmail, false)
 
@@ -232,5 +233,41 @@ func TestShowSaved(t *testing.T) {
 	setRedaction(t, false, false)
 	if out := captureStdout(t, func() { ShowSaved("nobody@example.com", false) }); !strings.Contains(out, "Nothing saved") {
 		t.Errorf("for an account without saved data: %q", out)
+	}
+}
+
+// Without VANMOOF_CACHE_KEY, the key pair, certificates, BLE keys and customer data are only
+// saved, unencrypted, with -cleartext-keys. What's saved is used either way.
+func TestCleartextKeysNeedConsent(t *testing.T) {
+	dir := filepath.Dir(useTempCache(t, ""))
+	t.Setenv("VANMOOF_PASSWORD", leakPassword)
+	fakeVanMoof(t)
+
+	out := getCert(t, Options{BikeFilter: "all"})
+	if !strings.Contains(out, "add -cleartext-keys") {
+		t.Errorf("no note on what isn't saved:\n%s", out)
+	}
+	if files := slices.Sorted(maps.Keys(cacheFiles(t, dir))); !slices.Equal(files, []string{"tokens.json"}) {
+		t.Errorf("saved without -cleartext-keys: %v", files)
+	}
+	if again := printedPrivateKey(getCert(t, Options{BikeFilter: "all"})); again == printedPrivateKey(out) {
+		t.Error("key pair kept without -cleartext-keys")
+	}
+
+	key := printedPrivateKey(getCert(t, Options{BikeFilter: "all", CleartextKeys: true}))
+	if files := slices.Sorted(maps.Keys(cacheFiles(t, dir))); !slices.Equal(files, []string{"bikes.json", "customer_data.json", "tokens.json"}) {
+		t.Errorf("saved with -cleartext-keys: %v", files)
+	}
+
+	// Without it again, the saved key pair is used, but nothing new is saved
+	before := cacheFiles(t, dir)
+	if out := getCert(t, Options{BikeFilter: "all"}); printedPrivateKey(out) != key {
+		t.Errorf("saved key pair not used:\n%s", out)
+	}
+	after := cacheFiles(t, dir)
+	for _, name := range []string{"bikes.json", "customer_data.json"} {
+		if before[name] != after[name] {
+			t.Errorf("%s changed without -cleartext-keys", name)
+		}
 	}
 }

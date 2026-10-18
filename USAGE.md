@@ -25,7 +25,9 @@ puts it into `$(go env GOPATH)/bin`.
 | `-show-everything` | With `-debug`, also show the tokens and keys it hides. Never share this output | `false` |
 | `-new-key` | Request the certificates for a new key pair, which replaces the saved one (see [Cache](#cache)) | `false` |
 | `-show-saved` | Show what the cache holds for the account: key pair, certificates, BLE keys, bike messages and customer data | `false` |
+| `-cleartext-keys` | Without `VANMOOF_CACHE_KEY`, save the key pair, certificates, BLE keys and customer data unencrypted (see [Cache](#cache)) | `false` |
 | `-no-cache` | Do not read or write the cache (tokens, key pair, certificates, BLE keys, bike messages, customer data) | `false` |
+| `-invitations` | Bike sharing invitations: `list`, `accept` or `decline` them (see [Bike Sharing Invitations](#bike-sharing-invitations)) | - |
 | `-sudo` | Skip all validation checks | `false` |
 | `-cert` | Base64 encoded certificate to parse | - |
 | `-pubkey` | Base64 encoded public key (optional) | - |
@@ -38,7 +40,7 @@ puts it into `$(go env GOPATH)/bin`.
 | Status | Meaning |
 |--------|---------|
 | `0` | Success, also when there was nothing to do (e.g. no supported bikes) |
-| `1` | Something failed: logging in, getting your bikes, a certificate request, or a certificate check (`Certificate INVALID`) |
+| `1` | Something failed: logging in, getting your bikes, a certificate request, a certificate check (`Certificate INVALID`), or accepting or declining an invitation |
 | `2` | Invalid flags or flag values |
 
 Optional lookups (bikes shared with you, pending sharing invitations, bike messages) don't change the exit status: if one fails, the tool prints a warning and carries on.
@@ -123,7 +125,15 @@ export VANMOOF_CACHE_KEY="your-secret-passphrase"
 ./vanmoof-certificates -email user@vanmoof.com
 ```
 
-This encrypts the cache files with AES-256-GCM (PBKDF2-SHA256 key derivation, 600k iterations). Without the env var, they're stored as plain JSON, which the tool points out when it creates each file. An existing unencrypted file is encrypted the first time the tool runs with the variable set, and one encrypted by an earlier version (100k iterations) is re-encrypted the first time it's read. Each file is replaced in one step, so an interrupted run can't leave it half-written.
+This encrypts the cache files with AES-256-GCM (PBKDF2-SHA256 key derivation, 600k iterations).
+
+Without the env var, the tokens are stored as plain JSON, which the tool points out when
+it creates the file. The key pair, certificates, BLE keys and customer data aren't saved
+unencrypted unless you accept that with `-cleartext-keys`, which every run that should
+save them needs; without it, each run makes a new key pair. What's saved is used either
+way.
+
+ An existing unencrypted file is encrypted the first time the tool runs with the variable set, and one encrypted by an earlier version (100k iterations) is re-encrypted the first time it's read. Each file is replaced in one step, so an interrupted run can't leave it half-written.
 
 If a cache file can't be read (it's encrypted and `VANMOOF_CACHE_KEY` is missing or wrong, or the file is corrupt), the tool warns, carries on without it (logging in with the password, or making a new key pair) and leaves the file as it is, so no account's data is lost. Set the right key again, or delete the file to start over.
 
@@ -223,6 +233,39 @@ or, if nothing is queued:
 bikeMessage: none waiting
 ```
 If a bike message is waiting either sent it to the bike via a tool or use the official app.  
+
+### Bike Sharing Invitations
+
+When someone shares their bike with you, the tool warns about the pending invitation.
+List the invitations, and accept or decline them:
+
+```console
+./vanmoof-certificates -email user@vanmoof.com -invitations list
+./vanmoof-certificates -email user@vanmoof.com -invitations accept
+./vanmoof-certificates -email user@vanmoof.com -invitations decline
+```
+
+Each invitation is listed like this:
+
+```
+Invitation 1
+Bike: Their bike
+Model: SA5
+Owner: Their name
+Expires: 2026-12-24T12:00:00+0100
+GUID: 0f0f0000-0000-3000-8000-000000000000
+```
+
+`accept` and `decline` then ask which ones: their numbers or GUIDs, comma-separated, or
+`all`. To choose them without the question, e.g. in a script, put them after `=`:
+
+```console
+./vanmoof-certificates -email user@vanmoof.com -invitations accept=all
+./vanmoof-certificates -email user@vanmoof.com -invitations decline=0f0f0000-0000-3000-8000-000000000000
+```
+
+Once you've accepted, the bike is shared with you: run the tool as usual to request its
+certificate.
 
 ### Debug Mode
 
@@ -462,6 +505,9 @@ func main() {
   set in `vanmoof.Expect`: the public key, the bike, and the user (`s.UserID()`). `Valid`
   is false if a check failed, and `Errors` says why. No S6 signing key is known yet, so
   for an S6, `SignatureVerified` is false and `Notes` says so.
+- `s.Invitations()` returns the pending bike sharing invitations, and
+  `s.AcceptInvitation(guid)` and `s.DeclineInvitation(guid)` respond to one. Accepting
+  returns the bike that's now shared with you.
 - A session can be used from several goroutines at once.
 - The tokens, your private key and the certificates let anyone unlock the bike: keep
   them out of logs.

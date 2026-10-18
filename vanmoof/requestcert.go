@@ -129,7 +129,6 @@ func login(email string, debug, noCache bool) (*Session, *CustomerData, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get customer data: %w", err)
 	}
-	saveCustomerData(email, customerData, debug, noCache)
 
 	return &Session{tokens: tokens, userID: customerData.Data.UUID, debug: debug}, customerData, nil
 }
@@ -153,6 +152,7 @@ func GetCert(email string, opts Options) error {
 	if err != nil {
 		return err
 	}
+	saveCustomerData(email, customerData, opts)
 	tokens := s.Tokens()
 
 	if debug {
@@ -206,13 +206,13 @@ func debugPrintVehicleAccessProfiles(vehicles []VehicleAccess) {
 // warnPendingInvitations prints a warning if the account has pending bike sharing
 // invitations. A lookup failure is only surfaced in debug mode, since it isn't fatal.
 func warnPendingInvitations(authToken string, debug bool) {
-	pendingInvitations, err := getBikeSharingInvitations(authToken, debug)
+	invitations, err := getBikeSharingInvitations(authToken, debug)
 	if err != nil {
 		fmt.Printf("WARNING: Couldn't check for pending bike sharing invitations: %v\n", ScrubText(err.Error()))
 		return
 	}
-	if pendingInvitations > 0 {
-		fmt.Printf("WARNING: You have %d pending bike sharing invitation(s)! Accept them in the VanMoof app first.\n", pendingInvitations)
+	if len(invitations) > 0 {
+		fmt.Printf("WARNING: You have %d pending bike sharing invitation(s)! Accept them first, with -invitations accept or in the VanMoof app.\n", len(invitations))
 	}
 }
 

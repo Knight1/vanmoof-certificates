@@ -15,10 +15,18 @@ var (
 	bikeCache         = cacheFile[savedAccount]{name: "bikes.json", what: "key pair, certificates and BLE keys"}
 )
 
-// saveCustomerData saves the account's getCustomerData response, unless -no-cache
-func saveCustomerData(email string, data *CustomerData, debug, noCache bool) {
-	if !noCache && data.raw != nil {
-		customerDataCache.save(email, data.raw, debug)
+// keysMayBeSaved reports whether the key pair, certificates, BLE keys and customer data
+// may be saved: encrypted with VANMOOF_CACHE_KEY, or unencrypted with -cleartext-keys, and
+// never with -no-cache
+func keysMayBeSaved(opts Options) bool {
+	return !opts.NoCache && (getCacheKey() != "" || opts.CleartextKeys)
+}
+
+// saveCustomerData saves the account's getCustomerData response, which has its BLE keys,
+// if keysMayBeSaved
+func saveCustomerData(email string, data *CustomerData, opts Options) {
+	if data.raw != nil && keysMayBeSaved(opts) {
+		customerDataCache.save(email, data.raw, opts.Debug)
 	}
 }
 
@@ -32,10 +40,14 @@ func loadAccount(email string, opts Options) savedAccount {
 	return account
 }
 
-// saveAccount saves the account's key pair and bikes, unless -no-cache
+// saveAccount saves the account's key pair and bikes if keysMayBeSaved, and else says why
+// not (unless -no-cache)
 func saveAccount(email string, account savedAccount, opts Options) {
-	if !opts.NoCache {
+	switch {
+	case keysMayBeSaved(opts):
 		bikeCache.save(email, account, opts.Debug)
+	case !opts.NoCache:
+		fmt.Println("Note: the key pair, certificates, BLE keys and customer data aren't saved unencrypted: set VANMOOF_CACHE_KEY to encrypt them, or add -cleartext-keys to save them anyway")
 	}
 }
 

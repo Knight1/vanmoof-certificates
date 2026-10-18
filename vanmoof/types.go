@@ -100,8 +100,22 @@ type RiderVehiclesResponse struct {
 
 // Bike sharing invitations response
 type BikeSharingInvitationsResponse struct {
-	Invitations []json.RawMessage `json:"invitations"`
-	Hash        string            `json:"hash"`
+	Invitations []Invitation `json:"invitations"`
+	Hash        string       `json:"hash"`
+}
+
+// Invitation is a pending invitation to share someone else's bike with the account (see
+// Session.Invitations). Its times are as VanMoof gives them, in ISO 8601.
+type Invitation struct {
+	GUID       string `json:"guid"`
+	OwnerName  string `json:"ownerName"`
+	BikeName   string `json:"bikeName"`
+	ModelName  string `json:"modelName"`  // e.g. "B-05S-E01EU-XX"
+	BleProfile string `json:"bleProfile"` // see Model
+	ExpiresAt  string `json:"expiresAt"`  // when the invitation expires
+	StartsAt   string `json:"startsAt"`   // when the sharing starts and ends, if it's limited
+	EndsAt     string `json:"endsAt"`
+	Duration   int    `json:"duration"` // of the sharing, in seconds
 }
 
 type CertificateRequest struct {
@@ -178,6 +192,10 @@ type Options struct {
 	NewKey     bool   // -new-key: request them for a new key pair, which replaces the saved one
 	Debug      bool   // -debug
 	NoCache    bool   // -no-cache: don't read or write the cache
+
+	// -cleartext-keys: save the key pair, certificates, BLE keys and customer data even
+	// without VANMOOF_CACHE_KEY, unencrypted
+	CleartextKeys bool
 }
 
 // savedAccount is what the cache keeps of an account's key pair and bikes (bikes.json)

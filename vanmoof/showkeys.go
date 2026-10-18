@@ -41,6 +41,7 @@ func ShowKeys(email, mode string, opts Options) error {
 	if err != nil {
 		return err
 	}
+	saveCustomerData(email, customerData, opts)
 	tokens := s.Tokens()
 
 	warnPendingInvitations(tokens.AuthToken, debug)

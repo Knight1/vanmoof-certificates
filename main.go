@@ -30,6 +30,8 @@ func main() {
 	showEverything := flag.Bool("show-everything", false, "With -debug, also show the tokens and keys it hides (never share this output)")
 	newKey := flag.Bool("new-key", false, "Request the certificates for a new key pair, which replaces the saved one")
 	showSaved := flag.Bool("show-saved", false, "Show what the cache holds for the account: key pair, certificates, BLE keys, bike messages and customer data")
+	invitations := flag.String("invitations", "", "Bike sharing invitations: 'list' them, or 'accept' or 'decline' them, asking which; 'accept=all', or numbers or GUIDs after '=', choose them")
+	cleartextKeys := flag.Bool("cleartext-keys", false, "Without VANMOOF_CACHE_KEY, save the key pair, certificates, BLE keys and customer data unencrypted (else they're only saved encrypted)")
 	noCache := flag.Bool("no-cache", false, "Do not read or write the cache (tokens, key pair, certificates, BLE keys, bike messages, customer data)")
 	sudo := flag.Bool("sudo", false, "Skip all validation checks")
 	flag.Parse()
@@ -55,8 +57,8 @@ func main() {
 		if bikesShown != "all" && bikesShown != "ask" {
 			bikesShown = vanmoof.RedactID(bikesShown)
 		}
-		fmt.Printf("[DEBUG] Flags: version=%v, genkey=%v, cert='%s', pubkey='%s', framenumber='%s', email='%s', bikes='%s', show-keys='%s', new-key=%v, show-saved=%v, no-cache=%v, sudo=%v, redact=%v, show-everything=%v\n",
-			*version, *genkey, vanmoof.Redact(*cert), vanmoof.Redact(*pubkey), vanmoof.RedactID(*frameNumber), vanmoof.Redact(*email), bikesShown, *showKeys, *newKey, *showSaved, *noCache, *sudo, *redact, *showEverything)
+		fmt.Printf("[DEBUG] Flags: version=%v, genkey=%v, cert='%s', pubkey='%s', framenumber='%s', email='%s', bikes='%s', show-keys='%s', new-key=%v, show-saved=%v, invitations='%s', cleartext-keys=%v, no-cache=%v, sudo=%v, redact=%v, show-everything=%v\n",
+			*version, *genkey, vanmoof.Redact(*cert), vanmoof.Redact(*pubkey), vanmoof.RedactID(*frameNumber), vanmoof.Redact(*email), bikesShown, *showKeys, *newKey, *showSaved, vanmoof.ScrubText(*invitations), *cleartextKeys, *noCache, *sudo, *redact, *showEverything)
 	}
 
 	if *version {
@@ -97,6 +99,26 @@ func main() {
 			fmt.Println("Error: -new-key only works when requesting certificates")
 			os.Exit(exitUsage)
 		}
+	}
+	invitationAction, invitationSelection, hasSelection := strings.Cut(*invitations, "=")
+	if *invitations != "" {
+		switch {
+		case invitationAction != vanmoof.InvitationsList && invitationAction != vanmoof.InvitationsAccept && invitationAction != vanmoof.InvitationsDecline:
+			fmt.Printf("Error: Invalid -invitations value '%s'. Must be '%s', '%s' or '%s'\n", vanmoof.ScrubText(*invitations), vanmoof.InvitationsList, vanmoof.InvitationsAccept, vanmoof.InvitationsDecline)
+			os.Exit(exitUsage)
+		case hasSelection && (invitationAction == vanmoof.InvitationsList || strings.TrimSpace(invitationSelection) == ""):
+			fmt.Println("Error: -invitations takes the invitations after '=' only to accept or decline them, e.g. 'accept=all'")
+			os.Exit(exitUsage)
+		}
+		if *cert != "" || *showKeys != "" || *showSaved || *pubkey != "" || *newKey {
+			fmt.Println("Error: -invitations cannot be combined with -cert, -show-keys, -show-saved, -pubkey or -new-key")
+			os.Exit(exitUsage)
+		}
+	}
+
+	if *cleartextKeys && *noCache {
+		fmt.Println("Error: -cleartext-keys and -no-cache cannot be combined")
+		os.Exit(exitUsage)
 	}
 	if *showSaved && (*cert != "" || *showKeys != "" || *pubkey != "" || *noCache) {
 		fmt.Println("Error: -show-saved cannot be combined with -cert, -show-keys, -pubkey or -no-cache")
@@ -174,7 +196,15 @@ func main() {
 			return
 		}
 
-		opts := vanmoof.Options{BikeFilter: *bikes, PublicKey: *pubkey, NewKey: *newKey, Debug: *debug, NoCache: *noCache}
+		opts := vanmoof.Options{BikeFilter: *bikes, PublicKey: *pubkey, NewKey: *newKey, Debug: *debug, NoCache: *noCache, CleartextKeys: *cleartextKeys}
+		if *invitations != "" {
+			if err := vanmoof.Invitations(emailInput, invitationAction, strings.TrimSpace(invitationSelection), opts); err != nil {
+				fmt.Printf("Error: %v\n", vanmoof.ScrubText(err.Error()))
+				os.Exit(exitFailure)
+			}
+			return
+		}
+
 		if *showKeys != "" {
 			// ShowKeys itself requests certificates too in "all" mode, reusing the
 			// authentication and customer data it already fetched for the keys.

@@ -159,6 +159,12 @@ const (
 	leakSA5ID      = 987654
 	leakS3ID       = 876543
 	leakS2ID       = 765432
+
+	// The pending invitation to share someone else's bike
+	leakInviteGUID   = "1eaf0000-0000-3000-8000-0000000000cc"
+	leakInvitedName  = "LeakyInvited"
+	leakInvitedFrame = "LEAKYC67890ZZ"
+	leakInvitedID    = 654321
 )
 
 func leakJWT(signature string) string {
@@ -218,7 +224,16 @@ func fakeVanMoof(t *testing.T) (certs, pubKeys *[]string) {
 		case p == "/v8/getApplicationToken":
 			body = fmt.Sprintf(`{"token":%q}`, leakAppToken)
 		case p == "/v8/getBikeSharingInvitations":
-			body = fmt.Sprintf(`{"invitations":[{"name":%q,"email":%q}],"hash":"x"}`, leakOwnerName, leakOwnerEmail)
+			body = fmt.Sprintf(`{"invitations":[{"guid":%q,"expiresAt":"2026-12-24T12:00:00+0100","startsAt":null,"endsAt":null,"duration":2592000,`+
+				`"ownerName":%q,"bikeName":%q,"modelName":"B-05S-E01EU-XX","frameShape":"S","bleProfile":"ELECTRIFIED_2022"}],"hash":"x"}`,
+				leakInviteGUID, leakOwnerName, leakInvitedName)
+		case p == "/v8/acceptBikeSharingInvitation/"+leakInviteGUID && r.Method == http.MethodPost:
+			body = fmt.Sprintf(`{"data":{"id":%d,"name":%q,"frameNumber":%q,"ownerName":%q,"bleProfile":"ELECTRIFIED_2022","key":null}}`,
+				leakInvitedID, leakInvitedName, leakInvitedFrame, leakOwnerName)
+		case p == "/v8/declineBikeSharingInvitation/"+leakInviteGUID && r.Method == http.MethodPost:
+			body = `{"result":true}`
+		case strings.HasPrefix(p, "/v8/acceptBikeSharingInvitation/"), strings.HasPrefix(p, "/v8/declineBikeSharingInvitation/"):
+			return httpResponse(r, http.StatusNotFound, `{"error":"BikeSharingInvitationNotFoundException","message":"This bike sharing invitation does not exist."}`), nil
 		case p == "/v8/getCustomerData":
 			body = string(customerData)
 		case strings.HasPrefix(p, "/v8/getBikeMessages/"):
@@ -264,11 +279,16 @@ func runEverything(t *testing.T) (out string, certs, pubKeys []string) {
 
 	out = captureStdout(t, func() {
 		for range 2 {
-			if err := GetCert(leakEmail, Options{BikeFilter: "all", Debug: true}); err != nil {
+			if err := GetCert(leakEmail, Options{BikeFilter: "all", Debug: true, CleartextKeys: true}); err != nil {
 				t.Errorf("GetCert: %v", err)
 			}
 		}
-		if err := ShowKeys(leakEmail, ShowKeysAll, Options{BikeFilter: "all", Debug: true}); err != nil {
+		for _, inv := range [][2]string{{InvitationsList, ""}, {InvitationsAccept, "1"}, {InvitationsDecline, leakInviteGUID}} {
+			if err := Invitations(leakEmail, inv[0], inv[1], Options{Debug: true}); err != nil {
+				t.Errorf("Invitations %s: %v", inv[0], err)
+			}
+		}
+		if err := ShowKeys(leakEmail, ShowKeysAll, Options{BikeFilter: "all", Debug: true, CleartextKeys: true}); err != nil {
 			t.Errorf("ShowKeys: %v", err)
 		}
 		ProcessCertificate((*certsP)[0], (*pubKeysP)[0], leakOtherFrame, true)
@@ -286,7 +306,8 @@ var (
 	leakPersonal = []string{leakEmail, leakUUID, strings.ReplaceAll(leakUUID, "-", ""), leakName, leakPhone,
 		leakSA5Name, leakS3Name, leakS2Name, leakSharedName, leakRiderName, leakOwnerName, leakOwnerEmail, leakOwnerUUID,
 		leakMAC, leakMAC2, leakMAC3, leakSA5Frame, leakS6Frame, leakS3Frame, leakS2Frame, leakOtherFrame, leakECU,
-		fmt.Sprint(leakSA5ID), fmt.Sprint(leakS3ID), fmt.Sprint(leakS2ID)}
+		fmt.Sprint(leakSA5ID), fmt.Sprint(leakS3ID), fmt.Sprint(leakS2ID),
+		leakInviteGUID, leakInvitedName, leakInvitedFrame, fmt.Sprint(leakInvitedID)}
 	privKeyLine = regexp.MustCompile(`Privkey = (\S+)`)
 )
 

@@ -115,22 +115,71 @@ func getSharedVehicles(riderUUID, appToken string, debug bool) ([]VehicleAccess,
 	return resp.VehicleAccess, nil
 }
 
-func getBikeSharingInvitations(authToken string, debug bool) (int, error) {
+func getBikeSharingInvitations(authToken string, debug bool) ([]Invitation, error) {
 	headers := apiHeaders(map[string]string{
 		"Authorization": "Bearer " + authToken,
 	})
 
 	body, err := doHTTPRequest("GET", apiBaseURL+"/getBikeSharingInvitations", nil, headers, debug)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	var resp BikeSharingInvitationsResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	return len(resp.Invitations), nil
+	return resp.Invitations, nil
+}
+
+// acceptBikeSharingInvitation accepts the invitation guid, and returns the bike it shares
+func acceptBikeSharingInvitation(guid, authToken string, debug bool) (Bike, error) {
+	headers := apiHeaders(map[string]string{
+		"Authorization": "Bearer " + authToken,
+	})
+
+	body, err := doHTTPRequest("POST", apiBaseURL+"/acceptBikeSharingInvitation/"+url.PathEscape(guid), nil, headers, debug)
+	if err != nil {
+		return Bike{}, err
+	}
+
+	// The bike's data, as getBikeData has it
+	var resp struct {
+		Data struct {
+			Bike
+			OwnerName string `json:"ownerName"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return Bike{}, err
+	}
+	bike := resp.Data.Bike
+	bike.Owner = resp.Data.OwnerName
+	return bike, nil
+}
+
+// declineBikeSharingInvitation declines the invitation guid
+func declineBikeSharingInvitation(guid, authToken string, debug bool) error {
+	headers := apiHeaders(map[string]string{
+		"Authorization": "Bearer " + authToken,
+	})
+
+	body, err := doHTTPRequest("POST", apiBaseURL+"/declineBikeSharingInvitation/"+url.PathEscape(guid), nil, headers, debug)
+	if err != nil {
+		return err
+	}
+
+	var resp struct {
+		Result bool `json:"result"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return err
+	}
+	if !resp.Result {
+		return fmt.Errorf("declining the invitation wasn't confirmed: %s", redactJSON(string(body)))
+	}
+	return nil
 }
 
 // getBikeMessages checks for messages queued for BLE delivery to a bike (getBikeMessages

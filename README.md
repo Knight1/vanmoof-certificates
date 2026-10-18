@@ -12,8 +12,9 @@ Pull Requests are welcome! ❤️
 ## Features
 
 - Authenticate with VanMoof API with token cache (auth token, app token, refresh token) or username/password, logging in again automatically if the server rejects cached tokens
-- Saves your key pair, the certificates, BLE keys, bike messages and `getCustomerData` response in its cache (encrypted with `VANMOOF_CACHE_KEY`), and requests every certificate for the saved key pair, so a BLE app needs the private key only once (`-new-key` makes a new one, `-show-saved` shows what's saved)
+- Saves your key pair, the certificates, BLE keys, bike messages and `getCustomerData` response in its cache (encrypted with `VANMOOF_CACHE_KEY`, or unencrypted only if you accept that with `-cleartext-keys`), and requests every certificate for the saved key pair, so a BLE app needs the private key only once (`-new-key` makes a new one, `-show-saved` shows what's saved)
 - Retrieve and filter SA5 and S6 bikes from your account
+- List, accept and decline bike sharing invitations (`-invitations`)
 - Support for shared/guest bikes via VanMoof's Vehicle Registry API
 - Generate Ed25519 key pairs
 - Create and parse bike certificates
