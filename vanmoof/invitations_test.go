@@ -33,6 +33,28 @@ func TestSessionInvitations(t *testing.T) {
 	if _, err := s.AcceptInvitation(""); err == nil {
 		t.Error("accepting no invitation: no error")
 	}
+	if err := s.DeclineInvitation(""); err == nil {
+		t.Error("declining no invitation: no error")
+	}
+}
+
+// -invitations reports an answer that fails, and a list it can't get
+func TestInvitationsFail(t *testing.T) {
+	useTempCache(t, "")
+	t.Setenv("VANMOOF_PASSWORD", leakPassword)
+	fakeVanMoof(t)
+	failRequests(t, http.StatusInternalServerError, "/v8/declineBikeSharingInvitation/")
+	var err error
+	out := captureStdout(t, func() { err = Invitations(leakEmail, InvitationsDecline, "1", Options{}) })
+	if err == nil || err.Error() != "1 of 1 invitation(s) failed" || !strings.Contains(out, "Failed to decline the invitation for "+leakInvitedName+": HTTP 500") {
+		t.Errorf("err = %v\n%s", err, out)
+	}
+
+	failRequests(t, http.StatusInternalServerError, "/v8/getBikeSharingInvitations")
+	captureStdout(t, func() { err = Invitations(leakEmail, InvitationsList, "", Options{}) })
+	if err == nil || !strings.Contains(err.Error(), "failed to get the bike sharing invitations: HTTP 500") {
+		t.Errorf("err = %v", err)
+	}
 }
 
 // -invitations lists the invitations, and accepts or declines the ones given, or asked for

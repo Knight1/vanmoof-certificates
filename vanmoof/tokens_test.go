@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,10 +18,7 @@ import (
 )
 
 func TestTokenCacheEncryptionFormat(t *testing.T) {
-	data, err := encrypt([]byte(`{"a":1}`), "secret")
-	if err != nil {
-		t.Fatal(err)
-	}
+	data := encrypt([]byte(`{"a":1}`), "secret")
 	if !hasCacheHeader(data) || binary.BigEndian.Uint32(data[len(cacheMagic):cacheHeaderSize]) != pbkdf2Iterations {
 		t.Fatalf("no header with %d iterations: %x", pbkdf2Iterations, data[:cacheHeaderSize])
 	}
@@ -42,15 +41,10 @@ func TestTokenCacheEncryptionFormat(t *testing.T) {
 
 // legacyEncrypt is how caches were encrypted before the header: 100,000 iterations and
 // only salt, nonce and ciphertext
-func legacyEncrypt(t *testing.T, plaintext []byte, passphrase string) []byte {
-	t.Helper()
+func legacyEncrypt(plaintext []byte, passphrase string) []byte {
 	salt := make([]byte, saltSize)
 	rand.Read(salt)
-	gcm, err := newCacheCipher(passphrase, salt, legacyPBKDF2Iterations)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return gcm.Seal(salt, nil, plaintext, nil) // salt, nonce, ciphertext
+	return newCacheCipher(passphrase, salt, legacyPBKDF2Iterations).Seal(salt, nil, plaintext, nil) // salt, nonce, ciphertext
 }
 
 // Caches that earlier versions of the tool wrote still decrypt: in the current format, and
@@ -72,7 +66,7 @@ func TestTokenCacheEarlierVersionsDecrypt(t *testing.T) {
 func TestTokenCacheLegacyFormatUpgraded(t *testing.T) {
 	path := useTempCache(t, "secret")
 	os.MkdirAll(filepath.Dir(path), 0700)
-	legacy := legacyEncrypt(t, []byte(`{"a@example.com":{"auth_token":"authA"},"b@example.com":{"auth_token":"authB"}}`), "secret")
+	legacy := legacyEncrypt([]byte(`{"a@example.com":{"auth_token":"authA"},"b@example.com":{"auth_token":"authB"}}`), "secret")
 	if err := os.WriteFile(path, legacy, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -281,10 +275,7 @@ func TestCacheEncryptionPassphrases(t *testing.T) {
 	for _, passphrase := range []string{"x", "pässwörd ✓", strings.Repeat("long", 1000), " leading and trailing ", "\x00\xff"} {
 		t.Run(fmt.Sprintf("%.10q", passphrase), func(t *testing.T) {
 			t.Parallel() // each derives the key three times, which takes a while
-			data, err := encrypt(plaintext, passphrase)
-			if err != nil {
-				t.Fatal(err)
-			}
+			data := encrypt(plaintext, passphrase)
 			if got, err := decrypt(data, passphrase); err != nil || !bytes.Equal(got, plaintext) {
 				t.Errorf("decrypt = %q, %v", got, err)
 			}
@@ -292,5 +283,80 @@ func TestCacheEncryptionPassphrases(t *testing.T) {
 				t.Error("decrypted with another passphrase")
 			}
 		})
+	}
+}
+
+// Without a home directory there's no cache: nothing is read or written, and debug output
+// says why
+func TestCacheWithoutHome(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	var entries map[string]Tokens
+	var err error
+	out := captureStdout(t, func() {
+		entries, err = tokenCache.loadAll(true)
+		tokenCache.saveAll(map[string]Tokens{"a@example.com": {AuthToken: "authA"}}, true)
+	})
+	if entries != nil || err != nil || strings.Count(out, "[DEBUG] Cache path error: ") != 2 {
+		t.Errorf("loadAll = %v, %v\n%s", entries, err, out)
+	}
+}
+
+// A cache file that can't be read, such as a folder in its place, is an error
+func TestCacheFileUnreadable(t *testing.T) {
+	path := useTempCache(t, "")
+	if err := os.MkdirAll(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tokenCache.loadAll(false); err == nil {
+		t.Error("no error")
+	}
+}
+
+// A cache that decrypts to something other than JSON is corrupt
+func TestCacheDecryptsToGarbage(t *testing.T) {
+	path := useTempCache(t, "secret")
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, encrypt([]byte("not JSON"), "secret"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tokenCache.loadAll(false); err == nil || !strings.Contains(err.Error(), "is corrupt") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+// Entries that don't encode are neither saved nor replace the file
+func TestCacheEntriesNotEncodable(t *testing.T) {
+	useTempCache(t, "")
+	out := captureStdout(t, func() {
+		customerDataCache.saveAll(map[string]json.RawMessage{"a@example.com": json.RawMessage("{")}, true)
+	})
+	path, _ := customerDataCache.path()
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) || !strings.Contains(out, "[DEBUG] customer_data.json marshal error: ") {
+		t.Errorf("file %v\n%s", err, out)
+	}
+}
+
+// Debug output tells what happens to the cache's encryption: a cache is encrypted once
+// VANMOOF_CACHE_KEY is set, decrypted when it's read, and re-encrypted if it's in the
+// format from before the header
+func TestCacheDebugOutput(t *testing.T) {
+	path := useTempCache(t, "")
+	captureStdout(t, func() { saveTokenCache("a@example.com", "authA", "refreshA", "appA", false) })
+	t.Setenv("VANMOOF_CACHE_KEY", "secret")
+
+	out := captureStdout(t, func() {
+		tokenCache.loadAll(true)
+		tokenCache.loadAll(true)
+		os.WriteFile(path, legacyEncrypt([]byte(`{"a@example.com":{"auth_token":"authA"}}`), "secret"), 0600)
+		tokenCache.loadAll(true)
+	})
+	for _, want := range []string{"Encrypting the unencrypted tokens.json with VANMOOF_CACHE_KEY", "tokens.json encrypted",
+		"tokens.json decrypted", "Re-encrypting tokens.json with the current key derivation"} {
+		if !strings.Contains(out, "[DEBUG] "+want+"\n") {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
 	}
 }

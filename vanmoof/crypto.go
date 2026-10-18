@@ -25,15 +25,7 @@ func GenerateED25519() (privateKey, publicKey string, err error) {
 }
 
 func createCertificate(bikeID, pubKey, appToken string, debug bool) (string, error) {
-	certReq := CertificateRequest{
-		PublicKey: pubKey,
-	}
-
-	reqBody, err := json.Marshal(certReq)
-	if err != nil {
-		return "", err
-	}
-
+	reqBody := must(json.Marshal(CertificateRequest{PublicKey: pubKey}))
 	headers := map[string]string{
 		"Authorization": "Bearer " + appToken,
 		"Content-Type":  "application/json",

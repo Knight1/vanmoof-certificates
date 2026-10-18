@@ -3,6 +3,7 @@ package vanmoof
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -79,6 +80,33 @@ func TestNoAnswer(t *testing.T) {
 	respondWith(t, func(r *http.Request) (*http.Response, error) { return nil, offline })
 	if _, err := doHTTPRequest("GET", apiBaseURL+"/getCustomerData", nil, nil, false); !errors.Is(err, offline) {
 		t.Errorf("err = %v", err)
+	}
+}
+
+// broken fails every read
+type broken struct{}
+
+func (broken) Read([]byte) (int, error) { return 0, errors.New("broken") }
+
+// A request that can't be made, or whose answer can't be read, is an error. An error page
+// is cut short in the error.
+func TestRequestErrors(t *testing.T) {
+	if _, err := doHTTPRequest("GET", "https://[not a host", nil, nil, false); err == nil {
+		t.Error("no error for a URL that isn't one")
+	}
+
+	respondWith(t, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(broken{}), Request: r}, nil
+	})
+	if _, err := doHTTPRequest("GET", apiBaseURL+"/getCustomerData", nil, nil, false); err == nil || !strings.Contains(err.Error(), "broken") {
+		t.Errorf("err = %v for an answer that can't be read", err)
+	}
+
+	respondWith(t, func(r *http.Request) (*http.Response, error) {
+		return httpResponse(r, http.StatusInternalServerError, strings.Repeat("x", 600)), nil
+	})
+	if _, err := doHTTPRequest("GET", apiBaseURL+"/getCustomerData", nil, nil, false); err == nil || err.Error() != "HTTP 500: "+strings.Repeat("x", 500)+"... (truncated)" {
+		t.Errorf("err = %v for a long error page", err)
 	}
 }
 

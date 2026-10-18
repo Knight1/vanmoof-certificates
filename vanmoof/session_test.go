@@ -193,6 +193,29 @@ func TestSessionLoginRequired(t *testing.T) {
 	}
 }
 
+// Tokens that another call renewed meanwhile are used as they are, without renewing them
+// again. Without an app token for the refreshed auth token, there's no session.
+func TestSessionRenew(t *testing.T) {
+	fakeVanMoof(t)
+	requests := countRequests(t)
+	s := testSession()
+	if tokens, err := s.renew(Tokens{AuthToken: leakAuthToken, AppToken: expiredJWT(), RefreshToken: leakRefresh}, false); err != nil || tokens != s.Tokens() {
+		t.Errorf("renew = %+v, %v; want the session's tokens", tokens, err)
+	}
+	if got := requests(); len(got) != 0 {
+		t.Errorf("requests %v, want none", got)
+	}
+
+	failRequests(t, http.StatusInternalServerError, "/v8/getApplicationToken")
+	s = Resume(Tokens{AuthToken: expiredJWT(), AppToken: expiredJWT(), RefreshToken: leakRefresh})
+	if _, err := s.UserID(); !errors.Is(err, ErrLoginRequired) {
+		t.Errorf("UserID: err = %v, want ErrLoginRequired", err)
+	}
+	if s, err := Login(leakEmail, leakPassword); s != nil || err == nil {
+		t.Errorf("Login = %v, %v; want an error", s, err)
+	}
+}
+
 // Goroutines can share a session; finding its app token expired, it renews it once
 func TestSessionConcurrentUse(t *testing.T) {
 	fakeVanMoof(t)

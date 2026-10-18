@@ -73,6 +73,24 @@ func TestShowKeysWarnsAboutFailedLookups(t *testing.T) {
 	}
 }
 
+// printStaticKeys picks the bikes as -bikes says, tells when no message waits for a bike
+// without a key yet, and in debug output calls a BLE profile it doesn't know unknown
+func TestPrintStaticKeys(t *testing.T) {
+	respondWith(t, func(r *http.Request) (*http.Response, error) { return httpResponse(r, http.StatusOK, `[]`), nil })
+	details := []BikeDetail{detail(1, "ELECTRIFIED_2030", "")}
+	var account savedAccount
+	out := captureStdout(t, func() { printStaticKeys(details, leakAuthToken, &account, Options{BikeFilter: "all", Debug: true}) })
+	for _, want := range []string{"bikeMessage: none waiting", "[DEBUG] bleProfile: ELECTRIFIED_2030 (unknown)"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+
+	if out := captureStdout(t, func() { printStaticKeys(details, leakAuthToken, &account, Options{BikeFilter: "2"}) }); out != "No bikes selected\n" {
+		t.Errorf("output %q when picking a bike the account doesn't have", out)
+	}
+}
+
 func detail(id int, profile, key string) BikeDetail {
 	d := BikeDetail{BikeID: id, BleProfile: profile}
 	d.Key.EncryptionKey = key

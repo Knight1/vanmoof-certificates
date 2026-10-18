@@ -134,13 +134,11 @@ func ShowSaved(email string, debug bool) error {
 		return nil
 	}
 
-	doc, err := json.MarshalIndent(struct {
+	// What loadAll decoded always encodes again
+	doc := must(json.MarshalIndent(struct {
 		savedAccount
 		CustomerData json.RawMessage `json:"customer_data,omitempty"`
-	}{account, data}, "", "  ")
-	if err != nil {
-		return err
-	}
+	}{account, data}, "", "  "))
 	fmt.Println(showJSON(doc))
 	return nil
 }
@@ -151,9 +149,10 @@ func showJSON(doc []byte) string {
 	if !redactOutput {
 		return printableLines(string(doc))
 	}
+	text := redactJSON(string(doc))
 	var out bytes.Buffer
-	if err := json.Indent(&out, []byte(redactJSON(string(doc))), "", "  "); err != nil {
-		return redacted
+	if err := json.Indent(&out, []byte(text), "", "  "); err != nil {
+		return text // an escaped control character, such as \x7f, isn't JSON: shown on one line
 	}
 	return out.String()
 }

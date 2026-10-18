@@ -183,9 +183,7 @@ func redactJSON(doc string) string {
 	var out bytes.Buffer
 	enc := json.NewEncoder(&out)
 	enc.SetEscapeHTML(false)
-	if err := enc.Encode(v); err != nil {
-		return redacted
-	}
+	enc.Encode(v) // never fails: v is decoded JSON, with strings for what it hides
 	return printable(strings.TrimSuffix(out.String(), "\n"))
 }
 

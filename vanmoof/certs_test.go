@@ -5,9 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -264,6 +266,64 @@ func TestCertificateFieldRanges(t *testing.T) {
 	}
 }
 
+// A field of the wrong type, an empty bike module or a zero expiry makes the certificate
+// invalid. A field the bike doesn't know is ignored, even with a number for its name.
+func TestCertificateFieldTypes(t *testing.T) {
+	ca := trustTestCA(t)
+	tests := []struct {
+		field string
+		value any
+		err   string // one of the errors
+	}{
+		{"i", "123456", "Field 'i' has incorrect type (expected uint)"},
+		{"f", uint64(1), "Field 'f' has incorrect type (expected string)"},
+		{"b", uint64(1), "Field 'b' has incorrect type (expected string)"},
+		{"u", "user", "Field 'u' has incorrect type (expected bytes)"},
+		{"p", "key", "Field 'p' has incorrect type (expected bytes)"},
+		{"b", "", "Bike ID (b) is empty"},
+		{"e", uint64(0), "Expiry timestamp is zero"},
+	}
+	for _, tt := range tests {
+		fields := testCertFields("BBBBBB00001AA")
+		fields[tt.field] = tt.value
+		if res := CheckCertificate(testCert(t, ca, fields), Expect{}); res.Valid || !slices.Contains(res.Errors, tt.err) {
+			t.Errorf("%s = %#v: valid = %v, errors %q; want %q", tt.field, tt.value, res.Valid, res.Errors, tt.err)
+		}
+	}
+
+	fields := map[any]any{uint64(8): "unknown"}
+	for k, v := range testCertFields("BBBBBB00001AA") {
+		fields[k] = v
+	}
+	payload, err := cbor.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res := CheckCertificate(signedCert(t, ca, payload), Expect{}); !res.Valid {
+		t.Errorf("with a field named 8: errors %q", res.Errors)
+	}
+}
+
+// A certificate for another user is invalid. The expected user ID may be written with or
+// without dashes, in either case.
+func TestCertificateUserID(t *testing.T) {
+	ca := trustTestCA(t)
+	fields := testCertFields("BBBBBB00001AA")
+	fields["u"], _ = hex.DecodeString(strings.ReplaceAll(leakUUID, "-", ""))
+	cert := testCert(t, ca, fields)
+	for userID, valid := range map[string]bool{
+		leakUUID:                              true,
+		strings.ToUpper(leakUUID):             true,
+		strings.ReplaceAll(leakUUID, "-", ""): true,
+		leakOwnerUUID:                         false,
+	} {
+		res := CheckCertificate(cert, Expect{UserID: userID})
+		if res.Valid != valid || res.UserIDVerified != valid || valid != !strings.Contains(strings.Join(res.Errors, "\n"), "User ID mismatch") {
+			t.Errorf("for %s: valid = %v, user ID verified = %v, errors %q", userID, res.Valid, res.UserIDVerified, res.Errors)
+		}
+	}
+}
+
 // A field that appears twice makes even a properly signed certificate invalid, as the bike
 // might use another of its values than the one shown: here an owner's that's also R&D's
 func TestCertificateDuplicateFields(t *testing.T) {
@@ -323,6 +383,16 @@ func TestPrintVerbose(t *testing.T) {
 	fields["p"] = pub
 	signed, unsigned := testCert(t, ca, fields), testCert(t, nil, fields)
 	expect := Expect{PublicKey: base64.StdEncoding.EncodeToString(pub), Bike: &sa5, Bikes: []Bike{sa5, other}}
+	shared := Bike{Name: "Shared", FrameNumber: "AAAAA000009AA"} // no bike ID
+
+	// Without frame and bike module, and with a user ID too short for a UUID
+	fields = testCertFields("")
+	fields["u"] = make([]byte, 15)
+	bare := testCert(t, ca, fields)
+	// With a bike module that isn't a frame number
+	fields = testCertFields(sa5.FrameNumber)
+	fields["b"] = "ECU-1"
+	module := testCert(t, ca, fields)
 
 	tests := []struct {
 		name   string
@@ -337,6 +407,12 @@ func TestPrintVerbose(t *testing.T) {
 			"✗ Certificate does NOT match any of your bikes", "Your bikes: BBBBBB00009AA (ID: 43)"}},
 		{"not signed by VanMoof", unsigned, expect, []string{"✗ Signature validation failed with all known CA keys"}},
 		{"for another key", signed, Expect{PublicKey: base64.StdEncoding.EncodeToString(make([]byte, 32))}, []string{"✗ Warning: Key mismatch detected."}},
+		{"for none of several bikes", signed, Expect{Bikes: []Bike{other, shared}}, []string{"Your bikes: BBBBBB00009AA (ID: 43), AAAAA000009AA\n"}},
+		{"for another user", signed, Expect{UserID: leakUUID}, []string{
+			"✗ User ID mismatch", "Expected: " + leakUUID, "Certificate: 00000000000040008000000000000000"}},
+		{"for no bike", bare, Expect{}, []string{
+			"AFM (Authorized Frame Module): \n", "ABM (Authorized Bike Module): \n", "User ID: " + strings.Repeat("00", 15) + " ✗ Invalid UUID"}},
+		{"for another module", module, Expect{}, []string{"ABM (Authorized Bike Module): ECU-1 ✗ Invalid format"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -348,4 +424,38 @@ func TestPrintVerbose(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A CA key that isn't one is skipped. Without any, a signature can't be checked: that
+// doesn't make the certificate invalid, but it isn't reported as signed either.
+func TestCAKeys(t *testing.T) {
+	ca := trustTestCA(t)
+	cert := testCert(t, ca, testCertFields("BBBBBB00001AA"))
+
+	knownCAKeys = append([]string{"not a key"}, knownCAKeys...)
+	var res CertificateResult
+	out := captureStdout(t, func() { res = checkCertificate(cert, Expect{}, true) })
+	if !res.Valid || !res.SignatureVerified || !strings.Contains(out, "✗ CA key 1: Invalid format") || !strings.Contains(out, "✓ Signature VALID with CA key 3") {
+		t.Errorf("valid = %v, signature verified = %v:\n%s", res.Valid, res.SignatureVerified, out)
+	}
+
+	knownCAKeys = nil
+	out = captureStdout(t, func() { res = checkCertificate(cert, Expect{}, true) })
+	if !res.Valid || res.SignatureVerified || !strings.Contains(out, "No VanMoof CA public keys available") {
+		t.Errorf("without CA keys: valid = %v, signature verified = %v:\n%s", res.Valid, res.SignatureVerified, out)
+	}
+}
+
+// must returns the value of a call that worked, and panics with the error of one that failed
+func TestMust(t *testing.T) {
+	if v := must(42, nil); v != 42 {
+		t.Errorf("must = %d, want 42", v)
+	}
+	failed := errors.New("failed")
+	defer func() {
+		if r := recover(); r != failed {
+			t.Errorf("panic %v, want %v", r, failed)
+		}
+	}()
+	must(0, failed)
 }

@@ -63,36 +63,27 @@ func getCacheKey() string {
 
 // newCacheCipher returns AES-256-GCM with a key derived from passphrase. It handles the
 // nonce itself: Seal puts a random one before the ciphertext, where Open reads it from.
-func newCacheCipher(passphrase string, salt []byte, iterations int) (cipher.AEAD, error) {
-	key, err := pbkdf2.Key(sha256.New, passphrase, salt, iterations, 32)
-	if err != nil {
-		return nil, err
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	return cipher.NewGCMWithRandomNonce(block)
+// With a 16 byte salt and a 32 byte key, none of the steps fails.
+func newCacheCipher(passphrase string, salt []byte, iterations int) cipher.AEAD {
+	key := must(pbkdf2.Key(sha256.New, passphrase, salt, iterations, 32))
+	return must(cipher.NewGCMWithRandomNonce(must(aes.NewCipher(key))))
 }
 
 // encrypt encrypts plaintext with AES-256-GCM using a key derived from passphrase
 // Format: [header][16 bytes salt][12 bytes nonce][ciphertext + GCM tag]
-func encrypt(plaintext []byte, passphrase string) ([]byte, error) {
+func encrypt(plaintext []byte, passphrase string) []byte {
 	header := binary.BigEndian.AppendUint32([]byte(cacheMagic), pbkdf2Iterations)
 
 	salt := make([]byte, saltSize)
 	rand.Read(salt) // never fails
 
-	gcm, err := newCacheCipher(passphrase, salt, pbkdf2Iterations)
-	if err != nil {
-		return nil, err
-	}
+	gcm := newCacheCipher(passphrase, salt, pbkdf2Iterations)
 
 	// header + salt, then Seal adds the nonce and ciphertext
 	result := make([]byte, 0, cacheHeaderSize+saltSize+gcm.Overhead()+len(plaintext))
 	result = append(result, header...)
 	result = append(result, salt...)
-	return gcm.Seal(result, nil, plaintext, header), nil
+	return gcm.Seal(result, nil, plaintext, header)
 }
 
 // hasCacheHeader reports whether encrypted cache data is in the current format
@@ -116,13 +107,8 @@ func decrypt(data []byte, passphrase string) ([]byte, error) {
 		return nil, fmt.Errorf("encrypted data too short")
 	}
 
-	gcm, err := newCacheCipher(passphrase, data[:saltSize], iterations)
-	if err != nil {
-		return nil, err
-	}
-
 	// nonce + ciphertext
-	return gcm.Open(nil, nil, data[saltSize:], header)
+	return newCacheCipher(passphrase, data[:saltSize], iterations).Open(nil, nil, data[saltSize:], header)
 }
 
 // loadAll loads all accounts' entries from disk. With no file yet it returns a nil map and
@@ -220,14 +206,7 @@ func (c cacheFile[T]) saveAll(entries map[string]T, debug bool) {
 	// Encrypt if cache key is set
 	key := getCacheKey()
 	if key != "" {
-		encrypted, err := encrypt(data, key)
-		if err != nil {
-			if debug {
-				fmt.Printf("[DEBUG] %s encryption failed: %v\n", c.name, ScrubText(err.Error()))
-			}
-			return
-		}
-		data = encrypted
+		data = encrypt(data, key)
 		if debug {
 			fmt.Printf("[DEBUG] %s encrypted\n", c.name)
 		}
@@ -259,18 +238,18 @@ func writeFileAtomic(path string, data []byte) error {
 	}
 	defer os.Remove(tmp.Name()) // fails harmlessly once renamed
 
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
+	// The first error counts, and the file is closed either way
+	_, err = tmp.Write(data)
+	if err == nil {
+		err = tmp.Sync()
 	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
 	}
-	if err := tmp.Close(); err != nil {
-		return err
+	if err == nil {
+		err = os.Rename(tmp.Name(), path)
 	}
-	return os.Rename(tmp.Name(), path)
+	return err
 }
 
 // load returns the account's entry, and whether there is one. A file it can't use is
@@ -326,14 +305,10 @@ func isJWTExpired(tokenString string) bool {
 		return true
 	}
 
+	// ParseUnverified decodes the claims into this map
+	claims := jwt.MapClaims{}
 	parser := jwt.NewParser(jwt.WithoutClaimsValidation())
-	token, _, err := parser.ParseUnverified(tokenString, jwt.MapClaims{})
-	if err != nil {
-		return true
-	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
+	if _, _, err := parser.ParseUnverified(tokenString, claims); err != nil {
 		return true
 	}
 

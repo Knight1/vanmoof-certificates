@@ -43,11 +43,7 @@ func authenticate(email, password string, debug bool) (string, string, error) {
 // refreshAuthToken exchanges the refresh token for a new auth token. It also returns the
 // refresh token from the response, if any, since the server may rotate it.
 func refreshAuthToken(refreshToken string, debug bool) (string, string, error) {
-	reqBody, err := json.Marshal(RefreshTokenRequest{RefreshToken: refreshToken})
-	if err != nil {
-		return "", "", err
-	}
-
+	reqBody := must(json.Marshal(RefreshTokenRequest{RefreshToken: refreshToken}))
 	headers := apiHeaders(map[string]string{
 		"Content-Type": "application/json",
 	})

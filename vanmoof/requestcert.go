@@ -8,6 +8,9 @@ import (
 	"golang.org/x/term"
 )
 
+// readPassword reads the password from the terminal without showing it (tests replace it)
+var readPassword = term.ReadPassword
+
 // resolveTokens tries cached tokens first, then falls back to password auth.
 // skipCachedTokens is for when the server rejected the cached tokens: only the
 // cached refresh token is tried then, before the password.
@@ -85,7 +88,7 @@ func resolveTokens(email, password string, skipCachedTokens, debug, noCache bool
 	}
 	if password == "" {
 		fmt.Print("Enter VanMoof password: ")
-		passwordBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+		passwordBytes, err := readPassword(int(os.Stdin.Fd()))
 		if err != nil {
 			return Tokens{}, false, fmt.Errorf("error reading password: %w", err)
 		}

@@ -19,8 +19,11 @@ const (
 	exitUsage   = 2
 )
 
+// exit is os.Exit, which TestMainExits replaces to run main
+var exit = os.Exit
+
 func main() {
-	os.Exit(run(os.Args[1:]))
+	exit(run(os.Args[1:]))
 }
 
 // run runs the tool with the command line arguments args, and returns its exit status
@@ -86,7 +89,7 @@ func run(args []string) int {
 	if genkey != nil && *genkey {
 		privKeyB64, pubKeyB64, err := vanmoof.GenerateED25519()
 		if err != nil {
-			fmt.Printf("Error generating key pair: %v\n", err)
+			fmt.Printf("Error: %v\n", err)
 			return exitFailure
 		}
 		fmt.Printf("Privkey = %s\n", vanmoof.Redact(privKeyB64))

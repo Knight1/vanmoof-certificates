@@ -5,10 +5,12 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync/atomic"
@@ -32,8 +34,8 @@ func (noNetwork) RoundTrip(r *http.Request) (*http.Response, error) {
 	return nil, fmt.Errorf("the test tried to reach %s", r.URL.Host)
 }
 
-// The tests never reach VanMoof or the real cache: requests fail and are counted, and the
-// home directory is empty
+// The tests never reach VanMoof or the real cache, and never wait for input: requests fail
+// and are counted, the home directory is empty, and standard input is closed
 func TestMain(m *testing.M) {
 	home, err := os.MkdirTemp("", "vanmoof-main-test-home")
 	if err != nil {
@@ -44,6 +46,7 @@ func TestMain(m *testing.M) {
 	os.Setenv("USERPROFILE", home)
 	os.Unsetenv("VANMOOF_CACHE_KEY")
 	os.Unsetenv("VANMOOF_PASSWORD")
+	os.Stdin.Close()
 	http.DefaultTransport = noNetwork{}
 	code := m.Run()
 	os.RemoveAll(home)
@@ -65,6 +68,14 @@ func runTool(t *testing.T, args ...string) (int, string) {
 // runOutput is runTool without failing the test if the tool tried to reach VanMoof
 func runOutput(t *testing.T, args []string) (int, string) {
 	t.Helper()
+	var status int
+	out := captureOutput(t, func() { status = run(args) })
+	return status, out
+}
+
+// captureOutput runs f, and returns what it printed to standard output and error
+func captureOutput(t *testing.T, f func()) string {
+	t.Helper()
 	defer vanmoof.SetRedaction(false, false)
 
 	r, w, err := os.Pipe()
@@ -78,10 +89,10 @@ func runOutput(t *testing.T, args []string) (int, string) {
 	}()
 	stdout, stderr := os.Stdout, os.Stderr
 	os.Stdout, os.Stderr = w, w
-	status := run(args)
+	f()
 	os.Stdout, os.Stderr = stdout, stderr
 	w.Close()
-	return status, <-out
+	return <-out
 }
 
 // testCertificate returns a base64 certificate for the frame number and public key, valid
@@ -157,6 +168,9 @@ func TestRun(t *testing.T) {
 		{"empty bike ID", []string{"-bikes", "1,,2", "-email", email}, 2, "Empty bike ID"},
 		{"invalid bike ID", []string{"-bikes", "1,x!", "-email", email}, 2, "Invalid bike ID"},
 		{"email address with a name", []string{"-email", "User <user@example.com>"}, 2, "Invalid email address"},
+
+		// Asking for the email address fails, as standard input is closed
+		{"no email address", nil, 1, "Enter VanMoof email: Error reading email"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -179,6 +193,126 @@ func TestRunGenkey(t *testing.T) {
 	pub, err2 := base64.StdEncoding.DecodeString(m[2])
 	if err1 != nil || err2 != nil || len(priv) != ed25519.PrivateKeySize || !bytes.Equal(ed25519.PrivateKey(priv).Public().(ed25519.PublicKey), pub) {
 		t.Errorf("not a key pair: %q", out)
+	}
+}
+
+// broken fails to read or write anything
+type broken struct{}
+
+func (broken) Read([]byte) (int, error)  { return 0, errors.New("broken") }
+func (broken) Write([]byte) (int, error) { return 0, errors.New("broken") }
+
+// Without randomness there's no key pair
+func TestRunGenkeyFails(t *testing.T) {
+	random := rand.Reader
+	rand.Reader = broken{}
+	defer func() { rand.Reader = random }()
+	if status, out := runTool(t, "-genkey"); status != 1 || !strings.Contains(out, "Error: failed to generate key pair: broken") {
+		t.Errorf("status %d:\n%s", status, out)
+	}
+}
+
+// main exits with the status of the run
+func TestMainExits(t *testing.T) {
+	status := -1
+	args := os.Args
+	exit, os.Args = func(code int) { status = code }, []string{"vanmoof-certificates", "-frobnicate"}
+	t.Cleanup(func() { exit, os.Args = os.Exit, args })
+	if out := captureOutput(t, main); status != exitUsage || !strings.Contains(out, "flag provided but not defined") {
+		t.Errorf("main exited with %d:\n%s", status, out)
+	}
+}
+
+// A cache that -show-saved can't read is an error
+func TestRunShowSavedUnreadable(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	dir := filepath.Join(home, ".vanmoof-certificates")
+	if err := os.Mkdir(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bikes.json"), []byte("not JSON"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if status, out := runTool(t, "-show-saved", "-email", "user@example.com"); status != 1 || !strings.Contains(out, "Error: ") {
+		t.Errorf("status %d:\n%s", status, out)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// fakeVanMoof answers like VanMoof for an account without bikes and invitations, for the
+// rest of the test, so the flows that log in run to their end
+func fakeVanMoof(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("VANMOOF_PASSWORD", "password")
+	claims := base64.RawURLEncoding.EncodeToString(fmt.Appendf(nil, `{"exp":%d}`, time.Now().Add(time.Hour).Unix()))
+	token := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256"}`)) + "." + claims + ".c2lnbmF0dXJl"
+	const userID = "00000000-0000-4000-8000-000000000001"
+	responses := map[string]string{
+		"/v8/authenticate":                         `{"token":"` + token + `","refreshToken":"refresh"}`,
+		"/v8/getApplicationToken":                  `{"token":"` + token + `"}`,
+		"/v8/getCustomerData":                      `{"data":{"uuid":"` + userID + `","bikes":[],"bikeDetails":[]}}`,
+		"/v8/getBikeSharingInvitations":            `{"invitations":[]}`,
+		"/external/riders/" + userID + "/vehicles": `{"vehicle_access":[]}`,
+	}
+	http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		body, ok := responses[r.URL.Path]
+		status := http.StatusOK
+		if !ok {
+			t.Errorf("unexpected request %s %s", r.Method, r.URL)
+			status = http.StatusNotFound
+		}
+		return &http.Response{StatusCode: status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
+	})
+	t.Cleanup(func() { http.DefaultTransport = noNetwork{} })
+}
+
+// The flows that log in exit with 0 when they're done, and 1 when they fail: here without a
+// password, as standard input is closed
+func TestRunLogsIn(t *testing.T) {
+	const email = "user@example.com"
+	tests := []struct {
+		name   string
+		args   []string
+		output string // part of the output
+	}{
+		{"certificates", []string{"-email", email}, "No supported bikes found"},
+		{"BLE keys", []string{"-show-keys", "static", "-email", email}, "No static bikes found"},
+		{"invitations", []string{"-invitations", "list", "-email", email}, "No pending bike sharing invitations"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeVanMoof(t)
+			if status, out := runTool(t, tt.args...); status != 0 || !strings.Contains(out, tt.output) {
+				t.Errorf("run(%q) = %d, want 0 with %q:\n%s", tt.args, status, tt.output, out)
+			}
+		})
+	}
+
+	t.Setenv("VANMOOF_PASSWORD", "")
+	if status, out := runTool(t, "-show-keys", "static", "-email", email); status != 1 || !strings.Contains(out, "Error: authentication failed: error reading password") {
+		t.Errorf("without a password: status %d:\n%s", status, out)
+	}
+}
+
+// The flag package's output reaches the terminal with control characters, bidi overrides and
+// invalid UTF-8 escaped, but line breaks and tabs as they are
+func TestEscaped(t *testing.T) {
+	const in = "-\x1b[2J\xe2\x80\xae\xff\tusage\n"
+	want := "-" + `\x1b` + "[2J" + `\u` + "202e" + string(utf8.RuneError) + "\tusage\n"
+	var b strings.Builder
+	if n, err := (escaped{&b}).Write([]byte(in)); n != len(in) || err != nil || b.String() != want {
+		t.Errorf("Write = %d, %v, wrote %q; want %d, %q", n, err, b.String(), len(in), want)
+	}
+	if n, err := (escaped{broken{}}).Write([]byte(in)); n != 0 || err == nil {
+		t.Errorf("Write to a broken writer = %d, %v", n, err)
 	}
 }
 

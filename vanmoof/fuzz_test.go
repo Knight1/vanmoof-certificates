@@ -269,10 +269,7 @@ func FuzzCacheFile(f *testing.F) {
 
 // Any encrypted cache is decrypted, or rejected, without a panic
 func FuzzDecrypt(f *testing.F) {
-	encrypted, err := encrypt([]byte(`{"a@example.com":{"auth_token":"authA"}}`), "secret")
-	if err != nil {
-		f.Fatal(err)
-	}
+	encrypted := encrypt([]byte(`{"a@example.com":{"auth_token":"authA"}}`), "secret")
 	header := func(iterations uint32) []byte { return binary.BigEndian.AppendUint32([]byte(cacheMagic), iterations) }
 	f.Add(encrypted)
 	f.Add(encrypted[:len(encrypted)/2])

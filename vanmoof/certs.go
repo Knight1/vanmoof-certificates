@@ -50,7 +50,7 @@ func checkCertificate(certStr string, expect Expect, debug bool) CertificateResu
 	// Output
 	if debug {
 		printVerbose(r, certData, expect)
-		validateCertificateSignature(r.signature, certData[64:], debug, r.perBikeKey)
+		validateCertificateSignature(r.signature, certData[64:], r.perBikeKey)
 		for _, n := range r.notes {
 			fmt.Printf("  Info: %s\n", printable(n))
 		}
@@ -145,15 +145,18 @@ func isS6Certificate(r certResult, requestedBike *Bike) bool {
 	}
 }
 
-// certDecMode decodes certificate payloads. It rejects a field that appears twice, as the
-// bike might use another of its values than the one shown.
-var certDecMode = func() cbor.DecMode {
-	dm, err := cbor.DecOptions{DupMapKey: cbor.DupMapKeyEnforcedAPF}.DecMode()
+// must returns v, and panics if err isn't nil: for calls that can't fail with the arguments
+// this package gives them, such as encoding a request or decoding with fixed options
+func must[T any](v T, err error) T {
 	if err != nil {
 		panic(err)
 	}
-	return dm
-}()
+	return v
+}
+
+// certDecMode decodes certificate payloads. It rejects a field that appears twice, as the
+// bike might use another of its values than the one shown.
+var certDecMode = must(cbor.DecOptions{DupMapKey: cbor.DupMapKeyEnforcedAPF}.DecMode())
 
 // parseCertificate extracts and validates all fields from raw certificate bytes
 func parseCertificate(certData []byte, bikes []Bike) certResult {

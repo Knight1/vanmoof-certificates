@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/mail"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -60,17 +59,7 @@ func IsValidEd25519PublicKey(pubkey string) bool {
 
 // ValidateFrameNumber validates a frame number against a pattern
 func ValidateFrameNumber(frameNumber string) bool {
-	if frameNumber == "" {
-		return false
-	}
-
-	// Check against pattern
-	matched, err := regexp.MatchString(frameNumberPattern, frameNumber)
-	if err != nil {
-		return false
-	}
-
-	return matched
+	return frameNumberRegexp.MatchString(frameNumber)
 }
 
 // ParseBikeID parses s as a bike's numeric API ID. Only digits count: fmt.Sscanf would
@@ -147,11 +136,7 @@ func verifyCertificateSignature(signature, payload []byte) (verified, hasKeys bo
 }
 
 // validateCertificateSignature prints detailed signature validation (debug mode)
-func validateCertificateSignature(signature, payload []byte, debug, perBikeKey bool) {
-	if !debug {
-		return // Only show in debug mode
-	}
-
+func validateCertificateSignature(signature, payload []byte, perBikeKey bool) {
 	fmt.Println("\n[DEBUG] Signature Validation:")
 
 	if len(knownCAKeys) == 0 {

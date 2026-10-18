@@ -24,8 +24,15 @@ func TestRequestCertificatesReportsFailures(t *testing.T) {
 		var req CertificateRequest
 		json.NewDecoder(r.Body).Decode(&req)
 		frame := strings.Split(r.URL.Path, "/")[2]
-		body := `{"err":"no certificate for this bike"}`
-		if frame != "BBBBBB00002AA" {
+		var body string
+		switch frame {
+		case "BBBBBB00002AA":
+			body = `{"err":"no certificate for this bike"}`
+		case "BBBBBB00004AA":
+			body = "not JSON"
+		case "BBBBBB00005AA":
+			body = `{"certificate":7}`
+		default:
 			// The certificate for BBBBBB00003AA is for another bike
 			if frame == "BBBBBB00003AA" {
 				frame = "BBBBBB00009AA"
@@ -40,16 +47,21 @@ func TestRequestCertificatesReportsFailures(t *testing.T) {
 	good := Bike{BikeID: 1, FrameNumber: "BBBBBB00001AA", BleProfile: "ELECTRIFIED_2022"}
 	refused := Bike{BikeID: 2, FrameNumber: "BBBBBB00002AA", BleProfile: "ELECTRIFIED_2022"}
 	wrong := Bike{BikeID: 3, FrameNumber: "BBBBBB00003AA", BleProfile: "ELECTRIFIED_2022"}
+	garbled := Bike{BikeID: 4, FrameNumber: "BBBBBB00004AA", BleProfile: "ELECTRIFIED_2022"}
+	without := Bike{BikeID: 5, FrameNumber: "BBBBBB00005AA", BleProfile: "ELECTRIFIED_2022"}
 
 	var err error
 	out := captureStdout(t, func() {
-		err = requestCertificates([]Bike{refused, wrong, good}, "", testSession(), &savedAccount{}, Options{BikeFilter: "all"})
+		err = requestCertificates([]Bike{refused, wrong, garbled, without, good}, "", testSession(), &savedAccount{}, Options{BikeFilter: "all"})
 	})
-	if err == nil || err.Error() != "2 of 3 certificate(s) failed" {
-		t.Errorf("err = %v, want 2 of 3 certificate(s) failed", err)
+	if err == nil || err.Error() != "4 of 5 certificate(s) failed" {
+		t.Errorf("err = %v, want 4 of 5 certificate(s) failed", err)
 	}
-	if !strings.Contains(out, "Certificate valid: BBBBBB00001AA") {
-		t.Errorf("the valid certificate wasn't processed after the failed ones:\n%s", out)
+	for _, want := range []string{"Certificate error: ", "Failed to parse certificate response: ", "Certificate response missing 'certificate' field",
+		"Certificate valid: BBBBBB00001AA"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q: the valid certificate has to be processed after the failed ones\n%s", want, out)
+		}
 	}
 
 	captureStdout(t, func() {
@@ -210,6 +222,157 @@ func TestLoginRetriesRejectedTokens(t *testing.T) {
 	captureStdout(t, func() { _, _, err = login(leakEmail, false, false) })
 	if err == nil || !strings.Contains(err.Error(), "failed to get customer data") {
 		t.Errorf("err = %v", err)
+	}
+
+	// and when it can't log in again, without a refresh token or password that works
+	failRequests(t, http.StatusUnauthorized, "/v8/token")
+	typePassword(t, "", errors.New("no terminal"))
+	captureStdout(t, func() { _, _, err = login(leakEmail, false, false) })
+	if err == nil || !strings.Contains(err.Error(), "authentication failed: error reading password: no terminal") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+// typePassword makes the password prompt read password, or fail with err, for the rest of
+// the test
+func typePassword(t *testing.T, password string, err error) {
+	t.Helper()
+	old := readPassword
+	readPassword = func(int) ([]byte, error) { return []byte(password), err }
+	t.Cleanup(func() { readPassword = old })
+}
+
+// Without cached tokens or VANMOOF_PASSWORD, logging in asks for the password, and fails
+// without one
+func TestPasswordPrompt(t *testing.T) {
+	useTempCache(t, "")
+	t.Setenv("VANMOOF_PASSWORD", "")
+	fakeVanMoof(t)
+	tests := []struct {
+		name, password string
+		readErr        error
+		err            string // the error, or "" for none
+	}{
+		{"typed", leakPassword, nil, ""},
+		{"none", "", nil, "password required"},
+		{"unreadable", "", errors.New("no terminal"), "error reading password: no terminal"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			typePassword(t, tt.password, tt.readErr)
+			var tokens Tokens
+			var err error
+			out := captureStdout(t, func() { tokens, _, err = resolveTokens(leakEmail, "", false, false, true) })
+			if !strings.HasPrefix(out, "Enter VanMoof password: ") || (err == nil) != (tt.err == "") || (err != nil && err.Error() != tt.err) {
+				t.Errorf("err = %v, want %q\n%s", err, tt.err, out)
+			}
+			if err == nil && tokens.AppToken != leakAppToken {
+				t.Errorf("tokens %+v", tokens)
+			}
+		})
+	}
+}
+
+// With -debug, resolveTokens says which of the cached tokens it tried, and why it went on
+// to the next: here as getting a new app token or a refresh fails. A refresh that doesn't
+// rotate the refresh token keeps the old one.
+func TestResolveTokensFallbacks(t *testing.T) {
+	useTempCache(t, "")
+	t.Setenv("VANMOOF_PASSWORD", leakPassword)
+	fakeVanMoof(t)
+	valid := Tokens{AuthToken: leakAuthToken, AppToken: leakAppToken, RefreshToken: leakRefresh}
+
+	tests := []struct {
+		name   string
+		cached Tokens
+		fail   string // the requests that fail
+		want   Tokens // zero for an error
+		debug  []string
+	}{
+		{"no app token at all", Tokens{AuthToken: leakAuthToken, AppToken: expiredJWT(), RefreshToken: leakRefresh}, "/v8/getApplicationToken", Tokens{}, []string{
+			"App token expired, refreshing with cached auth token", "Failed to get app token with cached auth token: HTTP 500",
+			"Auth token expired or rejected, trying refresh token", "Failed to get app token after refresh: HTTP 500",
+			"All cached tokens expired or rejected, need password"}},
+		{"refresh token rejected", Tokens{AuthToken: expiredJWT(), RefreshToken: leakRefresh}, "/v8/token", valid, []string{
+			"Auth token expired or rejected, trying refresh token", "Refresh token failed: HTTP 500", "All cached tokens expired or rejected, need password"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			captureStdout(t, func() { tokenCache.save(leakEmail, tt.cached, false) })
+			failRequests(t, http.StatusInternalServerError, tt.fail)
+			var tokens Tokens
+			var err error
+			out := captureStdout(t, func() { tokens, _, err = resolveTokens(leakEmail, "", false, true, false) })
+			if tokens != tt.want || (err == nil) != (tt.want != Tokens{}) {
+				t.Errorf("resolveTokens = %+v, %v; want %+v", tokens, err, tt.want)
+			}
+			for _, line := range tt.debug {
+				if !strings.Contains(out, "[DEBUG] "+line) {
+					t.Errorf("output lacks %q:\n%s", line, out)
+				}
+			}
+		})
+	}
+
+	captureStdout(t, func() { tokenCache.save(leakEmail, Tokens{AuthToken: expiredJWT(), RefreshToken: leakRefresh}, false) })
+	api := http.DefaultTransport
+	http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/v8/token" {
+			return httpResponse(r, http.StatusOK, `{"token":"`+leakAuthToken+`"}`), nil
+		}
+		return api.RoundTrip(r)
+	})
+	t.Cleanup(func() { http.DefaultTransport = api })
+	var tokens Tokens
+	var err error
+	captureStdout(t, func() { tokens, _, err = resolveTokens(leakEmail, "", false, false, false) })
+	if err != nil || tokens != valid {
+		t.Errorf("after a refresh without a new refresh token: resolveTokens = %+v, %v; want %+v", tokens, err, valid)
+	}
+}
+
+// requestCertificates requests the certificates for the bikes picked (none is no error),
+// and for the public key given with -pubkey, if any, instead of the key pair
+func TestRequestCertificatesOptions(t *testing.T) {
+	fakeVanMoof(t)
+	_, publicKey, _ := GenerateED25519()
+	tests := []struct {
+		name, stdin string
+		opts        Options
+		err         string // part of the error, or "" for none
+		output      string // part of the output
+	}{
+		{"none picked", "", Options{BikeFilter: "1"}, "", "No bikes selected"},
+		{"nothing to pick from", "", Options{BikeFilter: "ask"}, "failed to read input", "Enter bike numbers"},
+		{"-pubkey", "", Options{BikeFilter: "all", PublicKey: publicKey, Debug: true}, "",
+			"[DEBUG] Using supplied public key for certificate requests: " + publicKey},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setStdin(t, tt.stdin)
+			account := savedAccount{}
+			var err error
+			out := captureStdout(t, func() { err = requestCertificates([]Bike{fakeSA5}, "", testSession(), &account, tt.opts) })
+			if (err == nil) != (tt.err == "") || (err != nil && !strings.Contains(err.Error(), tt.err)) || !strings.Contains(out, tt.output) {
+				t.Errorf("err = %v, want %q; output lacks %q?\n%s", err, tt.err, tt.output, out)
+			}
+			if account.Key != nil || strings.Contains(out, "Privkey") {
+				t.Errorf("a key pair made, but not needed:\n%s", out)
+			}
+		})
+	}
+}
+
+// Debug output names the model of each BLE profile it knows, and calls the others unknown
+func TestDebugProfiles(t *testing.T) {
+	out := captureStdout(t, func() {
+		debugPrintBikeProfiles([]Bike{{FrameNumber: "BBBBBB00001AA", BleProfile: "ELECTRIFIED_2022"}, {FrameNumber: "BBBBBB00002AA", BleProfile: "ELECTRIFIED_2030"}})
+		debugPrintVehicleAccessProfiles([]VehicleAccess{{VehicleID: "AAAAA000001AA", BleProfile: "ELECTRIFIED_2030"}})
+	})
+	for _, want := range []string{"BBBBBB00001AA: ELECTRIFIED_2022 (SA5)", "BBBBBB00002AA: ELECTRIFIED_2030 (unknown)", "AAAAA000001AA: ELECTRIFIED_2030 (unknown)"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
 	}
 }
 

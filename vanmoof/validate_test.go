@@ -81,6 +81,9 @@ func TestValidateUUID(t *testing.T) {
 		if got, want := validateUUID(uuid), version >= 1 && version <= 8; got != want {
 			t.Errorf("version %d: validateUUID = %v, want %v", version, got, want)
 		}
+		if got := getUUIDVersion(uuid); got != version {
+			t.Errorf("version %d: getUUIDVersion = %d", version, got)
+		}
 	}
 
 	uuid := make([]byte, 16)
@@ -90,6 +93,9 @@ func TestValidateUUID(t *testing.T) {
 	}
 	if validateUUID(make([]byte, 15)) {
 		t.Error("validateUUID accepts 15 bytes")
+	}
+	if v := getUUIDVersion(make([]byte, 15)); v != 0 {
+		t.Errorf("getUUIDVersion of 15 bytes = %d, want 0", v)
 	}
 }
 

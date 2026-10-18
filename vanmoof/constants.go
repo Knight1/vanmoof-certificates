@@ -41,6 +41,9 @@ var bleProfileModel = map[string]string{
 	"ELECTRIFIED_2025":         "S6",
 }
 
+// frameNumberRegexp matches SA5 and S6 frame numbers (frameNumberPattern)
+var frameNumberRegexp = regexp.MustCompile(frameNumberPattern)
+
 // s6FrameNumberRegexp matches S6 frame numbers (5 letters + 6 digits + 2 letters). Some
 // SA5 frame numbers match too, so it's only a fallback when the BLE profile isn't known.
 var s6FrameNumberRegexp = regexp.MustCompile(`^[A-Z]{5}\d{6}[A-Z]{2}$`)

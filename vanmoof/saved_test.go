@@ -2,6 +2,7 @@ package vanmoof
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -13,8 +14,9 @@ import (
 	"time"
 )
 
-// The tests never touch the real cache: they start with an empty home directory, and
-// without VANMOOF_CACHE_KEY
+// The tests never touch the real cache, and never wait for input: they start with an empty
+// home directory, without VANMOOF_CACHE_KEY and VANMOOF_PASSWORD, and with standard input
+// closed (setStdin and typePassword give the prompts their input)
 func TestMain(m *testing.M) {
 	home, err := os.MkdirTemp("", "vanmoof-test-home")
 	if err != nil {
@@ -24,6 +26,8 @@ func TestMain(m *testing.M) {
 	os.Setenv("HOME", home)
 	os.Setenv("USERPROFILE", home)
 	os.Unsetenv("VANMOOF_CACHE_KEY")
+	os.Unsetenv("VANMOOF_PASSWORD")
+	os.Stdin.Close()
 	code := m.Run()
 	os.RemoveAll(home)
 	os.Exit(code)
@@ -281,5 +285,41 @@ func TestShowSavedUnreadable(t *testing.T) {
 	t.Setenv("VANMOOF_CACHE_KEY", "wrong")
 	if err := ShowSaved(leakEmail, false); err == nil || !strings.Contains(err.Error(), "can't decrypt") {
 		t.Errorf("err = %v", err)
+	}
+
+	// The customer data too
+	path, _ := customerDataCache.path()
+	if err := os.WriteFile(path, []byte("not JSON"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("VANMOOF_CACHE_KEY", "secret")
+	if err := ShowSaved(leakEmail, false); err == nil || !strings.Contains(err.Error(), "customer_data.json") {
+		t.Errorf("err = %v for unreadable customer data", err)
+	}
+}
+
+// With -redact, -show-saved shows what escaping a control character made invalid JSON,
+// and so can't be indented, on one line: redacted all the same
+func TestShowSavedOneLine(t *testing.T) {
+	useTempCache(t, "")
+	data := json.RawMessage("{\"model\":\"S\x7f3\",\"name\":\"" + leakName + "\"}")
+	captureStdout(t, func() { customerDataCache.save(leakEmail, data, false) })
+	setRedaction(t, true, false)
+	out := captureStdout(t, func() {
+		if err := ShowSaved(leakEmail, false); err != nil {
+			t.Error(err)
+		}
+	})
+	if want := `{"customer_data":{"model":"S\x7f3","name":"[REDACTED]"}}` + "\n"; out != want {
+		t.Errorf("output %q, want %q", out, want)
+	}
+}
+
+// Bike messages are saved for a bike with a frame number, as the saved bikes go by it
+func TestBikeMessagesNeedFrameNumber(t *testing.T) {
+	var account savedAccount
+	account.setBikeMessages(BikeDetail{BikeID: leakS2ID}, []BikeMessage{{Content: leakMessage}})
+	if len(account.Bikes) != 0 {
+		t.Errorf("saved %+v", account.Bikes)
 	}
 }
