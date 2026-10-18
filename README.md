@@ -97,6 +97,8 @@ Starting at byte 64, the certificate contains a CBOR-encoded map with the follow
 | `u` | bytes[16] | User UUID (without hyphens) | `uuid3` |
 | `p` | bytes[32] | User's Ed25519 public key | 32-byte public key |
 
+The tool reports a certificate as invalid if a field is missing, appears twice, has the wrong type, or holds a number too big for its type (such as an expiry after 2106). It doesn't guess at such a certificate: the bike might read it differently than the tool would show it.
+
 ### Access Levels (Role Field)
 
 The `r` (role) field determines what permissions the certificate grants by assigned the following username "Access Level" to the process accessing the MQTT Broker on the Bike.
@@ -105,11 +107,13 @@ More information here [acl.txt](https://github.com/Knight1/vanmoof-s5-decomp/blo
 | Value | Access Level | Description |
 |-------|--------------|-------------|
 | `0x07` | Owner | Standard access |
-| `0x0B` | Shared | Restricted access |
+| `0x0B` | Guest | Restricted access, for a bike shared with you |
 | `0x11` | Bike Doctor | Full access |
 | `0x16` | Bike Hunter | Full access |
 | `0x37` | QA Engineer | Full access |
-| `0x37` | R&D Engineer | Full access |
+| `0x42` | R&D Engineer | Full access |
+
+Any other role is shown as unknown, with a warning.
 
 ### Certificate Binding
 

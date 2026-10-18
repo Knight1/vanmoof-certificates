@@ -70,3 +70,22 @@ func TestIsValidEmail(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateUUID(t *testing.T) {
+	for version := 0; version < 16; version++ {
+		uuid := make([]byte, 16)
+		uuid[6], uuid[8] = byte(version<<4), 0x80 // the variant of RFC 9562 (10xx)
+		if got, want := validateUUID(uuid), version >= 1 && version <= 8; got != want {
+			t.Errorf("version %d: validateUUID = %v, want %v", version, got, want)
+		}
+	}
+
+	uuid := make([]byte, 16)
+	uuid[6], uuid[8] = 0x40, 0xc0 // Microsoft's variant (110x)
+	if validateUUID(uuid) {
+		t.Error("validateUUID accepts another variant")
+	}
+	if validateUUID(make([]byte, 15)) {
+		t.Error("validateUUID accepts 15 bytes")
+	}
+}

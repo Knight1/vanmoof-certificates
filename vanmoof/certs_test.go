@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -69,6 +70,13 @@ func testCert(t *testing.T, key ed25519.PrivateKey, fields map[string]interface{
 	if err != nil {
 		t.Fatal(err)
 	}
+	return signedCert(t, key, payload)
+}
+
+// signedCert is a base64 certificate of payload, signed with key, or with a random
+// signature if key is nil
+func signedCert(t *testing.T, key ed25519.PrivateKey, payload []byte) string {
+	t.Helper()
 	signature := make([]byte, ed25519.SignatureSize)
 	if key != nil {
 		signature = ed25519.Sign(key, payload)
@@ -177,5 +185,102 @@ func TestProcessCertificateVerdict(t *testing.T) {
 				t.Errorf("unexpected warning:\n%s", out)
 			}
 		})
+	}
+}
+
+// Each role the bike knows (its MQTT users ble-role-<role>, see acl.txt) is reported by
+// name without a warning, and any other one as unknown, with a warning
+func TestCertificateRoles(t *testing.T) {
+	ca := trustTestCA(t)
+	roles := map[uint64]string{
+		7:  "Owner",
+		11: "Guest",
+		17: "Bike Doctor",
+		22: "Bike Hunter",
+		55: "QA Engineer",
+		66: "R&D Engineer",
+		// Shown in hex
+		0x00: "Unknown Role (0x00)",
+		0x0F: "Unknown Role (0x0F)",
+		0xFF: "Unknown Role (0xFF)",
+	}
+	for role, name := range roles {
+		fields := testCertFields("BBBBBB00001AA")
+		fields["r"] = role
+		res := CheckCertificate(testCert(t, ca, fields), Expect{})
+		wantWarnings := 0
+		if strings.HasPrefix(name, "Unknown") {
+			wantWarnings = 1
+		}
+		if !res.Valid || res.AccessLevel() != name || len(res.Warnings) != wantWarnings {
+			t.Errorf("role %d: valid = %v, access level %q, warnings %q; want %q", role, res.Valid, res.AccessLevel(), res.Warnings, name)
+		}
+	}
+}
+
+// A number too big for its field makes the certificate invalid, instead of being cut off
+// into one that looks valid
+func TestCertificateFieldRanges(t *testing.T) {
+	ca := trustTestCA(t)
+	inAWeek := uint64(time.Now().Add(7 * 24 * time.Hour).Unix())
+	tests := []struct {
+		field string
+		value uint64
+		err   string // the only error, or "" if it's valid
+	}{
+		{"i", 1<<32 - 1, ""},
+		{"i", 1<<32 + 123456, "Field 'i' is out of range (expected uint32, got 4295090752)"},
+		{"e", 1<<32 + inAWeek, fmt.Sprintf("Field 'e' is out of range (expected uint32, got %d)", 1<<32+inAWeek)},
+		{"r", 0xFF, ""}, // valid, but unknown
+		{"r", 0x107, "Field 'r' is out of range (expected uint8, got 263)"},
+	}
+	for _, tt := range tests {
+		fields := testCertFields("BBBBBB00001AA")
+		fields[tt.field] = tt.value
+		res := CheckCertificate(testCert(t, ca, fields), Expect{})
+		if got := strings.Join(res.Errors, "; "); got != tt.err || res.Valid != (tt.err == "") {
+			t.Errorf("%s = %d: errors %q, want %q", tt.field, tt.value, res.Errors, tt.err)
+		}
+	}
+
+	// Neither shows up cut off: an expiry in 2162 as one in 2026, or role 0x107 as an owner
+	fields := testCertFields("BBBBBB00001AA")
+	fields["e"], fields["r"] = 1<<32+inAWeek, uint64(0x107)
+	res := CheckCertificate(testCert(t, ca, fields), Expect{})
+	if !res.Expires.IsZero() || res.AccessLevel() == "Owner" || len(res.Warnings) != 0 {
+		t.Errorf("expires %v, access level %q, warnings %q", res.Expires, res.AccessLevel(), res.Warnings)
+	}
+	out := captureStdout(t, func() { ProcessCertificate(testCert(t, ca, fields), "", "", true) })
+	if !strings.Contains(out, "✗ Field 'e' is out of range") || !strings.Contains(out, "✗ Field 'r' is out of range") ||
+		strings.Contains(out, time.Unix(int64(inAWeek), 0).Format("2006-01-02")) || strings.Contains(out, "Access Level: Owner") {
+		t.Errorf("debug output:\n%s", out)
+	}
+
+	// A missing number is reported as missing, not as zero
+	fields = testCertFields("BBBBBB00001AA")
+	delete(fields, "e")
+	if res := CheckCertificate(testCert(t, ca, fields), Expect{}); strings.Join(res.Errors, "; ") != "Missing required field: 'e'" {
+		t.Errorf("without an expiry: errors %q", res.Errors)
+	}
+}
+
+// A field that appears twice makes even a properly signed certificate invalid, as the bike
+// might use another of its values than the one shown: here an owner's that's also R&D's
+func TestCertificateDuplicateFields(t *testing.T) {
+	ca := trustTestCA(t)
+	payload, err := cbor.Marshal(testCertFields("BBBBBB00001AA"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload[0] != 0xa7 {
+		t.Fatalf("payload starts with 0x%02x, want a map of 7 fields (0xa7)", payload[0])
+	}
+	key, _ := cbor.Marshal("r")
+	value, _ := cbor.Marshal(uint64(0x42))
+	payload = append(append(append([]byte{0xa8}, payload[1:]...), key...), value...)
+
+	res := CheckCertificate(signedCert(t, ca, payload), Expect{})
+	if res.Valid || !res.SignatureVerified || !strings.Contains(strings.Join(res.Errors, "\n"), `duplicate map key "r"`) {
+		t.Errorf("valid = %v, signature verified = %v, errors %q", res.Valid, res.SignatureVerified, res.Errors)
 	}
 }

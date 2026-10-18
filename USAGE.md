@@ -249,6 +249,10 @@ With optional public key and frame number verification:
 
 Certificates the tool requests itself are always checked against the bike they were requested for.
 
+A certificate is invalid if a field is missing, appears twice, has the wrong type, or
+holds a number too big for its type (such as an expiry after 2106): the bike might
+read it differently than the tool would show it.
+
 Control characters in a certificate (or in names and messages from the API) are shown
 escaped, e.g. `\x1b`, so a crafted certificate can't change how the result looks.
 

@@ -194,9 +194,9 @@ func validateUUID(uuid []byte) bool {
 		return false
 	}
 
-	// Check version field (byte 6, high nibble should be 1-5)
+	// Check version field (byte 6, high nibble should be 1-8, the versions of RFC 9562)
 	version := uuid[6] >> 4
-	if version < 1 || version > 5 {
+	if version < 1 || version > 8 {
 		return false
 	}
 

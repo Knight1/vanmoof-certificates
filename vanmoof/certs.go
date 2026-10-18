@@ -103,6 +103,10 @@ func analyzeCertificate(certStr string, expect Expect) (certResult, []byte, erro
 
 // result returns r as a CertificateResult, with certData the decoded certificate
 func (r certResult) result(certData []byte) CertificateResult {
+	var expires time.Time
+	if r.expiry != 0 {
+		expires = time.Unix(int64(r.expiry), 0)
+	}
 	return CertificateResult{
 		Valid:             len(r.errors) == 0,
 		Errors:            r.errors,
@@ -116,7 +120,7 @@ func (r certResult) result(certData []byte) CertificateResult {
 		ID:                r.apiID,
 		FrameModule:       string(r.frameID),
 		BikeModule:        string(r.bikeID),
-		Expires:           time.Unix(int64(r.expiry), 0),
+		Expires:           expires,
 		Role:              r.role,
 		UserID:            r.userID,
 		PublicKey:         r.publicKey,
@@ -141,6 +145,16 @@ func isS6Certificate(r certResult, requestedBike *Bike) bool {
 	}
 }
 
+// certDecMode decodes certificate payloads. It rejects a field that appears twice, as the
+// bike might use another of its values than the one shown.
+var certDecMode = func() cbor.DecMode {
+	dm, err := cbor.DecOptions{DupMapKey: cbor.DupMapKeyEnforcedAPF}.DecMode()
+	if err != nil {
+		panic(err)
+	}
+	return dm
+}()
+
 // parseCertificate extracts and validates all fields from raw certificate bytes
 func parseCertificate(certData []byte, bikes []Bike) certResult {
 	r := certResult{
@@ -150,7 +164,7 @@ func parseCertificate(certData []byte, bikes []Bike) certResult {
 	cborPayload := certData[64:]
 
 	var rawMap map[interface{}]interface{}
-	if err := cbor.Unmarshal(cborPayload, &rawMap); err != nil {
+	if err := certDecMode.Unmarshal(cborPayload, &rawMap); err != nil {
 		r.errors = append(r.errors, fmt.Sprintf("CBOR parse error: %v", err))
 		return r
 	}
@@ -163,6 +177,7 @@ func parseCertificate(certData []byte, bikes []Bike) certResult {
 	}
 
 	// Extract fields
+	var hasExpiry, hasRole bool
 	for key, value := range rawMap {
 		keyStr, ok := key.(string)
 		if !ok {
@@ -170,10 +185,8 @@ func parseCertificate(certData []byte, bikes []Bike) certResult {
 		}
 		switch keyStr {
 		case "i":
-			if v, ok := value.(uint64); ok {
+			if v, ok := uintField(&r, "i", value, 32); ok {
 				r.apiID = uint32(v)
-			} else {
-				r.errors = append(r.errors, "Field 'i' has incorrect type (expected uint)")
 			}
 		case "f":
 			if v, ok := value.(string); ok {
@@ -188,16 +201,12 @@ func parseCertificate(certData []byte, bikes []Bike) certResult {
 				r.errors = append(r.errors, "Field 'b' has incorrect type (expected string)")
 			}
 		case "e":
-			if v, ok := value.(uint64); ok {
-				r.expiry = uint32(v)
-			} else {
-				r.errors = append(r.errors, "Field 'e' has incorrect type (expected uint)")
+			if v, ok := uintField(&r, "e", value, 32); ok {
+				r.expiry, hasExpiry = uint32(v), true
 			}
 		case "r":
-			if v, ok := value.(uint64); ok {
-				r.role = uint8(v)
-			} else {
-				r.errors = append(r.errors, "Field 'r' has incorrect type (expected uint)")
+			if v, ok := uintField(&r, "r", value, 8); ok {
+				r.role, hasRole = uint8(v), true
 			}
 		case "u":
 			if v, ok := value.([]byte); ok {
@@ -234,26 +243,20 @@ func parseCertificate(certData []byte, bikes []Bike) certResult {
 		r.warnings = append(r.warnings, fmt.Sprintf("Bike ID (b) has invalid format: %s", RedactID(string(r.bikeID))))
 	}
 
-	// Validate expiry
-	now := time.Now().Unix()
-	if r.expiry == 0 {
-		r.errors = append(r.errors, "Expiry timestamp is zero")
-	} else if int64(r.expiry) < now {
-		r.errors = append(r.errors, fmt.Sprintf("Certificate has EXPIRED (expired %s ago)", time.Since(time.Unix(int64(r.expiry), 0)).Round(time.Second)))
-	} else if int64(r.expiry) > now+365*24*60*60 {
-		r.warnings = append(r.warnings, fmt.Sprintf("Certificate expiry is suspiciously far in the future (%.1f days)", float64(int64(r.expiry)-now)/86400))
-	}
-
-	// Validate role
-	validRoles := []uint8{0x00, 0x01, 0x03, 0x07, 0x0F, 0x0B}
-	roleValid := false
-	for _, validRole := range validRoles {
-		if r.role == validRole {
-			roleValid = true
-			break
+	// Validate expiry, unless it's missing or invalid (reported above)
+	if hasExpiry {
+		now := time.Now().Unix()
+		if r.expiry == 0 {
+			r.errors = append(r.errors, "Expiry timestamp is zero")
+		} else if int64(r.expiry) < now {
+			r.errors = append(r.errors, fmt.Sprintf("Certificate has EXPIRED (expired %s ago)", time.Since(time.Unix(int64(r.expiry), 0)).Round(time.Second)))
+		} else if int64(r.expiry) > now+365*24*60*60 {
+			r.warnings = append(r.warnings, fmt.Sprintf("Certificate expiry is suspiciously far in the future (%.1f days)", float64(int64(r.expiry)-now)/86400))
 		}
 	}
-	if !roleValid {
+
+	// Validate role, unless it's missing or invalid (reported above)
+	if _, known := roleNames[r.role]; hasRole && !known {
 		r.warnings = append(r.warnings, fmt.Sprintf("Unknown role value: 0x%02X", r.role))
 	}
 
@@ -274,6 +277,22 @@ func parseCertificate(certData []byte, bikes []Bike) certResult {
 	}
 
 	return r
+}
+
+// uintField returns the value of the certificate's field key, which has to be an unsigned
+// integer that fits in bits, or else records why it isn't one. A bigger number isn't cut
+// off to fit: an expiry in 2162 would show as one in 2026, and role 0x107 as an owner.
+func uintField(r *certResult, key string, value interface{}, bits int) (uint64, bool) {
+	v, ok := value.(uint64)
+	switch {
+	case !ok:
+		r.errors = append(r.errors, fmt.Sprintf("Field '%s' has incorrect type (expected uint)", key))
+	case v>>bits != 0:
+		r.errors = append(r.errors, fmt.Sprintf("Field '%s' is out of range (expected uint%d, got %s)", key, bits, RedactID(fmt.Sprint(v))))
+	default:
+		return v, true
+	}
+	return 0, false
 }
 
 // verifyBike checks the certificate against the bike it should be for
@@ -523,24 +542,23 @@ func printVerbose(r certResult, certData []byte, expect Expect) {
 	}
 }
 
+// roleNames are the access levels of the roles a certificate can grant: the bike's MQTT
+// users ble-role-<role> (see acl.txt, linked in the README)
+var roleNames = map[uint8]string{
+	0x07: "Owner",
+	0x0B: "Guest",
+	0x11: "Bike Doctor",
+	0x16: "Bike Hunter",
+	0x37: "QA Engineer",
+	0x42: "R&D Engineer",
+}
+
 // getRoleDescription returns a human-readable description of the role value
 func getRoleDescription(role uint8) string {
-	switch role {
-	case 0x07:
-		return "Owner"
-	case 0x0B:
-		return "Guest"
-	case 0x11:
-		return "Bike Doctor"
-	case 0x16:
-		return "Bike Hunter"
-	case 0x37:
-		return "QA Engineer"
-	case 0x42:
-		return "R&D Engineer"
-	default:
-		return fmt.Sprintf("Unknown Role (0x%02X)", role)
+	if name, ok := roleNames[role]; ok {
+		return name
 	}
+	return fmt.Sprintf("Unknown Role (0x%02X)", role)
 }
 
 // formatUUID formats a 16-byte UUID into standard hyphenated format

@@ -156,6 +156,8 @@ type CertificateResult struct {
 	UserIDVerified    bool  // it's for Expect.UserID
 	MatchedBike       *Bike // the bike of Expect.Bikes it's for, if any
 
+	// What the certificate contains. A field it lacks, or has with the wrong type or out
+	// of range (see Errors), is zero.
 	ID          uint32 // certificate ID, random per certificate
 	FrameModule string // the frame module (AFM) it's for, normally the frame number
 	BikeModule  string // the bike module (ABM) it's for
