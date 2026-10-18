@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -80,10 +81,7 @@ func encrypt(plaintext []byte, passphrase string) []byte {
 	gcm := newCacheCipher(passphrase, salt, pbkdf2Iterations)
 
 	// header + salt, then Seal adds the nonce and ciphertext
-	result := make([]byte, 0, cacheHeaderSize+saltSize+gcm.Overhead()+len(plaintext))
-	result = append(result, header...)
-	result = append(result, salt...)
-	return gcm.Seal(result, nil, plaintext, header)
+	return gcm.Seal(slices.Concat(header, salt), nil, plaintext, header)
 }
 
 // hasCacheHeader reports whether encrypted cache data is in the current format

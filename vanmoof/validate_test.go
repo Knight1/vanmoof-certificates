@@ -64,6 +64,10 @@ func TestIsValidEmail(t *testing.T) {
 		{"Name <user@example.com>", false},
 		{"user@example.com (comment)", false},
 		{" user@example.com", false},
+		{"user@example.com\xc2\xa0", false}, // a no-break space
+		{"\xc2\xa0user@example.com", false},
+		{"user@\xc2\xa0", false},
+		{"üser@exämple.com", true},
 		{"user", false},
 		{"", false},
 	}

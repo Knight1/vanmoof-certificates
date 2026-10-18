@@ -17,7 +17,8 @@ import (
 // it's used as is to log in, so a display name, comment or spaces around it don't count.
 func IsValidEmail(email string) bool {
 	addr, err := mail.ParseAddress(email)
-	return err == nil && addr.Address == email
+	// net/mail takes a Unicode space, such as a no-break space, for part of the address
+	return err == nil && addr.Address == email && strings.TrimSpace(email) == email
 }
 
 // IsValidBase64 validates a base64 string
