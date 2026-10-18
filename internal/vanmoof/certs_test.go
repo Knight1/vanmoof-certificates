@@ -97,13 +97,18 @@ func captureStdout(t *testing.T, f func()) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Read while f runs, as more output than the pipe holds would block it
+	out := make(chan string)
+	go func() {
+		b, _ := io.ReadAll(r)
+		out <- string(b)
+	}()
 	stdout := os.Stdout
 	os.Stdout = w
 	f()
 	os.Stdout = stdout
 	w.Close()
-	out, _ := io.ReadAll(r)
-	return string(out)
+	return <-out
 }
 
 // The default output may only say "Certificate valid" when every check that ran passed,

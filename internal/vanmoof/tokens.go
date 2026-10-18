@@ -104,7 +104,7 @@ func loadAllTokenCaches(debug bool) (map[string]CachedTokens, error) {
 	path, err := tokenCachePath()
 	if err != nil {
 		if debug {
-			fmt.Printf("[DEBUG] Token cache path error: %v\n", err)
+			fmt.Printf("[DEBUG] Token cache path error: %v\n", ScrubText(err.Error()))
 		}
 		return nil, nil
 	}
@@ -112,7 +112,7 @@ func loadAllTokenCaches(debug bool) (map[string]CachedTokens, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		if debug {
-			fmt.Printf("[DEBUG] No token cache found: %v\n", err)
+			fmt.Printf("[DEBUG] No token cache found: %v\n", ScrubText(err.Error()))
 		}
 		return nil, nil
 	}
@@ -160,14 +160,14 @@ func saveAllTokenCaches(cacheMap map[string]CachedTokens, debug bool) {
 	path, err := tokenCachePath()
 	if err != nil {
 		if debug {
-			fmt.Printf("[DEBUG] Token cache path error: %v\n", err)
+			fmt.Printf("[DEBUG] Token cache path error: %v\n", ScrubText(err.Error()))
 		}
 		return
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		if debug {
-			fmt.Printf("[DEBUG] Failed to create token cache dir: %v\n", err)
+			fmt.Printf("[DEBUG] Failed to create token cache dir: %v\n", ScrubText(err.Error()))
 		}
 		return
 	}
@@ -175,7 +175,7 @@ func saveAllTokenCaches(cacheMap map[string]CachedTokens, debug bool) {
 	data, err := json.MarshalIndent(cacheMap, "", "  ")
 	if err != nil {
 		if debug {
-			fmt.Printf("[DEBUG] Token cache marshal error: %v\n", err)
+			fmt.Printf("[DEBUG] Token cache marshal error: %v\n", ScrubText(err.Error()))
 		}
 		return
 	}
@@ -185,7 +185,7 @@ func saveAllTokenCaches(cacheMap map[string]CachedTokens, debug bool) {
 		encrypted, err := encrypt(data, key)
 		if err != nil {
 			if debug {
-				fmt.Printf("[DEBUG] Token cache encryption failed: %v\n", err)
+				fmt.Printf("[DEBUG] Token cache encryption failed: %v\n", ScrubText(err.Error()))
 			}
 			return
 		}
@@ -197,7 +197,7 @@ func saveAllTokenCaches(cacheMap map[string]CachedTokens, debug bool) {
 
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		if debug {
-			fmt.Printf("[DEBUG] Failed to write token cache: %v\n", err)
+			fmt.Printf("[DEBUG] Failed to write token cache: %v\n", ScrubText(err.Error()))
 		}
 		return
 	}
@@ -211,7 +211,7 @@ func saveAllTokenCaches(cacheMap map[string]CachedTokens, debug bool) {
 func loadTokenCache(email string, debug bool) *CachedTokens {
 	cacheMap, err := loadAllTokenCaches(debug)
 	if err != nil {
-		fmt.Printf("WARNING: Token cache not used: %v\n", err)
+		fmt.Printf("WARNING: Token cache not used: %v\n", ScrubText(err.Error()))
 		return nil
 	}
 	if cacheMap == nil {
@@ -221,13 +221,13 @@ func loadTokenCache(email string, debug bool) *CachedTokens {
 	cached, ok := cacheMap[email]
 	if !ok {
 		if debug {
-			fmt.Printf("[DEBUG] No cached tokens for %s\n", email)
+			fmt.Printf("[DEBUG] No cached tokens for %s\n", Redact(email))
 		}
 		return nil
 	}
 
 	if debug {
-		fmt.Printf("[DEBUG] Loaded token cache for %s\n", email)
+		fmt.Printf("[DEBUG] Loaded token cache for %s\n", Redact(email))
 	}
 	return &cached
 }

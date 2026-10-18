@@ -44,7 +44,7 @@ func resolveTokens(email, password string, skipCachedTokens, debug, noCache bool
 				return cached.AuthToken, appToken, true, nil
 			}
 			if debug {
-				fmt.Printf("[DEBUG] Failed to get app token with cached auth token: %v\n", err)
+				fmt.Printf("[DEBUG] Failed to get app token with cached auth token: %v\n", ScrubText(err.Error()))
 			}
 		}
 
@@ -67,10 +67,10 @@ func resolveTokens(email, password string, skipCachedTokens, debug, noCache bool
 					return authToken, appToken, false, nil
 				}
 				if debug {
-					fmt.Printf("[DEBUG] Failed to get app token after refresh: %v\n", err)
+					fmt.Printf("[DEBUG] Failed to get app token after refresh: %v\n", ScrubText(err.Error()))
 				}
 			} else if debug {
-				fmt.Printf("[DEBUG] Refresh token failed: %v\n", err)
+				fmt.Printf("[DEBUG] Refresh token failed: %v\n", ScrubText(err.Error()))
 			}
 		}
 
@@ -105,7 +105,7 @@ func resolveTokens(email, password string, skipCachedTokens, debug, noCache bool
 	}
 
 	if debug {
-		fmt.Printf("[DEBUG] Auth token received: %s...\n", authToken[:min(20, len(authToken))])
+		fmt.Printf("[DEBUG] Auth token received: %s\n", debugSecret(authToken[:min(20, len(authToken))]+"..."))
 	}
 
 	appToken, err := getApplicationToken(authToken, debug)
@@ -159,7 +159,7 @@ func GetCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 	}
 
 	if debug {
-		fmt.Printf("[DEBUG] App token received: %s...\n", appToken[:min(20, len(appToken))])
+		fmt.Printf("[DEBUG] App token received: %s\n", debugSecret(appToken[:min(20, len(appToken))]+"..."))
 	}
 
 	warnPendingInvitations(authToken, debug)
@@ -167,7 +167,7 @@ func GetCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 	customerUUID, bikes := customerData.Data.UUID, customerData.Data.Bikes
 
 	if debug {
-		fmt.Printf("[DEBUG] Customer UUID: %s\n", customerUUID)
+		fmt.Printf("[DEBUG] Customer UUID: %s\n", Redact(customerUUID))
 		fmt.Printf("[DEBUG] Retrieved %d owned bikes\n", len(bikes))
 		debugPrintBikeProfiles(bikes)
 	}
@@ -185,7 +185,7 @@ func debugPrintBikeProfiles(bikes []BikeData) {
 		if model == "" {
 			model = "unknown"
 		}
-		fmt.Printf("[DEBUG]   %s: %s (%s)\n", b.FrameNumber, b.BleProfile, model)
+		fmt.Printf("[DEBUG]   %s: %s (%s)\n", RedactID(b.FrameNumber), b.BleProfile, model)
 	}
 }
 
@@ -197,7 +197,7 @@ func debugPrintVehicleAccessProfiles(vehicles []VehicleAccess) {
 		if model == "" {
 			model = "unknown"
 		}
-		fmt.Printf("[DEBUG]   %s: %s (%s)\n", v.VehicleID, v.BleProfile, model)
+		fmt.Printf("[DEBUG]   %s: %s (%s)\n", RedactID(v.VehicleID), v.BleProfile, model)
 	}
 }
 
@@ -207,7 +207,7 @@ func warnPendingInvitations(authToken string, debug bool) {
 	pendingInvitations, err := getBikeSharingInvitations(authToken, debug)
 	if err != nil {
 		if debug {
-			fmt.Printf("[DEBUG] Failed to check sharing invitations: %v\n", err)
+			fmt.Printf("[DEBUG] Failed to check sharing invitations: %v\n", ScrubText(err.Error()))
 		}
 		return
 	}
@@ -222,7 +222,7 @@ func mergeSharedVehicles(bikes []BikeData, customerUUID, appToken string, debug 
 	sharedVehicles, err := getSharedVehicles(customerUUID, appToken, debug)
 	if err != nil {
 		if debug {
-			fmt.Printf("[DEBUG] Failed to fetch shared vehicles: %v\n", err)
+			fmt.Printf("[DEBUG] Failed to fetch shared vehicles: %v\n", ScrubText(err.Error()))
 		}
 		return bikes
 	}
@@ -287,7 +287,7 @@ func requestCertificates(bikes []BikeData, customerUUID, appToken, bikeFilter, p
 	if pubkey != "" {
 		pubKeyB64 = pubkey
 		if debug {
-			fmt.Printf("[DEBUG] Using supplied public key for certificate requests: %s\n", pubKeyB64)
+			fmt.Printf("[DEBUG] Using supplied public key for certificate requests: %s\n", Redact(pubKeyB64))
 		}
 	} else {
 		var genErr error
@@ -295,18 +295,18 @@ func requestCertificates(bikes []BikeData, customerUUID, appToken, bikeFilter, p
 		if genErr != nil {
 			return genErr
 		}
-		fmt.Printf("Privkey = %s\n", privKeyB64)
-		fmt.Printf("Pubkey = %s\n", pubKeyB64)
+		fmt.Printf("Privkey = %s\n", Redact(privKeyB64))
+		fmt.Printf("Pubkey = %s\n", Redact(pubKeyB64))
 		fmt.Println()
 	}
 
 	// Process each selected bike and create certificate
 	for _, bike := range selectedBikes {
 		if bike.BikeID != 0 {
-			fmt.Printf("Bike ID: %d\n", bike.BikeID)
+			fmt.Printf("Bike ID: %s\n", RedactID(fmt.Sprint(bike.BikeID)))
 		}
-		fmt.Printf("Name: %s\n", bike.Name)
-		fmt.Printf("Frame number: %s\n", bike.FrameNumber)
+		fmt.Printf("Name: %s\n", Redact(bike.Name))
+		fmt.Printf("Frame number: %s\n", RedactID(bike.FrameNumber))
 		model := bleProfileModel[bike.BleProfile]
 		if model == "" {
 			model = bike.BleProfile
@@ -314,29 +314,29 @@ func requestCertificates(bikes []BikeData, customerUUID, appToken, bikeFilter, p
 		fmt.Printf("Model: %s\n", model)
 
 		if debug {
-			fmt.Printf("[DEBUG] Creating certificate for %s\n", bike.FrameNumber)
+			fmt.Printf("[DEBUG] Creating certificate for %s\n", RedactID(bike.FrameNumber))
 		}
 
 		certResp, err := createCertificate(bike.FrameNumber, pubKeyB64, appToken, debug)
 		if err != nil {
-			fmt.Printf("Failed to create certificate: %v\n", err)
+			fmt.Printf("Failed to create certificate: %v\n", ScrubText(err.Error()))
 			continue
 		}
 
 		// Check if response contains an error
 		var respData map[string]interface{}
 		if err := json.Unmarshal([]byte(certResp), &respData); err != nil {
-			fmt.Printf("Failed to parse certificate response: %v\n", err)
+			fmt.Printf("Failed to parse certificate response: %v\n", ScrubText(err.Error()))
 			continue
 		}
 
 		if _, hasErr := respData["err"]; hasErr {
-			fmt.Printf("Certificate error: %v\n", certResp)
+			fmt.Printf("Certificate error: %v\n", redactJSON(certResp))
 			continue
 		}
 
 		fmt.Println("Certificate:")
-		fmt.Println(certResp)
+		fmt.Println(redactJSON(certResp))
 
 		// Parse the certificate
 		cert, ok := respData["certificate"].(string)

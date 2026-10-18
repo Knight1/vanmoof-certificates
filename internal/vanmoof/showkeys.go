@@ -45,7 +45,7 @@ func ShowKeys(email, mode, bikeFilter, pubkey string, debug, noCache bool) error
 	warnPendingInvitations(authToken, debug)
 
 	if debug {
-		fmt.Printf("[DEBUG] Customer UUID: %s\n", customerData.Data.UUID)
+		fmt.Printf("[DEBUG] Customer UUID: %s\n", Redact(customerData.Data.UUID))
 		fmt.Printf("[DEBUG] Retrieved %d owned bikes\n", len(customerData.Data.Bikes))
 		debugPrintBikeProfiles(customerData.Data.Bikes)
 	}
@@ -76,7 +76,7 @@ func printStaticKeys(details []BikeDetail, bikeFilter, authToken string, debug b
 	}
 	selected, err := selectBikes(list, bikeFilter)
 	if err != nil {
-		fmt.Printf("Error selecting bikes: %v\n", err)
+		fmt.Printf("Error selecting bikes: %v\n", ScrubText(err.Error()))
 		return
 	}
 	if len(selected) == 0 {
@@ -89,13 +89,13 @@ func printStaticKeys(details []BikeDetail, bikeFilter, authToken string, debug b
 			if d.BikeID != sel.BikeID {
 				continue
 			}
-			secret := d.Key.EncryptionKey
+			secret := Redact(d.Key.EncryptionKey)
 			if secret == "" {
 				secret = "not available"
 			}
-			fmt.Printf("bikeName: %s\n", d.Name)
-			fmt.Printf("frameNumber: %s\n", d.FrameNumber)
-			fmt.Printf("macAddress: %s\n", d.MacAddress)
+			fmt.Printf("bikeName: %s\n", Redact(d.Name))
+			fmt.Printf("frameNumber: %s\n", RedactID(d.FrameNumber))
+			fmt.Printf("macAddress: %s\n", Redact(d.MacAddress))
 			fmt.Printf("bleSecret: %s\n", secret)
 
 			// No key set yet on a non-certificate (pre-S5) bike means the key itself may
@@ -106,7 +106,7 @@ func printStaticKeys(details []BikeDetail, bikeFilter, authToken string, debug b
 				messages, err := getBikeMessages(d.BikeID, authToken, debug)
 				if err != nil {
 					if debug {
-						fmt.Printf("[DEBUG] Failed to check bike messages: %v\n", err)
+						fmt.Printf("[DEBUG] Failed to check bike messages: %v\n", ScrubText(err.Error()))
 					}
 				} else if len(messages) > 0 {
 					fmt.Printf("bikeMessage: %d message(s) waiting for delivery over BLE\n", len(messages))

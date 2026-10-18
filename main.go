@@ -20,13 +20,30 @@ func main() {
 	email := flag.String("email", "", "VanMoof email address (optional)")
 	bikes := flag.String("bikes", "all", "Bikes to fetch certificates for: 'all', bike IDs (comma-separated), or 'ask' to be prompted")
 	showKeys := flag.String("show-keys", "", "Show BLE encryption keys instead of requesting certificates: 'static' (only the keys) or 'all' (keys, and certificates for the certificate bikes as usual)")
-	debug := flag.Bool("debug", false, "Enable debug output")
+	debug := flag.Bool("debug", false, "Enable debug output (tokens and keys stay hidden, see -show-everything)")
+	redact := flag.Bool("redact", false, "Hide secrets and personal data in all output, e.g. to share it in an issue")
+	showEverything := flag.Bool("show-everything", false, "With -debug, also show the tokens and keys it hides (never share this output)")
 	noCache := flag.Bool("no-cache", false, "Do not read or write token cache")
 	sudo := flag.Bool("sudo", false, "Skip all validation checks")
 	flag.Parse()
 
+	if *redact && *showEverything {
+		fmt.Println("Error: -redact and -show-everything cannot be combined")
+		return
+	}
+	if *showEverything && !*debug {
+		fmt.Println("Error: -show-everything only works with -debug")
+		return
+	}
+	vanmoof.SetRedaction(*redact, *showEverything)
+
 	if *debug {
-		fmt.Printf("[DEBUG] Flags: version=%v, genkey=%v, cert='%s', pubkey='%s', framenumber='%s', email='%s', bikes='%s', show-keys='%s', sudo=%v\n", *version, *genkey, *cert, *pubkey, *frameNumber, *email, *bikes, *showKeys, *sudo)
+		bikesShown := *bikes
+		if bikesShown != "all" && bikesShown != "ask" {
+			bikesShown = vanmoof.RedactID(bikesShown)
+		}
+		fmt.Printf("[DEBUG] Flags: version=%v, genkey=%v, cert='%s', pubkey='%s', framenumber='%s', email='%s', bikes='%s', show-keys='%s', sudo=%v, redact=%v, show-everything=%v\n",
+			*version, *genkey, vanmoof.Redact(*cert), vanmoof.Redact(*pubkey), vanmoof.RedactID(*frameNumber), vanmoof.Redact(*email), bikesShown, *showKeys, *sudo, *redact, *showEverything)
 	}
 
 	if *version {
@@ -41,8 +58,8 @@ func main() {
 			fmt.Printf("Error generating key pair: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("Privkey = %s\n", privKeyB64)
-		fmt.Printf("Pubkey = %s\n", pubKeyB64)
+		fmt.Printf("Privkey = %s\n", vanmoof.Redact(privKeyB64))
+		fmt.Printf("Pubkey = %s\n", vanmoof.Redact(pubKeyB64))
 		return
 	}
 
@@ -81,7 +98,7 @@ func main() {
 			return
 		}
 		if !*sudo && !vanmoof.ValidateFrameNumber(*frameNumber) {
-			fmt.Printf("Error: Invalid frame number '%s'\n", *frameNumber)
+			fmt.Printf("Error: Invalid frame number '%s'\n", vanmoof.RedactID(*frameNumber))
 			return
 		}
 	}
@@ -98,7 +115,7 @@ func main() {
 			var numericID uint32
 			if _, err := fmt.Sscanf(id, "%d", &numericID); err != nil {
 				if !*sudo && !vanmoof.ValidateFrameNumber(id) {
-					fmt.Printf("Error: Invalid bike ID '%s' in bikes list. Must be a numeric ID or frame number\n", id)
+					fmt.Printf("Error: Invalid bike ID '%s' in bikes list. Must be a numeric ID or frame number\n", vanmoof.RedactID(id))
 					return
 				}
 			}
@@ -120,7 +137,7 @@ func main() {
 		}
 
 		if !*sudo && !vanmoof.IsValidEmail(emailInput) {
-			fmt.Printf("Error: Invalid email address '%s'\n", emailInput)
+			fmt.Printf("Error: Invalid email address '%s'\n", vanmoof.Redact(emailInput))
 			return
 		}
 
@@ -128,13 +145,13 @@ func main() {
 			// ShowKeys itself requests certificates too in "all" mode, reusing the
 			// authentication and customer data it already fetched for the keys.
 			if err := vanmoof.ShowKeys(emailInput, *showKeys, *bikes, *pubkey, *debug, *noCache); err != nil {
-				fmt.Printf("Error: %v\n", err)
+				fmt.Printf("Error: %v\n", vanmoof.ScrubText(err.Error()))
 			}
 			return
 		}
 
 		if err := vanmoof.GetCert(emailInput, *bikes, *pubkey, *debug, *noCache); err != nil {
-			fmt.Printf("Error: %v\n", err)
+			fmt.Printf("Error: %v\n", vanmoof.ScrubText(err.Error()))
 			return
 		}
 		return

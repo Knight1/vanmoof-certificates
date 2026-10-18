@@ -175,14 +175,14 @@ func parseCertificate(certData []byte, bikes []BikeData) certResult {
 	if len(r.frameID) == 0 {
 		r.errors = append(r.errors, "Frame ID (f) is empty")
 	} else if !ValidateFrameNumber(string(r.frameID)) {
-		r.warnings = append(r.warnings, fmt.Sprintf("Frame ID (f) has invalid format: %s", string(r.frameID)))
+		r.warnings = append(r.warnings, fmt.Sprintf("Frame ID (f) has invalid format: %s", RedactID(string(r.frameID))))
 	}
 
 	// Validate bike ID format
 	if len(r.bikeID) == 0 {
 		r.errors = append(r.errors, "Bike ID (b) is empty")
 	} else if !ValidateFrameNumber(string(r.bikeID)) {
-		r.warnings = append(r.warnings, fmt.Sprintf("Bike ID (b) has invalid format: %s", string(r.bikeID)))
+		r.warnings = append(r.warnings, fmt.Sprintf("Bike ID (b) has invalid format: %s", RedactID(string(r.bikeID))))
 	}
 
 	// Validate expiry
@@ -243,14 +243,16 @@ func verifyBike(r *certResult, bike *BikeData) {
 			(bikeIDStr == bike.FrameNumber || bikeIDStr == bike.FrameSerial || bikeIDStr == bike.MainEcuSerial) {
 			r.bikeIDVerified = true
 		} else {
-			r.errors = append(r.errors, fmt.Sprintf("Bike ID %d mismatch: bike has frame %s, certificate has AFM %s, ABM %s", bike.BikeID, bike.FrameNumber, frameIDStr, bikeIDStr))
+			r.errors = append(r.errors, fmt.Sprintf("Bike ID %s mismatch: bike has frame %s, certificate has AFM %s, ABM %s",
+				RedactID(fmt.Sprint(bike.BikeID)), RedactID(bike.FrameNumber), RedactID(frameIDStr), RedactID(bikeIDStr)))
 		}
 	default:
 		// Only the frame number is known: a shared bike, or -framenumber
 		if frameIDStr == bike.FrameNumber || bikeIDStr == bike.FrameNumber {
 			r.bikeIDVerified = true
 		} else {
-			r.errors = append(r.errors, fmt.Sprintf("Bike frame %s not found in certificate (AFM: %s, ABM: %s)", bike.FrameNumber, frameIDStr, bikeIDStr))
+			r.errors = append(r.errors, fmt.Sprintf("Bike frame %s not found in certificate (AFM: %s, ABM: %s)",
+				RedactID(bike.FrameNumber), RedactID(frameIDStr), RedactID(bikeIDStr)))
 		}
 	}
 }
@@ -286,7 +288,7 @@ func verifyUserID(r *certResult, expectedUserID string) {
 	if certUserID == expectedClean {
 		r.userIDVerified = true
 	} else {
-		r.errors = append(r.errors, fmt.Sprintf("User ID mismatch: expected %s, certificate has %s", expectedUserID, certUserID))
+		r.errors = append(r.errors, fmt.Sprintf("User ID mismatch: expected %s, certificate has %s", Redact(expectedUserID), Redact(certUserID)))
 	}
 }
 
@@ -297,7 +299,7 @@ func printCompact(r certResult) {
 	accessLevel := getRoleDescription(r.role)
 
 	if len(r.errors) == 0 {
-		parts := []string{frameIDStr, accessLevel, "expires " + expiryTime.Format("2006-01-02 15:04:05 MST")}
+		parts := []string{RedactID(frameIDStr), accessLevel, "expires " + expiryTime.Format("2006-01-02 15:04:05 MST")}
 		if r.matchedBike != nil {
 			parts = append(parts, "bike matched")
 		}
@@ -330,22 +332,22 @@ func printCompact(r certResult) {
 // printVerbose prints the full detailed output (debug mode)
 func printVerbose(r certResult, certData []byte, expectedPubKeyStr string, expectedBike *BikeData, expectedUserID string, bikes []BikeData) {
 	fmt.Printf("Total Certificate Length: %d bytes\n", len(certData))
-	fmt.Printf("Decoded Certificate (hex): %x\n", certData)
+	fmt.Printf("Decoded Certificate (hex): %s\n", Redact(fmt.Sprintf("%x", certData)))
 
 	signature := certData[0:64]
 	cborPayload := certData[64:]
 
 	signatureBase64 := base64.StdEncoding.EncodeToString(signature)
 	fmt.Printf("\n--- Extracted from Certificate ---\n")
-	fmt.Printf("Signature (Base64): %s\n", signatureBase64)
-	fmt.Printf("Signature (hex): %x\n", signature)
+	fmt.Printf("Signature (Base64): %s\n", Redact(signatureBase64))
+	fmt.Printf("Signature (hex): %s\n", Redact(fmt.Sprintf("%x", signature)))
 	fmt.Printf("CBOR Payload length: %d bytes\n", len(cborPayload))
-	fmt.Printf("CBOR Payload (hex): %x\n", cborPayload)
+	fmt.Printf("CBOR Payload (hex): %s\n", Redact(fmt.Sprintf("%x", cborPayload)))
 
 	fmt.Println("\n[DEBUG] Signature Analysis:")
 	fmt.Printf("  Signature is %d bytes (Ed25519 signature)\n", len(signature))
-	fmt.Printf("  R component (first 32 bytes): %x\n", signature[:32])
-	fmt.Printf("  S component (last 32 bytes):  %x\n", signature[32:])
+	fmt.Printf("  R component (first 32 bytes): %s\n", Redact(fmt.Sprintf("%x", signature[:32])))
+	fmt.Printf("  S component (last 32 bytes):  %s\n", Redact(fmt.Sprintf("%x", signature[32:])))
 
 	// Validation summary
 	fmt.Println("\n--- Certificate Validation ---")
@@ -361,10 +363,10 @@ func printVerbose(r certResult, certData []byte, expectedPubKeyStr string, expec
 	}
 
 	// Parsed fields
-	fmt.Printf("Certificate ID: %d\n", r.apiID)
+	fmt.Printf("Certificate ID: %s\n", RedactID(fmt.Sprint(r.apiID)))
 
 	frameIDStr := string(r.frameID)
-	fmt.Printf("AFM (Authorized Frame Module): %s", frameIDStr)
+	fmt.Printf("AFM (Authorized Frame Module): %s", RedactID(frameIDStr))
 	if r.matchedBike != nil && (r.matchedBike.FrameNumber == frameIDStr || r.matchedBike.FrameSerial == frameIDStr) {
 		fmt.Printf(" ✓ Valid (matches API bike)\n")
 	} else if ValidateFrameNumber(frameIDStr) {
@@ -376,7 +378,7 @@ func printVerbose(r certResult, certData []byte, expectedPubKeyStr string, expec
 	}
 
 	bikeIDStr := string(r.bikeID)
-	fmt.Printf("ABM (Authorized Bike Module): %s", bikeIDStr)
+	fmt.Printf("ABM (Authorized Bike Module): %s", RedactID(bikeIDStr))
 	if r.matchedBike != nil && (r.matchedBike.FrameNumber == bikeIDStr || r.matchedBike.FrameSerial == bikeIDStr || r.matchedBike.MainEcuSerial == bikeIDStr) {
 		fmt.Printf(" ✓ Valid (matches API bike)\n")
 	} else if ValidateFrameNumber(bikeIDStr) {
@@ -392,7 +394,7 @@ func printVerbose(r certResult, certData []byte, expectedPubKeyStr string, expec
 	fmt.Printf("Access Level: %s\n", getRoleDescription(r.role))
 
 	userUUIDStr := formatUUID(r.userID)
-	fmt.Printf("User ID: %s", userUUIDStr)
+	fmt.Printf("User ID: %s", Redact(userUUIDStr))
 	if validateUUID(r.userID) {
 		fmt.Printf(" ✓ Valid UUID v%d\n", getUUIDVersion(r.userID))
 	} else {
@@ -400,7 +402,7 @@ func printVerbose(r certResult, certData []byte, expectedPubKeyStr string, expec
 	}
 
 	embeddedPubKeyBase64 := base64.StdEncoding.EncodeToString(r.publicKey)
-	fmt.Printf("Embedded Public Key (Base64): %s\n", embeddedPubKeyBase64)
+	fmt.Printf("Embedded Public Key (Base64): %s\n", Redact(embeddedPubKeyBase64))
 
 	// Bike match summary
 	if len(bikes) > 0 {
@@ -408,23 +410,23 @@ func printVerbose(r certResult, certData []byte, expectedPubKeyStr string, expec
 		if r.matchedBike != nil {
 			fmt.Printf("✓ Certificate matches one of your bikes\n")
 			if r.matchedBike.BikeID != 0 {
-				fmt.Printf("  Matched Bike ID: %d\n", r.matchedBike.BikeID)
+				fmt.Printf("  Matched Bike ID: %s\n", RedactID(fmt.Sprint(r.matchedBike.BikeID)))
 			}
-			fmt.Printf("  Bike Name: %s\n", r.matchedBike.Name)
-			fmt.Printf("  Frame Number: %s\n", r.matchedBike.FrameNumber)
+			fmt.Printf("  Bike Name: %s\n", Redact(r.matchedBike.Name))
+			fmt.Printf("  Frame Number: %s\n", RedactID(r.matchedBike.FrameNumber))
 		} else {
 			fmt.Printf("✗ Certificate does NOT match any of your bikes\n")
-			fmt.Printf("  Certificate AFM: %s\n", frameIDStr)
-			fmt.Printf("  Certificate ABM: %s\n", bikeIDStr)
+			fmt.Printf("  Certificate AFM: %s\n", RedactID(frameIDStr))
+			fmt.Printf("  Certificate ABM: %s\n", RedactID(bikeIDStr))
 			fmt.Printf("  Your bikes: ")
 			for i, bike := range bikes {
 				if i > 0 {
 					fmt.Printf(", ")
 				}
 				if bike.BikeID != 0 {
-					fmt.Printf("%s (ID: %d)", bike.FrameNumber, bike.BikeID)
+					fmt.Printf("%s (ID: %s)", RedactID(bike.FrameNumber), RedactID(fmt.Sprint(bike.BikeID)))
 				} else {
-					fmt.Printf("%s", bike.FrameNumber)
+					fmt.Printf("%s", RedactID(bike.FrameNumber))
 				}
 			}
 			fmt.Println()
@@ -433,9 +435,9 @@ func printVerbose(r certResult, certData []byte, expectedPubKeyStr string, expec
 
 	// Bike ID verification
 	if expectedBike != nil {
-		bikeLabel := expectedBike.FrameNumber
+		bikeLabel := RedactID(expectedBike.FrameNumber)
 		if expectedBike.BikeID != 0 {
-			bikeLabel = fmt.Sprintf("%d", expectedBike.BikeID)
+			bikeLabel = RedactID(fmt.Sprint(expectedBike.BikeID))
 		}
 		fmt.Println("\n--- Bike ID Verification ---")
 		if r.bikeIDVerified {
@@ -462,11 +464,11 @@ func printVerbose(r certResult, certData []byte, expectedPubKeyStr string, expec
 	if expectedUserID != "" {
 		fmt.Println("\n--- User ID Verification ---")
 		if r.userIDVerified {
-			fmt.Printf("✓ User ID Verified: %s\n", expectedUserID)
+			fmt.Printf("✓ User ID Verified: %s\n", Redact(expectedUserID))
 		} else {
 			fmt.Printf("✗ User ID mismatch\n")
-			fmt.Printf("  Expected: %s\n", expectedUserID)
-			fmt.Printf("  Certificate: %s\n", fmt.Sprintf("%x", r.userID))
+			fmt.Printf("  Expected: %s\n", Redact(expectedUserID))
+			fmt.Printf("  Certificate: %s\n", Redact(fmt.Sprintf("%x", r.userID)))
 		}
 	}
 }

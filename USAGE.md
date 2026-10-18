@@ -14,7 +14,9 @@ go build -mod=vendor -ldflags "-w -d"
 | `-email` | VanMoof email address | Prompt if not provided |
 | `-bikes` | Bikes to process: 'all', IDs (comma-separated), or 'ask' | `all` |
 | `-show-keys` | Show BLE encryption keys instead of requesting certificates: `static` (only the keys) or `all` (keys, plus certificates for the certificate bikes) | - |
-| `-debug` | Enable debug output | `false` |
+| `-debug` | Enable debug output (tokens and keys stay hidden) | `false` |
+| `-redact` | Hide secrets and personal data in all output, to share it in an issue or pull request | `false` |
+| `-show-everything` | With `-debug`, also show the tokens and keys it hides. Never share this output | `false` |
 | `-no-cache` | Do not read or write token cache | `false` |
 | `-sudo` | Skip all validation checks | `false` |
 | `-cert` | Base64 encoded certificate to parse | - |
@@ -183,6 +185,22 @@ Enable debug output to see detailed API requests and responses:
 ```console
 ./vanmoof-certificates -email user@vanmoof.com -debug
 ```
+
+Debug output hides secrets: tokens, the refresh token, BLE keys and bike messages
+in API responses. It still contains personal data, such as your email address,
+names and frame numbers, and the regular output, such as a generated private key
+or a `-show-keys` BLE key.
+
+To share output, for example in an issue or pull request, add `-redact`. It hides
+secrets and personal data in all output, including the private key, BLE keys and
+certificates. Frame numbers and IDs keep only their shape (e.g. `LLLLLLDDDDDLL`):
+
+```console
+./vanmoof-certificates -email user@vanmoof.com -debug -redact
+```
+
+To see everything, tokens included, add `-show-everything` (debug only). Never
+share that output: anyone with your tokens or keys can unlock your bike.
 
 The certificate's Ed25519 signature is always verified against VanMoof's known
 certificate signing (CA) key. In normal mode this is silent — a mismatch is

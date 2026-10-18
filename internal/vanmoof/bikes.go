@@ -19,9 +19,9 @@ func selectBikes(bikes []BikeData, filter string) ([]BikeData, error) {
 		fmt.Println("\nAvailable bikes:")
 		for i, bike := range bikes {
 			if bike.BikeID != 0 {
-				fmt.Printf("%d. %s (ID: %d, Frame: %s)\n", i+1, bike.Name, bike.BikeID, bike.FrameNumber)
+				fmt.Printf("%d. %s (ID: %s, Frame: %s)\n", i+1, Redact(bike.Name), RedactID(fmt.Sprint(bike.BikeID)), RedactID(bike.FrameNumber))
 			} else {
-				fmt.Printf("%d. %s (Frame: %s)\n", i+1, bike.Name, bike.FrameNumber)
+				fmt.Printf("%d. %s (Frame: %s)\n", i+1, Redact(bike.Name), RedactID(bike.FrameNumber))
 			}
 		}
 

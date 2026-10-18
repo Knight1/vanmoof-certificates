@@ -11,7 +11,7 @@ import (
 )
 
 func (e *httpError) Error() string {
-	return fmt.Sprintf("HTTP %d: %s", e.statusCode, e.body)
+	return fmt.Sprintf("HTTP %d: %s", e.statusCode, redactJSON(e.body))
 }
 
 // isUnauthorized reports whether err is an HTTP 401 response, i.e. the server rejected the token
@@ -31,10 +31,10 @@ func parseResetTime(reset string) (time.Time, error) {
 
 func doHTTPRequest(method, url string, body io.Reader, headers map[string]string, debug bool) ([]byte, error) {
 	if debug {
-		fmt.Printf("[DEBUG] %s %s\n", method, url)
+		fmt.Printf("[DEBUG] %s %s\n", method, ScrubText(url))
 		if body != nil {
 			if buf, ok := body.(*bytes.Buffer); ok {
-				fmt.Printf("[DEBUG] Request body: %s\n", buf.String())
+				fmt.Printf("[DEBUG] Request body: %s\n", redactJSON(buf.String()))
 			}
 		}
 	}
@@ -96,7 +96,7 @@ func doHTTPRequest(method, url string, body io.Reader, headers map[string]string
 
 	if debug {
 		fmt.Printf("[DEBUG] Response body length: %d bytes\n", len(respBody))
-		fmt.Printf("[DEBUG] Response body: %s\n", string(respBody))
+		fmt.Printf("[DEBUG] Response body: %s\n", redactJSON(string(respBody)))
 	}
 
 	// Check for HTTP errors

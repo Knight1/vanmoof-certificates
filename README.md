@@ -5,6 +5,7 @@ This tool authenticates with VanMoof's API, retrieves your bikes, generates Ed25
 Currently this is the SA5 and SA6 bikes. So to list it S5, A5, Series 6, Series 6 Open.    
 
 If the RegEx does not match your Bikes Framenumber, open a PR, Issue or contact me.  
+When you share output, run with `-debug -redact`: it hides your tokens, keys and personal data.  
 If you have a Series 6 (Open) and you want to invite me as a guest, just contact me :)  
 Pull Requests are welcome! ❤️
 
@@ -17,7 +18,7 @@ Pull Requests are welcome! ❤️
 - Create and parse bike certificates
 - Show the BLE encryption key of S2/S3/S4 and older bikes (`-show-keys`), including a check for a pending key delivery over BLE (`getBikeMessages`) when no key is available yet
 - Interactive or command-line bike selection (by ID or frame number)
-- Debug mode for troubleshooting
+- Debug mode for troubleshooting, with `-redact` to share its output without secrets or personal data
 
 ## Usage & Installation
 See [USAGE.md](USAGE.md)

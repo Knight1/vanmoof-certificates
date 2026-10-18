@@ -85,26 +85,26 @@ func validateAndShowJWT(tokenString string) {
 	token, _, err := parser.ParseUnverified(tokenString, jwt.MapClaims{})
 
 	if err != nil {
-		fmt.Printf("[DEBUG] Failed to parse JWT: %v\n", err)
+		fmt.Printf("[DEBUG] Failed to parse JWT: %v\n", ScrubText(err.Error()))
 		return
 	}
 
-	// Show header
-	if headerJSON, err := json.MarshalIndent(token.Header, "[DEBUG]   ", "  "); err == nil {
+	// Show header and claims/payload, which -redact hides apart from harmless fields
+	header, _ := redactValue(token.Header, "", false)
+	if headerJSON, err := json.MarshalIndent(header, "[DEBUG]   ", "  "); err == nil {
 		fmt.Printf("[DEBUG] JWT Header:\n%s\n", string(headerJSON))
 	}
-
-	// Show claims/payload
 	if claims, ok := token.Claims.(jwt.MapClaims); ok {
-		if claimsJSON, err := json.MarshalIndent(claims, "[DEBUG]   ", "  "); err == nil {
+		payload, _ := redactValue(map[string]interface{}(claims), "", false)
+		if claimsJSON, err := json.MarshalIndent(payload, "[DEBUG]   ", "  "); err == nil {
 			fmt.Printf("[DEBUG] JWT Payload:\n%s\n", string(claimsJSON))
 		}
 	}
 
-	// Show signature info
+	// Show signature info: the signature is what makes the token usable, so it's a secret
 	parts := strings.Split(tokenString, ".")
 	if len(parts) == 3 {
-		fmt.Printf("[DEBUG] JWT Signature (base64): %s...\n", parts[2][:min(40, len(parts[2]))])
+		fmt.Printf("[DEBUG] JWT Signature (base64): %s\n", debugSecret(parts[2][:min(40, len(parts[2]))]+"..."))
 	}
 
 	fmt.Println()
