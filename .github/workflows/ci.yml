@@ -14,6 +14,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Test the Go versions of the matrix, not the toolchain go.mod asks for
+      GOTOOLCHAIN: local
     strategy:
       matrix:
         go-version: ['oldstable', 'stable']

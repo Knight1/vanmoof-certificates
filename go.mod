@@ -2,6 +2,8 @@ module vanmoof-certificates
 
 go 1.25.0
 
+toolchain go1.27.2
+
 require (
 	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
