@@ -3,6 +3,9 @@ package vanmoof
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -15,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/fxamacker/cbor/v2"
+	"golang.org/x/crypto/ocsp"
 )
 
 // A certificate is only valid if each of its fields is right: of its type and in range, not
@@ -338,6 +342,74 @@ func FuzzDebugOutput(f *testing.F) {
 		})
 		if unescaped(out) {
 			t.Errorf("output not escaped: %q", out)
+		}
+	})
+}
+
+// Whatever OCSP answers about a revoked certificate, it's never good: not a response for
+// another certificate, from another CA, from a certificate of the CA's that isn't for OCSP,
+// or that isn't current, nor anything made of them. Only the CA's signature, or that of a
+// responder it authorized, makes a response count, and that can't be forged.
+func FuzzOCSPResponse(f *testing.F) {
+	ca := newCA(f, nil, "Test CA", nil, nil)
+	cert, other := newLeaf(f, &ca, "server", nil, nil), newLeaf(f, &ca, "other", nil, nil)
+	responder := issue(f, &ca, &x509.Certificate{Subject: pkix.Name{CommonName: "Responder"}, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageOCSPSigning}})
+	site := issue(f, &ca, &x509.Certificate{Subject: pkix.Name{CommonName: "Another site"}, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}})
+	revoked := ocsp.Response{Status: ocsp.Revoked, SerialNumber: cert.cert.SerialNumber, RevokedAt: time.Now().Add(-time.Hour)}
+	good := ocsp.Response{Status: ocsp.Good, SerialNumber: cert.cert.SerialNumber}
+	anHourAgo := time.Now().Add(-time.Hour)
+	for _, seed := range [][]byte{
+		ocspAnswer(ca, nil, revoked),
+		ocspAnswer(ca, &responder, revoked),
+		ocspAnswer(ca, nil, ocsp.Response{Status: ocsp.Good, SerialNumber: other.cert.SerialNumber}),
+		ocspAnswer(ca, &site, good),
+		ocspAnswer(newCA(f, nil, "Another CA", nil, nil), nil, good),
+		ocspAnswer(ca, nil, ocsp.Response{Status: ocsp.Good, SerialNumber: cert.cert.SerialNumber, ThisUpdate: anHourAgo.Add(-time.Hour), NextUpdate: anHourAgo}),
+		ocspAnswer(ca, nil, ocsp.Response{Status: ocsp.Good, SerialNumber: cert.cert.SerialNumber, ThisUpdate: anHourAgo}),
+		ocspAnswer(ca, nil, ocsp.Response{Status: ocsp.Unknown, SerialNumber: cert.cert.SerialNumber}),
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, response []byte) {
+		if r := ocspResult(response, cert.cert, ca.cert); r.status == statusGood {
+			t.Errorf("a revoked certificate is good: %+v", r)
+		}
+	})
+}
+
+// Whatever CRL a revoked certificate's URL serves, it's never good: not one from another
+// CA, one from before it was revoked, one for other certificates of the CA's (another part
+// of its CRL, CA certificates, some revocation reasons, other CAs' too), or one with a
+// critical extension this package doesn't know (a delta CRL's), nor anything made of them
+func FuzzCRL(f *testing.F) {
+	const crlURL = "http://ca.example/1.crl"
+	ca := newCA(f, nil, "Test CA", nil, nil)
+	cert := newLeaf(f, &ca, "server", nil, []string{crlURL})
+	anHourAgo := time.Now().Add(-time.Hour)
+	revoked := []x509.RevocationListEntry{{SerialNumber: cert.cert.SerialNumber, RevocationTime: anHourAgo}}
+	with := func(extensions ...pkix.Extension) []byte {
+		return crlOf(ca, x509.RevocationList{ExtraExtensions: extensions})
+	}
+	for _, seed := range [][]byte{
+		crlOf(ca, x509.RevocationList{RevokedCertificateEntries: revoked}),
+		crlOf(ca, x509.RevocationList{RevokedCertificateEntries: revoked, ExtraExtensions: []pkix.Extension{idpExtension(fullName(uri(crlURL)), onlyContainsUserCerts)}}),
+		crlOf(newCA(f, nil, "Another CA", nil, nil), x509.RevocationList{}),
+		crlOf(ca, x509.RevocationList{ThisUpdate: anHourAgo.Add(-time.Hour), NextUpdate: anHourAgo}),
+		with(idpExtension(fullName(uri("http://ca.example/2.crl")))),
+		with(idpExtension(nil, onlyContainsCACerts)),
+		with(idpExtension(nil, onlySomeReasons)),
+		with(idpExtension(nil, indirectCRL)),
+		with(pkix.Extension{Id: asn1.ObjectIdentifier{2, 5, 29, 27}, Critical: true, Value: must(asn1.Marshal(1))}), // deltaCRLIndicator
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, der []byte) {
+		crl, err := x509.ParseRevocationList(der)
+		if err != nil {
+			return
+		}
+		if r := crlResult(crl, crlURL, cert.cert, ca.cert); r.status == statusGood {
+			t.Errorf("a revoked certificate is good: %+v", r)
 		}
 	})
 }

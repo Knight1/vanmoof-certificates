@@ -2,13 +2,23 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	"math/big"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -244,9 +254,9 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-// fakeVanMoof answers like VanMoof for an account without bikes and invitations, for the
-// rest of the test, so the flows that log in run to their end
-func fakeVanMoof(t *testing.T) {
+// fakeAccount returns VanMoof's answers for an account without bikes and invitations, by
+// path, and sets the test up for it: with an empty home directory, and the password
+func fakeAccount(t *testing.T) map[string]string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -255,13 +265,20 @@ func fakeVanMoof(t *testing.T) {
 	claims := base64.RawURLEncoding.EncodeToString(fmt.Appendf(nil, `{"exp":%d}`, time.Now().Add(time.Hour).Unix()))
 	token := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256"}`)) + "." + claims + ".c2lnbmF0dXJl"
 	const userID = "00000000-0000-4000-8000-000000000001"
-	responses := map[string]string{
+	return map[string]string{
 		"/v8/authenticate":                         `{"token":"` + token + `","refreshToken":"refresh"}`,
 		"/v8/getApplicationToken":                  `{"token":"` + token + `"}`,
 		"/v8/getCustomerData":                      `{"data":{"uuid":"` + userID + `","bikes":[],"bikeDetails":[]}}`,
 		"/v8/getBikeSharingInvitations":            `{"invitations":[]}`,
 		"/external/riders/" + userID + "/vehicles": `{"vehicle_access":[]}`,
 	}
+}
+
+// fakeVanMoof answers the tool's requests like VanMoof for fakeAccount, for the rest of the
+// test, so the flows that log in run to their end
+func fakeVanMoof(t *testing.T) {
+	t.Helper()
+	responses := fakeAccount(t)
 	http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		body, ok := responses[r.URL.Path]
 		status := http.StatusOK
@@ -299,6 +316,62 @@ func TestRunLogsIn(t *testing.T) {
 	t.Setenv("VANMOOF_PASSWORD", "")
 	if status, out := runTool(t, "-show-keys", "static", "-email", email); status != 1 || !strings.Contains(out, "Error: authentication failed: error reading password") {
 		t.Errorf("without a password: status %d:\n%s", status, out)
+	}
+}
+
+// certificate issues a certificate from template, valid for 30 days, signed by issuer
+// (self-signed without one), and returns it with its key
+func certificate(t *testing.T, template, issuer *x509.Certificate, issuerKey *ecdsa.PrivateKey) (*x509.Certificate, *ecdsa.PrivateKey) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template.NotBefore, template.NotAfter = time.Now().Add(-time.Hour), time.Now().Add(30*24*time.Hour)
+	if issuer == nil {
+		issuer, issuerKey = template, key
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, issuer, &key.PublicKey, issuerKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cert, key
+}
+
+// VanMoof's servers here have a TLS certificate whose revocation neither OCSP nor a CRL can
+// confirm, as it names neither (and it isn't short-lived): the tool refuses to connect,
+// unless -allow-unknown-revocation
+func TestRunAllowUnknownRevocation(t *testing.T) {
+	responses := fakeAccount(t)
+	ca, caKey := certificate(t, &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "Test CA"},
+		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}, nil, nil)
+	leaf, key := certificate(t, &x509.Certificate{SerialNumber: big.NewInt(2),
+		DNSNames: []string{"api.vanmoof-api.com", "bikeapi.production.vanmoof.cloud", "vehicleregistry.production.vanmoof.cloud"}}, ca, caKey)
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, responses[r.URL.Path])
+	}))
+	server.TLS = &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{leaf.Raw}, PrivateKey: key}}}
+	server.Config.ErrorLog = log.New(io.Discard, "", 0) // the handshakes the tool refuses
+	server.StartTLS()
+	t.Cleanup(server.Close)
+	roots := x509.NewCertPool()
+	roots.AddCert(ca)
+	http.DefaultTransport = &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots}, DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return new(net.Dialer).DialContext(ctx, network, server.Listener.Addr().String())
+	}}
+	t.Cleanup(func() { http.DefaultTransport = noNetwork{} })
+
+	const email = "user@example.com"
+	if status, out := runTool(t, "-invitations", "list", "-email", email); status != 1 ||
+		!strings.Contains(out, "vanmoof: TLS certificate revocation unknown") || !strings.Contains(out, "-allow-unknown-revocation connects anyway") {
+		t.Errorf("without -allow-unknown-revocation: status %d\n%s", status, out)
+	}
+	if status, out := runTool(t, "-allow-unknown-revocation", "-invitations", "list", "-email", email); status != 0 || !strings.Contains(out, "No pending bike sharing invitations") {
+		t.Errorf("with -allow-unknown-revocation: status %d\n%s", status, out)
 	}
 }
 
@@ -346,7 +419,7 @@ func FuzzRun(f *testing.F) {
 	for _, line := range []string{"-version", "-h", "-genkey -redact", "-cert AAAA", "-show-keys maybe", "-invitations accept=1,2",
 		"-bikes 1,,2", "-debug -redact -show-everything", "-show-saved", "-cert \x1b[2J", "-show-keys \x1b[2J -debug",
 		"-framenumber BBBBBB00001AA -cert QUFB", "-sudo -cert garbage", "-debug -bikes LEAKY12345ZZ", "-new-key -pubkey x",
-		"-cleartext-keys -no-cache", "--", "-email= -debug", "-bikes ask -debug", "-invitations decline=\xe2\x80\xae"} {
+		"-cleartext-keys -no-cache", "-allow-unknown-revocation -debug", "--", "-email= -debug", "-bikes ask -debug", "-invitations decline=\xe2\x80\xae"} {
 		f.Add(line)
 	}
 	f.Fuzz(func(t *testing.T, line string) {

@@ -21,6 +21,7 @@ Pull Requests are welcome! ❤️
 - Show the BLE encryption key of S2/S3/S4 and older bikes (`-show-keys`), including a check for a pending key delivery over BLE (`getBikeMessages`) when no key is available yet
 - Interactive or command-line bike selection (by ID or frame number, of any generation)
 - Exit status for scripts: `1` if logging in or a certificate failed (including an invalid one), `2` for invalid flags
+- Checks the TLS certificates of VanMoof's servers for revocation before sending them anything: with OCSP and the CRL, once per certificate, keeping the connections alive. A revoked certificate is refused, and so is one neither confirms, unless `-allow-unknown-revocation`
 - Debug mode for troubleshooting, with `-redact` to share its output without secrets or personal data
 - Go package for your own programs: log in, list the bikes, and request and check certificates, with the results as values
 

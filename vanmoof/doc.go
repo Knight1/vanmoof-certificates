@@ -21,6 +21,11 @@
 // save Session.Tokens and continue with Resume. Keep the tokens and private keys secret:
 // they let anyone unlock the bikes.
 //
+// Requests go over a copy of http.DefaultTransport that checks the TLS certificates of
+// VanMoof's servers for revocation, with OCSP and CRLs, once each: a revoked one fails
+// them with ErrRevoked, and one neither confirms with ErrRevocationUnknown, unless
+// SetAllowUnknownRevocation.
+//
 // The package's other exported functions, such as GetCert, ShowKeys and
 // ProcessCertificate, are the command's own: they prompt and print rather than return
 // their results.

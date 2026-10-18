@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,9 +15,10 @@ import (
 	"time"
 )
 
-// The tests never touch the real cache, and never wait for input: they start with an empty
-// home directory, without VANMOOF_CACHE_KEY and VANMOOF_PASSWORD, and with standard input
-// closed (setStdin and typePassword give the prompts their input)
+// The tests never reach the network or the real cache, and never wait for input: a request
+// fails unless the test answers it (fakeVanMoof, newRevocationServers), they start with an
+// empty home directory, without VANMOOF_CACHE_KEY and VANMOOF_PASSWORD, and with standard
+// input closed (setStdin and typePassword give the prompts their input)
 func TestMain(m *testing.M) {
 	home, err := os.MkdirTemp("", "vanmoof-test-home")
 	if err != nil {
@@ -28,6 +30,9 @@ func TestMain(m *testing.M) {
 	os.Unsetenv("VANMOOF_CACHE_KEY")
 	os.Unsetenv("VANMOOF_PASSWORD")
 	os.Stdin.Close()
+	http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return nil, fmt.Errorf("the test tried to reach %s", r.URL.Host)
+	})
 	code := m.Run()
 	os.RemoveAll(home)
 	os.Exit(code)

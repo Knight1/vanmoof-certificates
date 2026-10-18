@@ -46,6 +46,7 @@ func run(args []string) int {
 	invitations := flags.String("invitations", "", "Bike sharing invitations: 'list' them, or 'accept' or 'decline' them, asking which; 'accept=all', or numbers or GUIDs after '=', choose them")
 	cleartextKeys := flags.Bool("cleartext-keys", false, "Without VANMOOF_CACHE_KEY, save the key pair, certificates, BLE keys and customer data unencrypted (else they're only saved encrypted)")
 	noCache := flags.Bool("no-cache", false, "Do not read or write the cache (tokens, key pair, certificates, BLE keys, bike messages, customer data)")
+	allowUnknownRevocation := flags.Bool("allow-unknown-revocation", false, "Connect even when neither OCSP nor the CRL can confirm that a VanMoof server's TLS certificate isn't revoked, e.g. with the CA's servers unreachable (a revoked one is always refused)")
 	sudo := flags.Bool("sudo", false, "Skip all validation checks")
 	if err := flags.Parse(args); err != nil {
 		// The flag package has printed the error and the usage (or only the usage, for -h)
@@ -70,14 +71,15 @@ func run(args []string) int {
 		return exitUsage
 	}
 	vanmoof.SetRedaction(*redact, *showEverything)
+	vanmoof.SetAllowUnknownRevocation(*allowUnknownRevocation)
 
 	if *debug {
 		bikesShown := *bikes
 		if bikesShown != "all" && bikesShown != "ask" {
 			bikesShown = vanmoof.RedactID(bikesShown)
 		}
-		fmt.Printf("[DEBUG] Flags: version=%v, genkey=%v, cert='%s', pubkey='%s', framenumber='%s', email='%s', bikes='%s', show-keys='%s', new-key=%v, show-saved=%v, invitations='%s', cleartext-keys=%v, no-cache=%v, sudo=%v, redact=%v, show-everything=%v\n",
-			*version, *genkey, vanmoof.Redact(*cert), vanmoof.Redact(*pubkey), vanmoof.RedactID(*frameNumber), vanmoof.Redact(*email), bikesShown, vanmoof.ScrubText(*showKeys), *newKey, *showSaved, vanmoof.ScrubText(*invitations), *cleartextKeys, *noCache, *sudo, *redact, *showEverything)
+		fmt.Printf("[DEBUG] Flags: version=%v, genkey=%v, cert='%s', pubkey='%s', framenumber='%s', email='%s', bikes='%s', show-keys='%s', new-key=%v, show-saved=%v, invitations='%s', cleartext-keys=%v, no-cache=%v, allow-unknown-revocation=%v, sudo=%v, redact=%v, show-everything=%v\n",
+			*version, *genkey, vanmoof.Redact(*cert), vanmoof.Redact(*pubkey), vanmoof.RedactID(*frameNumber), vanmoof.Redact(*email), bikesShown, vanmoof.ScrubText(*showKeys), *newKey, *showSaved, vanmoof.ScrubText(*invitations), *cleartextKeys, *noCache, *allowUnknownRevocation, *sudo, *redact, *showEverything)
 	}
 
 	if *version {

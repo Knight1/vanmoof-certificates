@@ -49,8 +49,11 @@ func doHTTPRequest(method, url string, body io.Reader, headers map[string]string
 		}
 	}
 
+	// The transport checks the servers' TLS certificates for revocation (see revocation.go)
+	transport, checker := checkedTransport(http.DefaultTransport)
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Transport: transport,
+		Timeout:   30 * time.Second,
 		// Do not follow redirects to prevent leaking auth headers to redirect targets
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -73,6 +76,9 @@ func doHTTPRequest(method, url string, body io.Reader, headers map[string]string
 	defer resp.Body.Close()
 
 	if debug {
+		if checker != nil && resp.TLS != nil {
+			checker.print(resp.TLS)
+		}
 		fmt.Printf("[DEBUG] Response status: %d\n", resp.StatusCode)
 
 		// Display rate limit headers in human-readable format
