@@ -10,7 +10,10 @@ import (
 	"net/url"
 )
 
-func GenerateED25519() (string, string, error) {
+// GenerateED25519 generates an Ed25519 key pair in base64: the 64 byte private key (seed
+// and public key), and the 32 byte public key to request certificates for. Keep the
+// private key secret: with a certificate for its public key, it unlocks the bike.
+func GenerateED25519() (privateKey, publicKey string, err error) {
 	pubKey, privKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate key pair: %w", err)

@@ -122,7 +122,7 @@ func decrypt(data []byte, passphrase string) ([]byte, error) {
 // returns a nil map and no error. A cache file that exists but can't be read, decrypted
 // or parsed is an error instead, so callers don't overwrite it: it may hold other
 // accounts' tokens, or be encrypted with a different VANMOOF_CACHE_KEY.
-func loadAllTokenCaches(debug bool) (map[string]CachedTokens, error) {
+func loadAllTokenCaches(debug bool) (map[string]Tokens, error) {
 	path, err := tokenCachePath()
 	if err != nil {
 		if debug {
@@ -146,7 +146,7 @@ func loadAllTokenCaches(debug bool) (map[string]CachedTokens, error) {
 
 	// An unencrypted (plain JSON) cache is used as is. If VANMOOF_CACHE_KEY has been
 	// set since it was written, it's encrypted right away, keeping every account.
-	var plainMap map[string]CachedTokens
+	var plainMap map[string]Tokens
 	if err := json.Unmarshal(data, &plainMap); err == nil {
 		if key != "" && plainMap != nil {
 			if debug {
@@ -169,7 +169,7 @@ func loadAllTokenCaches(debug bool) (map[string]CachedTokens, error) {
 		fmt.Println("[DEBUG] Token cache decrypted")
 	}
 
-	var cacheMap map[string]CachedTokens
+	var cacheMap map[string]Tokens
 	if err := json.Unmarshal(plaintext, &cacheMap); err != nil {
 		return nil, fmt.Errorf("%s is corrupt (delete it to start over): %w", path, err)
 	}
@@ -186,7 +186,7 @@ func loadAllTokenCaches(debug bool) (map[string]CachedTokens, error) {
 }
 
 // saveAllTokenCaches writes the full cache map to disk
-func saveAllTokenCaches(cacheMap map[string]CachedTokens, debug bool) {
+func saveAllTokenCaches(cacheMap map[string]Tokens, debug bool) {
 	path, err := tokenCachePath()
 	if err != nil {
 		if debug {
@@ -267,7 +267,7 @@ func writeFileAtomic(path string, data []byte) error {
 }
 
 // loadTokenCache loads cached tokens from disk for the given email
-func loadTokenCache(email string, debug bool) *CachedTokens {
+func loadTokenCache(email string, debug bool) *Tokens {
 	cacheMap, err := loadAllTokenCaches(debug)
 	if err != nil {
 		fmt.Printf("WARNING: Token cache not used: %v\n", ScrubText(err.Error()))
@@ -301,10 +301,10 @@ func saveTokenCache(email, authToken, refreshToken, appToken string, debug bool)
 		return
 	}
 	if cacheMap == nil {
-		cacheMap = make(map[string]CachedTokens)
+		cacheMap = make(map[string]Tokens)
 	}
 
-	cacheMap[email] = CachedTokens{
+	cacheMap[email] = Tokens{
 		AuthToken:    authToken,
 		AppToken:     appToken,
 		RefreshToken: refreshToken,

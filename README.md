@@ -20,9 +20,29 @@ Pull Requests are welcome! ❤️
 - Interactive or command-line bike selection (by ID or frame number, of any generation)
 - Exit status for scripts: `1` if logging in or a certificate failed (including an invalid one), `2` for invalid flags
 - Debug mode for troubleshooting, with `-redact` to share its output without secrets or personal data
+- Go package for your own programs: log in, list the bikes, and request and check certificates, with the results as values
 
 ## Usage & Installation
-See [USAGE.md](USAGE.md), which also covers [using it from scripts and other programs](USAGE.md#using-it-from-scripts-and-other-programs)
+See [USAGE.md](USAGE.md), which also covers [using it from scripts and other programs](USAGE.md#using-it-from-scripts-and-other-programs) and [in Go](USAGE.md#using-it-in-go)
+
+## Using it in Go
+
+```console
+go get github.com/Knight1/vanmoof-certificates/vanmoof
+```
+
+```go
+s, err := vanmoof.Login(email, password)
+bikes, err := s.Bikes()
+cert, err := s.RequestCertificate(bikes[0], publicKey)
+
+res := vanmoof.CheckCertificate(cert, vanmoof.Expect{PublicKey: publicKey, Bike: &bikes[0]})
+if !res.Valid {
+	log.Println(res.Errors)
+}
+```
+
+USAGE.md has [a complete example](USAGE.md#using-it-in-go), and [pkg.go.dev](https://pkg.go.dev/github.com/Knight1/vanmoof-certificates/vanmoof) (or `go doc -all github.com/Knight1/vanmoof-certificates/vanmoof`) the whole package.
 
 ## Certificate Structure
 

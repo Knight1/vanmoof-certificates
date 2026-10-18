@@ -15,15 +15,15 @@ import (
 )
 
 func TestIsS6Certificate(t *testing.T) {
-	s6Bike := BikeData{FrameNumber: "AAAAA000000AA", BleProfile: "ELECTRIFIED_2025"}
-	sa5Bike := BikeData{FrameNumber: "BBBBBB00000AA", BleProfile: "ELECTRIFIED_2022"}
+	s6Bike := Bike{FrameNumber: "AAAAA000000AA", BleProfile: "ELECTRIFIED_2025"}
+	sa5Bike := Bike{FrameNumber: "BBBBBB00000AA", BleProfile: "ELECTRIFIED_2022"}
 	// Some SA5 frame numbers have the S6 shape (5 letters + 6 digits)
-	sa5S6Shaped := BikeData{FrameNumber: "AAAAA000001AA", BleProfile: "ELECTRIFIED_2022"}
+	sa5S6Shaped := Bike{FrameNumber: "AAAAA000001AA", BleProfile: "ELECTRIFIED_2022"}
 
 	tests := []struct {
 		name      string
 		r         certResult
-		requested *BikeData
+		requested *Bike
 		want      bool
 	}{
 		{"matched S6 bike", certResult{matchedBike: &s6Bike}, nil, true},
@@ -31,7 +31,7 @@ func TestIsS6Certificate(t *testing.T) {
 		{"matched SA5 bike, S6-shaped frame ID", certResult{matchedBike: &sa5S6Shaped, frameID: []byte("AAAAA000001AA")}, nil, false},
 		{"requested S6 bike", certResult{frameID: []byte("AAAAA000000AA")}, &s6Bike, true},
 		{"requested SA5 bike, S6-shaped frame ID", certResult{frameID: []byte("AAAAA000001AA")}, &sa5S6Shaped, false},
-		{"-framenumber without a BLE profile, S6-shaped frame ID", certResult{frameID: []byte("AAAAA000000AA")}, &BikeData{FrameNumber: "AAAAA000000AA"}, true},
+		{"-framenumber without a BLE profile, S6-shaped frame ID", certResult{frameID: []byte("AAAAA000000AA")}, &Bike{FrameNumber: "AAAAA000000AA"}, true},
 		{"no matched bike, S6-shaped frame ID", certResult{frameID: []byte("AAAAA000000AA")}, nil, true},
 		{"no matched bike, SA5-shaped frame ID", certResult{frameID: []byte("BBBBBB00000AA")}, nil, false},
 		{"no matched bike, empty frame ID", certResult{}, nil, false},
@@ -122,18 +122,18 @@ func TestProcessCertificateVerdict(t *testing.T) {
 	tests := []struct {
 		name        string
 		cert        string
-		bike        *BikeData // the bike the certificate was requested for, or nil for -cert
-		frameNumber string    // -framenumber
-		verdict     string    // expected start of the output
-		lines       []string  // expected elsewhere in the output
+		bike        *Bike    // the bike the certificate was requested for, or nil for -cert
+		frameNumber string   // -framenumber
+		verdict     string   // expected start of the output
+		lines       []string // expected elsewhere in the output
 	}{
 		{"signed certificate", testCert(t, ca, testCertFields(sa5)), nil, "",
 			"Certificate valid: " + sa5, nil},
-		{"certificate for the requested bike", testCert(t, ca, testCertFields(sa5)), &BikeData{BikeID: 42, FrameNumber: sa5, BleProfile: "ELECTRIFIED_2022"}, "",
+		{"certificate for the requested bike", testCert(t, ca, testCertFields(sa5)), &Bike{BikeID: 42, FrameNumber: sa5, BleProfile: "ELECTRIFIED_2022"}, "",
 			"Certificate valid: " + sa5, []string{"bike matched"}},
-		{"certificate for another bike", testCert(t, ca, testCertFields(sa5)), &BikeData{BikeID: 42, FrameNumber: "BBBBBB00002AA", BleProfile: "ELECTRIFIED_2022"}, "",
+		{"certificate for another bike", testCert(t, ca, testCertFields(sa5)), &Bike{BikeID: 42, FrameNumber: "BBBBBB00002AA", BleProfile: "ELECTRIFIED_2022"}, "",
 			"Certificate INVALID", []string{"✗ Bike ID 42 mismatch"}},
-		{"certificate for a shared bike", testCert(t, ca, testCertFields(sa5)), &BikeData{FrameNumber: sa5, BleProfile: "ELECTRIFIED_2022"}, "",
+		{"certificate for a shared bike", testCert(t, ca, testCertFields(sa5)), &Bike{FrameNumber: sa5, BleProfile: "ELECTRIFIED_2022"}, "",
 			"Certificate valid: " + sa5, []string{"bike matched"}},
 		{"matching -framenumber", testCert(t, ca, testCertFields(sa5)), nil, sa5,
 			"Certificate valid: " + sa5, nil},
@@ -141,13 +141,13 @@ func TestProcessCertificateVerdict(t *testing.T) {
 			"Certificate INVALID", []string{"✗ Bike frame BBBBBB00002AA not found in certificate"}},
 		{"warning on a valid certificate", testCert(t, ca, longLived), nil, "",
 			"Certificate valid: " + sa5, []string{"⚠ Certificate expiry is suspiciously far in the future"}},
-		{"S6 signature can't be verified", testCert(t, nil, testCertFields(s6)), &BikeData{BikeID: 8, FrameNumber: s6, BleProfile: "ELECTRIFIED_2025"}, "",
+		{"S6 signature can't be verified", testCert(t, nil, testCertFields(s6)), &Bike{BikeID: 8, FrameNumber: s6, BleProfile: "ELECTRIFIED_2025"}, "",
 			"Certificate valid, but signature not verified: " + s6, []string{"Note: " + s6SignatureNote}},
 		{"S6-shaped frame offline, signature can't be verified", testCert(t, nil, testCertFields(s6)), nil, "",
 			"Certificate valid, but signature not verified: " + s6, []string{"Note: " + s6SignatureNote}},
 		{"SA5 with a bad signature", testCert(t, nil, testCertFields(sa5)), nil, "",
 			"Certificate INVALID", []string{"✗ Signature INVALID"}},
-		{"SA5 with an S6-shaped frame number and a bad signature", testCert(t, nil, testCertFields(sa5S6Shaped)), &BikeData{BikeID: 7, FrameNumber: sa5S6Shaped, BleProfile: "ELECTRIFIED_2022"}, "",
+		{"SA5 with an S6-shaped frame number and a bad signature", testCert(t, nil, testCertFields(sa5S6Shaped)), &Bike{BikeID: 7, FrameNumber: sa5S6Shaped, BleProfile: "ELECTRIFIED_2022"}, "",
 			"Certificate INVALID", []string{"✗ Signature INVALID"}},
 	}
 
@@ -156,7 +156,7 @@ func TestProcessCertificateVerdict(t *testing.T) {
 			var valid bool
 			out := captureStdout(t, func() {
 				if tt.bike != nil {
-					valid = checkCertificate(tt.cert, "", tt.bike, "", []BikeData{*tt.bike}, false)
+					valid = checkCertificate(tt.cert, Expect{Bike: tt.bike, Bikes: []Bike{*tt.bike}}, false)
 				} else {
 					valid = ProcessCertificate(tt.cert, "", tt.frameNumber, false)
 				}

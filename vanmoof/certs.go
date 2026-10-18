@@ -3,6 +3,7 @@ package vanmoof
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -13,61 +14,43 @@ import (
 // ProcessCertificate parses and checks a certificate given with -cert, against the
 // optional -pubkey and -framenumber. It reports whether the certificate is valid.
 func ProcessCertificate(certStr, expectedPubKeyStr, frameNumber string, debug bool) bool {
-	var expectedBike *BikeData
+	expect := Expect{PublicKey: expectedPubKeyStr}
 	if frameNumber != "" {
-		expectedBike = &BikeData{FrameNumber: frameNumber}
+		expect.Bike = &Bike{FrameNumber: frameNumber}
 	}
-	return checkCertificate(certStr, expectedPubKeyStr, expectedBike, "", nil, debug)
+	return checkCertificate(certStr, expect, debug)
 }
 
-// checkCertificate parses a certificate and checks it against the expected public key,
-// bike and user ID, each skipped if empty. expectedBike is the bike the certificate was
-// requested for, or the one given with -framenumber. bikes are the account's bikes, to report
-// which one the certificate matches. It reports whether the certificate is valid.
-func checkCertificate(certStr, expectedPubKeyStr string, expectedBike *BikeData, expectedUserID string, bikes []BikeData, debug bool) bool {
-	if certStr == "" {
-		fmt.Println("Error: Certificate string is empty")
-		return false
-	}
-
-	certData, err := base64.StdEncoding.DecodeString(certStr)
+// CheckCertificate parses a base64 certificate, as Session.RequestCertificate returns it,
+// and checks its signature against VanMoof's known key, its expiry, and whatever expect
+// says it has to be for.
+func CheckCertificate(cert string, expect Expect) CertificateResult {
+	r, certData, err := analyzeCertificate(cert, expect)
 	if err != nil {
-		fmt.Println("Error decoding certificate:", err)
-		return false
+		return CertificateResult{Errors: []string{err.Error()}}
 	}
+	return r.result(certData)
+}
 
-	if len(certData) < 134 {
-		fmt.Println("Error: Certificate is too short")
+// AccessLevel describes the certificate's role, such as "Owner" or "Guest"
+func (r CertificateResult) AccessLevel() string {
+	return getRoleDescription(r.Role)
+}
+
+// checkCertificate checks a certificate like CheckCertificate, and prints the result.
+// expect.Bike is the bike the certificate was requested for, or the one given with
+// -framenumber. It reports whether the certificate is valid.
+func checkCertificate(certStr string, expect Expect, debug bool) bool {
+	r, certData, err := analyzeCertificate(certStr, expect)
+	if err != nil {
+		fmt.Printf("Error: %s\n", printable(err.Error()))
 		return false
-	}
-
-	// Parse certificate into result struct
-	r := parseCertificate(certData, bikes)
-
-	// Cross-reference verifications
-	verifyBike(&r, expectedBike)
-	verifyPublicKey(&r, expectedPubKeyStr)
-	verifyUserID(&r, expectedUserID)
-
-	// Verify the certificate signature against known CA keys. A match is silent, a
-	// mismatch is an error, except on S6 where it only means the key isn't known yet.
-	perBikeKey := isS6Certificate(r, expectedBike)
-	verified, hasKeys := verifyCertificateSignature(r.signature, certData[64:])
-	r.signatureVerified = verified
-	if hasKeys && !verified {
-		if perBikeKey {
-			// No S6 signing key is known yet, so a mismatch against the known CA keys
-			// says nothing about the certificate and is not an error.
-			r.notes = append(r.notes, s6SignatureNote)
-		} else {
-			r.errors = append(r.errors, "Signature INVALID: does not verify against any known VanMoof CA key")
-		}
 	}
 
 	// Output
 	if debug {
-		printVerbose(r, certData, expectedPubKeyStr, expectedBike, expectedUserID, bikes)
-		validateCertificateSignature(r.signature, certData[64:], debug, perBikeKey)
+		printVerbose(r, certData, expect)
+		validateCertificateSignature(r.signature, certData[64:], debug, r.perBikeKey)
 		for _, n := range r.notes {
 			fmt.Printf("  Info: %s\n", printable(n))
 		}
@@ -77,13 +60,77 @@ func checkCertificate(certStr, expectedPubKeyStr string, expectedBike *BikeData,
 	return len(r.errors) == 0
 }
 
-// parseCertificate extracts and validates all fields from raw certificate bytes
+// analyzeCertificate decodes, parses and checks a certificate against expect. It only
+// returns an error for one too broken to parse at all.
+func analyzeCertificate(certStr string, expect Expect) (certResult, []byte, error) {
+	if certStr == "" {
+		return certResult{}, nil, errors.New("certificate is empty")
+	}
+
+	certData, err := base64.StdEncoding.DecodeString(certStr)
+	if err != nil {
+		return certResult{}, nil, fmt.Errorf("certificate isn't valid base64: %w", err)
+	}
+
+	if len(certData) < 134 {
+		return certResult{}, nil, errors.New("certificate is too short")
+	}
+
+	// Parse certificate into result struct
+	r := parseCertificate(certData, expect.Bikes)
+
+	// Cross-reference verifications
+	verifyBike(&r, expect.Bike)
+	verifyPublicKey(&r, expect.PublicKey)
+	verifyUserID(&r, expect.UserID)
+
+	// Verify the certificate signature against known CA keys. A match is silent, a
+	// mismatch is an error, except on S6 where it only means the key isn't known yet.
+	r.perBikeKey = isS6Certificate(r, expect.Bike)
+	verified, hasKeys := verifyCertificateSignature(r.signature, certData[64:])
+	r.signatureVerified = verified
+	if hasKeys && !verified {
+		if r.perBikeKey {
+			// No S6 signing key is known yet, so a mismatch against the known CA keys
+			// says nothing about the certificate and is not an error.
+			r.notes = append(r.notes, s6SignatureNote)
+		} else {
+			r.errors = append(r.errors, "Signature INVALID: does not verify against any known VanMoof CA key")
+		}
+	}
+	return r, certData, nil
+}
+
+// result returns r as a CertificateResult, with certData the decoded certificate
+func (r certResult) result(certData []byte) CertificateResult {
+	return CertificateResult{
+		Valid:             len(r.errors) == 0,
+		Errors:            r.errors,
+		Warnings:          r.warnings,
+		Notes:             r.notes,
+		SignatureVerified: r.signatureVerified,
+		BikeVerified:      r.bikeIDVerified,
+		PublicKeyVerified: r.pubKeyVerified,
+		UserIDVerified:    r.userIDVerified,
+		MatchedBike:       r.matchedBike,
+		ID:                r.apiID,
+		FrameModule:       string(r.frameID),
+		BikeModule:        string(r.bikeID),
+		Expires:           time.Unix(int64(r.expiry), 0),
+		Role:              r.role,
+		UserID:            r.userID,
+		PublicKey:         r.publicKey,
+		Signature:         certData[:64],
+		Payload:           certData[64:],
+	}
+}
+
 const s6SignatureNote = "Signature verification unavailable: no S6 certificate signing key is known yet"
 
 // isS6Certificate reports whether the certificate belongs to an S6. The BLE profile of
 // the bike it was requested for decides, or else that of the account bike it matches.
 // Without either (offline), the frame number shape decides, which some SA5s share.
-func isS6Certificate(r certResult, requestedBike *BikeData) bool {
+func isS6Certificate(r certResult, requestedBike *Bike) bool {
 	switch {
 	case requestedBike != nil && requestedBike.BleProfile != "":
 		return requestedBike.BleProfile == "ELECTRIFIED_2025"
@@ -94,7 +141,8 @@ func isS6Certificate(r certResult, requestedBike *BikeData) bool {
 	}
 }
 
-func parseCertificate(certData []byte, bikes []BikeData) certResult {
+// parseCertificate extracts and validates all fields from raw certificate bytes
+func parseCertificate(certData []byte, bikes []Bike) certResult {
 	r := certResult{
 		signature: certData[0:64],
 	}
@@ -229,7 +277,7 @@ func parseCertificate(certData []byte, bikes []BikeData) certResult {
 }
 
 // verifyBike checks the certificate against the bike it should be for
-func verifyBike(r *certResult, bike *BikeData) {
+func verifyBike(r *certResult, bike *Bike) {
 	if bike == nil {
 		return
 	}
@@ -331,7 +379,8 @@ func printCompact(r certResult) {
 }
 
 // printVerbose prints the full detailed output (debug mode)
-func printVerbose(r certResult, certData []byte, expectedPubKeyStr string, expectedBike *BikeData, expectedUserID string, bikes []BikeData) {
+func printVerbose(r certResult, certData []byte, expect Expect) {
+	expectedPubKeyStr, expectedBike, expectedUserID, bikes := expect.PublicKey, expect.Bike, expect.UserID, expect.Bikes
 	fmt.Printf("Total Certificate Length: %d bytes\n", len(certData))
 	fmt.Printf("Decoded Certificate (hex): %s\n", Redact(fmt.Sprintf("%x", certData)))
 
@@ -413,7 +462,7 @@ func printVerbose(r certResult, certData []byte, expectedPubKeyStr string, expec
 			if r.matchedBike.BikeID != 0 {
 				fmt.Printf("  Matched Bike ID: %s\n", RedactID(fmt.Sprint(r.matchedBike.BikeID)))
 			}
-			fmt.Printf("  Bike Name: %s\n", Redact(r.matchedBike.Name))
+			fmt.Printf("  Bike Name: %s\n", Redact(displayName(*r.matchedBike)))
 			fmt.Printf("  Frame Number: %s\n", RedactID(r.matchedBike.FrameNumber))
 		} else {
 			fmt.Printf("✗ Certificate does NOT match any of your bikes\n")

@@ -37,12 +37,13 @@ func filterKeyBikes(details []BikeDetail) []BikeDetail {
 // (SA5/S6), reusing the authentication and customer data already fetched for the keys
 // instead of fetching them a second time.
 func ShowKeys(email, mode, bikeFilter, pubkey string, debug, noCache bool) error {
-	authToken, appToken, customerData, err := login(email, debug, noCache)
+	s, customerData, err := login(email, debug, noCache)
 	if err != nil {
 		return err
 	}
+	tokens := s.Tokens()
 
-	warnPendingInvitations(authToken, debug)
+	warnPendingInvitations(tokens.AuthToken, debug)
 
 	if debug {
 		fmt.Printf("[DEBUG] Customer UUID: %s\n", Redact(customerData.Data.UUID))
@@ -50,7 +51,7 @@ func ShowKeys(email, mode, bikeFilter, pubkey string, debug, noCache bool) error
 		debugPrintBikeProfiles(customerData.Data.Bikes)
 	}
 
-	if err := printStaticKeys(customerData.Data.BikeDetails, bikeFilter, authToken, debug); err != nil {
+	if err := printStaticKeys(customerData.Data.BikeDetails, bikeFilter, tokens.AuthToken, debug); err != nil {
 		return err
 	}
 
@@ -58,8 +59,10 @@ func ShowKeys(email, mode, bikeFilter, pubkey string, debug, noCache bool) error
 		return nil
 	}
 
-	bikes := mergeSharedVehicles(customerData.Data.Bikes, customerData.Data.UUID, appToken, debug)
-	return requestCertificates(bikes, customerData.Data.UUID, appToken, bikeFilter, pubkey, debug)
+	bikes := mergeSharedVehicles(customerData.Data.Bikes, customerData.Data.UUID, tokens.AppToken, debug)
+	err = requestCertificates(bikes, customerData.Data.UUID, s, bikeFilter, pubkey, debug)
+	cacheRenewedTokens(email, tokens, s, debug, noCache)
+	return err
 }
 
 // printStaticKeys prints the BLE encryption key (or bike message status) of the
@@ -72,9 +75,9 @@ func printStaticKeys(details []BikeDetail, bikeFilter, authToken string, debug b
 	}
 
 	// Reuse the regular bike selection (-bikes all / IDs / frame numbers / ask)
-	list := make([]BikeData, len(candidates))
+	list := make([]Bike, len(candidates))
 	for i, d := range candidates {
-		list[i] = BikeData{Name: d.Name, BikeID: d.BikeID, FrameNumber: d.FrameNumber, BleProfile: d.BleProfile}
+		list[i] = Bike{Name: d.Name, BikeID: d.BikeID, FrameNumber: d.FrameNumber, BleProfile: d.BleProfile}
 	}
 	selected, err := selectBikes(list, bikeFilter)
 	if err != nil {

@@ -22,7 +22,30 @@ func ReadLine() (string, error) {
 	return strings.TrimSpace(line), nil
 }
 
-func selectBikes(bikes []BikeData, filter string) ([]BikeData, error) {
+// Model returns the bike's model, such as "SA5" or "S6", or its BLE profile if it's one
+// this package doesn't know
+func (b Bike) Model() string {
+	if model := bleProfileModel[b.BleProfile]; model != "" {
+		return model
+	}
+	return b.BleProfile
+}
+
+// UsesCertificates reports whether the bike is unlocked with certificates (S5/A5 and S6),
+// which Session.RequestCertificate is for. Older bikes use a BLE key instead.
+func (b Bike) UsesCertificates() bool {
+	return isCertOnlyProfile(b.BleProfile)
+}
+
+// displayName is the bike's name for output: for a shared bike, with its owner's name
+func displayName(b Bike) string {
+	if b.Owner != "" {
+		return b.Name + " (shared by " + b.Owner + ")"
+	}
+	return b.Name
+}
+
+func selectBikes(bikes []Bike, filter string) ([]Bike, error) {
 	if filter == "all" {
 		return bikes, nil
 	}
@@ -34,9 +57,9 @@ func selectBikes(bikes []BikeData, filter string) ([]BikeData, error) {
 		fmt.Println("\nAvailable bikes:")
 		for i, bike := range bikes {
 			if bike.BikeID != 0 {
-				fmt.Printf("%d. %s (ID: %s, Frame: %s)\n", i+1, Redact(bike.Name), RedactID(fmt.Sprint(bike.BikeID)), RedactID(bike.FrameNumber))
+				fmt.Printf("%d. %s (ID: %s, Frame: %s)\n", i+1, Redact(displayName(bike)), RedactID(fmt.Sprint(bike.BikeID)), RedactID(bike.FrameNumber))
 			} else {
-				fmt.Printf("%d. %s (Frame: %s)\n", i+1, Redact(bike.Name), RedactID(bike.FrameNumber))
+				fmt.Printf("%d. %s (Frame: %s)\n", i+1, Redact(displayName(bike)), RedactID(bike.FrameNumber))
 			}
 		}
 
@@ -54,7 +77,7 @@ func selectBikes(bikes []BikeData, filter string) ([]BikeData, error) {
 
 	// Parse comma-separated bike IDs, frame numbers, or indices (interactive only).
 	// A bike given more than once, or both by ID and frame number, is selected once.
-	var selected []BikeData
+	var selected []Bike
 	seen := make(map[int]bool)
 	add := func(i int) {
 		if !seen[i] {

@@ -10,6 +10,9 @@ CGO_ENABLED=0 go build -mod=vendor -ldflags "-w -d"
 
 This builds a static binary (`-d` needs cgo off). On Windows, build with `go build -mod=vendor -ldflags "-w"`.
 
+Or install it without cloning: `go install github.com/Knight1/vanmoof-certificates@latest`
+puts it into `$(go env GOPATH)/bin`.
+
 ## Flags
 
 | Flag | Description | Default |
@@ -289,8 +292,8 @@ openssl pkey -in public.pem -pubin -outform DER | tail -c 32 | base64
 ## Using it from Scripts and Other Programs
 
 Other programs use the tool by running it: the exit status says whether everything
-worked, and the output contains the certificate. The Go code is in `internal/`, so
-other Go modules can't import it.
+worked, and the output contains the certificate. Go programs can import its package
+instead and get the results as values: see [Using it in Go](#using-it-in-go).
 
 ### Run it without prompts
 
@@ -362,3 +365,75 @@ fi
 The output contains your certificate, and without `-pubkey` also a new private key:
 keep it out of shared logs. `-redact` hides both, so use it only for output you want
 to share, not when you need the certificate.
+
+## Using it in Go
+
+The package `github.com/Knight1/vanmoof-certificates/vanmoof` does what the tool does,
+but returns the results instead of printing them:
+
+```console
+go get github.com/Knight1/vanmoof-certificates/vanmoof
+```
+
+```go
+package main
+
+import (
+	"errors"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/Knight1/vanmoof-certificates/vanmoof"
+)
+
+func main() {
+	// The public key of your own key pair, e.g. from -genkey: keep the private key safe
+	publicKey := os.Getenv("PUBKEY")
+
+	s, err := vanmoof.Login("user@vanmoof.com", os.Getenv("VANMOOF_PASSWORD"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	bikes, err := s.Bikes()
+	if err != nil && !errors.Is(err, vanmoof.ErrSharedBikes) {
+		log.Fatal(err)
+	}
+
+	for i, bike := range bikes {
+		if !bike.UsesCertificates() {
+			continue // an S4/X4 or older bike, which uses a BLE key instead
+		}
+		cert, err := s.RequestCertificate(bike, publicKey)
+		if err != nil {
+			log.Fatal(err)
+		}
+		res := vanmoof.CheckCertificate(cert, vanmoof.Expect{PublicKey: publicKey, Bike: &bikes[i]})
+		if !res.Valid {
+			log.Fatalf("%s: %v", bike.FrameNumber, res.Errors)
+		}
+		fmt.Println(bike.FrameNumber, res.AccessLevel(), res.Expires, cert)
+	}
+}
+```
+
+- `Login` never prompts and doesn't use the tool's token cache. To log in again later
+  without the password, save `s.Tokens()` and continue with `vanmoof.Resume(tokens)`.
+  The session renews its tokens when they expire, so save them again after using it.
+  Once it can't renew them, its methods return `vanmoof.ErrLoginRequired` (check with
+  `errors.Is`).
+- `Bikes` returns the account's own bikes, then the ones shared with it. If it can't
+  look up the shared ones, it returns the own ones along with an error wrapping
+  `vanmoof.ErrSharedBikes`.
+- `CheckCertificate` checks the certificate's signature and expiry, and whatever you
+  set in `vanmoof.Expect`: the public key, the bike, and the user (`s.UserID()`). `Valid`
+  is false if a check failed, and `Errors` says why. No S6 signing key is known yet, so
+  for an S6, `SignatureVerified` is false and `Notes` says so.
+- A session can be used from several goroutines at once.
+- The tokens, your private key and the certificates let anyone unlock the bike: keep
+  them out of logs.
+
+`go doc -all github.com/Knight1/vanmoof-certificates/vanmoof` describes the whole
+package. Its `GetCert`, `ShowKeys` and `ProcessCertificate` are the tool's own: they
+prompt and print instead of returning their results. The BLE encryption keys of older
+bikes (`-show-keys`) aren't available as values yet.

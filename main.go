@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"strings"
 
-	"vanmoof-certificates/internal/vanmoof"
+	"github.com/Knight1/vanmoof-certificates/vanmoof"
 )
 
 // Exit statuses: 1 when something failed, 2 for invalid flags (as the flag package does)

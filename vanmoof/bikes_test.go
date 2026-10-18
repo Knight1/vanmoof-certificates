@@ -28,7 +28,7 @@ func TestReadLineSharedByPrompts(t *testing.T) {
 	}
 }
 
-func frameNumbers(bikes []BikeData) string {
+func frameNumbers(bikes []Bike) string {
 	var frames []string
 	for _, b := range bikes {
 		frames = append(frames, b.FrameNumber)
@@ -37,7 +37,7 @@ func frameNumbers(bikes []BikeData) string {
 }
 
 func TestSelectBikes(t *testing.T) {
-	bikes := []BikeData{
+	bikes := []Bike{
 		{BikeID: 42, FrameNumber: "BBBBBB00001AA"},
 		{BikeID: 43, FrameNumber: "BBBBBB00002AA"},
 		{FrameNumber: "AAAAA000001AA"}, // shared, so no numeric ID
@@ -62,7 +62,7 @@ func TestSelectBikes(t *testing.T) {
 
 	// Interactively, numbers are list positions first: "1" and "42" are the same bike here
 	setStdin(t, "1, 42\n")
-	var got []BikeData
+	var got []Bike
 	var err error
 	captureStdout(t, func() { got, err = selectBikes(bikes, "ask") })
 	if err != nil || frameNumbers(got) != "BBBBBB00001AA" {

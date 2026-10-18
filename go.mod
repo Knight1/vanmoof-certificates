@@ -1,4 +1,4 @@
-module vanmoof-certificates
+module github.com/Knight1/vanmoof-certificates
 
 go 1.25.0
 

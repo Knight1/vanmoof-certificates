@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -119,8 +120,8 @@ func TestOutputEscapesControlCharacters(t *testing.T) {
 	http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusBadRequest, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("bad\x1b[2Jrequest")), Request: r}, nil
 	})
-	bikes := []BikeData{{BikeID: 1, Name: "My\x1b[31m bike\u202e", FrameNumber: "BBBBBB00001AA", BleProfile: "ELECTRIFIED_2022"}}
-	out := captureStdout(t, func() { requestCertificates(bikes, "", "app", "all", "", false) })
+	bikes := []Bike{{BikeID: 1, Name: "My\x1b[31m bike\u202e", FrameNumber: "BBBBBB00001AA", BleProfile: "ELECTRIFIED_2022"}}
+	out := captureStdout(t, func() { requestCertificates(bikes, "", testSession(), "all", "", false) })
 	if hasRaw(out) || !strings.Contains(out, `HTTP 400: bad\x1b[2Jrequest`) {
 		t.Errorf("output: %q", out)
 	}
@@ -131,6 +132,7 @@ const (
 	leakEmail      = "leak.user@example.com"
 	leakPassword   = "LeakPassword42"
 	leakRefresh    = "LeakRefreshToken42"
+	leakRotated    = "LeakRotatedRefreshToken42"
 	leakUUID       = "1eaf0000-0000-4000-8000-00000000beef"
 	leakName       = "Leaky McLeakface"
 	leakPhone      = "+31600000042"
@@ -171,6 +173,11 @@ var (
 	leakAppToken  = leakJWT("LeakAppSignature0123456789abcdefghijklmnopq")
 )
 
+// testSession is a session with valid tokens of the fake account, which needs no renewing
+func testSession() *Session {
+	return Resume(Tokens{AuthToken: leakAuthToken, AppToken: leakAppToken, RefreshToken: leakRefresh})
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
@@ -199,12 +206,15 @@ func fakeVanMoof(t *testing.T) (certs, pubKeys *[]string) {
 		"ble_profile": "ELECTRIFIED_2025", "ble_id": leakMAC3, "owner_id": leakOwnerUUID, "owner_name": leakOwnerName, "owner_email": leakOwnerEmail,
 	}}})
 
+	var mu sync.Mutex // the fake serves concurrent requests too
 	old := http.DefaultTransport
 	http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		var body string
 		switch p := r.URL.Path; {
 		case p == "/v8/authenticate":
 			body = fmt.Sprintf(`{"token":%q,"refreshToken":%q}`, leakAuthToken, leakRefresh)
+		case p == "/v8/token":
+			body = fmt.Sprintf(`{"token":%q,"refreshToken":%q}`, leakAuthToken, leakRotated)
 		case p == "/v8/getApplicationToken":
 			body = fmt.Sprintf(`{"token":%q}`, leakAppToken)
 		case p == "/v8/getBikeSharingInvitations":
@@ -227,7 +237,9 @@ func fakeVanMoof(t *testing.T) (certs, pubKeys *[]string) {
 				key = nil // no S6 signing key known
 			}
 			cert := testCert(t, key, fields)
+			mu.Lock()
 			*certs, *pubKeys = append(*certs, cert), append(*pubKeys, req.PublicKey)
+			mu.Unlock()
 			body = fmt.Sprintf(`{"certificate":%q}`, cert)
 		default:
 			t.Errorf("unexpected request %s %s", r.Method, r.URL)
@@ -269,7 +281,7 @@ func runEverything(t *testing.T) (out string, certs, pubKeys []string) {
 }
 
 var (
-	leakSecrets = []string{leakPassword, leakRefresh, leakAuthToken, leakAppToken, "LeakAuthSignature", "LeakAppSignature",
+	leakSecrets = []string{leakPassword, leakRefresh, leakRotated, leakAuthToken, leakAppToken, "LeakAuthSignature", "LeakAppSignature",
 		leakBLEKey, leakPasscode, leakMessage}
 	leakPersonal = []string{leakEmail, leakUUID, strings.ReplaceAll(leakUUID, "-", ""), leakName, leakPhone,
 		leakSA5Name, leakS3Name, leakS2Name, leakSharedName, leakRiderName, leakOwnerName, leakOwnerEmail, leakOwnerUUID,

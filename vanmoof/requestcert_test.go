@@ -31,12 +31,12 @@ func TestRequestCertificatesReportsFailures(t *testing.T) {
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
 	})
 
-	good := BikeData{BikeID: 1, FrameNumber: "BBBBBB00001AA", BleProfile: "ELECTRIFIED_2022"}
-	refused := BikeData{BikeID: 2, FrameNumber: "BBBBBB00002AA", BleProfile: "ELECTRIFIED_2022"}
-	wrong := BikeData{BikeID: 3, FrameNumber: "BBBBBB00003AA", BleProfile: "ELECTRIFIED_2022"}
+	good := Bike{BikeID: 1, FrameNumber: "BBBBBB00001AA", BleProfile: "ELECTRIFIED_2022"}
+	refused := Bike{BikeID: 2, FrameNumber: "BBBBBB00002AA", BleProfile: "ELECTRIFIED_2022"}
+	wrong := Bike{BikeID: 3, FrameNumber: "BBBBBB00003AA", BleProfile: "ELECTRIFIED_2022"}
 
 	var err error
-	out := captureStdout(t, func() { err = requestCertificates([]BikeData{refused, wrong, good}, "", "app", "all", "", false) })
+	out := captureStdout(t, func() { err = requestCertificates([]Bike{refused, wrong, good}, "", testSession(), "all", "", false) })
 	if err == nil || err.Error() != "2 of 3 certificate(s) failed" {
 		t.Errorf("err = %v, want 2 of 3 certificate(s) failed", err)
 	}
@@ -44,7 +44,7 @@ func TestRequestCertificatesReportsFailures(t *testing.T) {
 		t.Errorf("the valid certificate wasn't processed after the failed ones:\n%s", out)
 	}
 
-	captureStdout(t, func() { err = requestCertificates([]BikeData{good}, "", "app", "all", "", false) })
+	captureStdout(t, func() { err = requestCertificates([]Bike{good}, "", testSession(), "all", "", false) })
 	if err != nil {
 		t.Errorf("err = %v for a valid certificate", err)
 	}
