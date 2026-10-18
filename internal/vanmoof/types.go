@@ -24,6 +24,12 @@ type AppTokenResponse struct {
 	Token string `json:"token"`
 }
 
+// httpError is the error doHTTPRequest returns for an HTTP error response (status >= 400)
+type httpError struct {
+	statusCode int
+	body       string // truncated to 500 bytes
+}
+
 type BikeData struct {
 	Name          string `json:"name"`
 	BikeID        int    `json:"id"`

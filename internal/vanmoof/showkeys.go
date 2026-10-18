@@ -37,17 +37,12 @@ func filterKeyBikes(details []BikeDetail) []BikeDetail {
 // (SA5/S6), reusing the authentication and customer data already fetched for the keys
 // instead of fetching them a second time.
 func ShowKeys(email, mode, bikeFilter, pubkey string, debug, noCache bool) error {
-	authToken, appToken, _, err := resolveTokens(email, "", debug, noCache)
+	authToken, appToken, customerData, err := login(email, debug, noCache)
 	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
+		return err
 	}
 
 	warnPendingInvitations(authToken, debug)
-
-	customerData, err := fetchCustomerData(authToken, debug)
-	if err != nil {
-		return fmt.Errorf("failed to get customer data: %w", err)
-	}
 
 	if debug {
 		fmt.Printf("[DEBUG] Customer UUID: %s\n", customerData.Data.UUID)

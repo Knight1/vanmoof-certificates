@@ -38,10 +38,12 @@ func authenticate(email, password string, debug bool) (string, string, error) {
 	return authResp.Token, authResp.RefreshToken, nil
 }
 
-func refreshAuthToken(refreshToken string, debug bool) (string, error) {
+// refreshAuthToken exchanges the refresh token for a new auth token. It also returns the
+// refresh token from the response, if any, since the server may rotate it.
+func refreshAuthToken(refreshToken string, debug bool) (string, string, error) {
 	reqBody, err := json.Marshal(RefreshTokenRequest{RefreshToken: refreshToken})
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	headers := apiHeaders(map[string]string{
@@ -50,15 +52,15 @@ func refreshAuthToken(refreshToken string, debug bool) (string, error) {
 
 	body, err := doHTTPRequest("POST", apiBaseURL+"/token", bytes.NewBuffer(reqBody), headers, debug)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	var resp AuthResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	return resp.Token, nil
+	return resp.Token, resp.RefreshToken, nil
 }
 
 func getApplicationToken(authToken string, debug bool) (string, error) {
@@ -158,13 +160,4 @@ func fetchCustomerData(authToken string, debug bool) (*CustomerData, error) {
 	}
 
 	return &customerData, nil
-}
-
-func getCustomerData(authToken string, debug bool) (string, []BikeData, error) {
-	customerData, err := fetchCustomerData(authToken, debug)
-	if err != nil {
-		return "", nil, err
-	}
-
-	return customerData.Data.UUID, customerData.Data.Bikes, nil
 }

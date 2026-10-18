@@ -2,12 +2,23 @@ package vanmoof
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"time"
 )
+
+func (e *httpError) Error() string {
+	return fmt.Sprintf("HTTP %d: %s", e.statusCode, e.body)
+}
+
+// isUnauthorized reports whether err is an HTTP 401 response, i.e. the server rejected the token
+func isUnauthorized(err error) bool {
+	var httpErr *httpError
+	return errors.As(err, &httpErr) && httpErr.statusCode == http.StatusUnauthorized
+}
 
 // parseResetTime parses the x-ratelimit-reset header value (Unix timestamp) into a time.Time
 func parseResetTime(reset string) (time.Time, error) {
@@ -94,7 +105,7 @@ func doHTTPRequest(method, url string, body io.Reader, headers map[string]string
 		if len(body) > 500 {
 			body = body[:500] + "... (truncated)"
 		}
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, body)
+		return nil, &httpError{statusCode: resp.StatusCode, body: body}
 	}
 
 	return respBody, nil

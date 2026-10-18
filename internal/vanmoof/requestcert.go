@@ -9,20 +9,26 @@ import (
 )
 
 // resolveTokens tries cached tokens first, then falls back to password auth.
-// Returns authToken, appToken, refreshToken.
-func resolveTokens(email, password string, debug, noCache bool) (string, string, string, error) {
+// skipCachedTokens is for when the server rejected the cached tokens: only the
+// cached refresh token is tried then, before the password.
+// Returns authToken, appToken, and whether the auth token came from the cache, where
+// it's only checked for expiry (the server can still reject it if it was revoked early).
+func resolveTokens(email, password string, skipCachedTokens, debug, noCache bool) (string, string, bool, error) {
 	var cached *CachedTokens
 	if !noCache {
 		cached = loadTokenCache(email, debug)
 	}
+	if cached != nil && skipCachedTokens {
+		cached = &CachedTokens{RefreshToken: cached.RefreshToken}
+	}
 
 	if cached != nil {
-		// Try app token first (valid ~2 hours)
-		if !isJWTExpired(cached.AppToken) {
+		// Try app token first (valid ~2 hours), as long as the auth token hasn't expired either
+		if !isJWTExpired(cached.AppToken) && !isJWTExpired(cached.AuthToken) {
 			if debug {
 				fmt.Println("[DEBUG] Using cached app token")
 			}
-			return cached.AuthToken, cached.AppToken, cached.RefreshToken, nil
+			return cached.AuthToken, cached.AppToken, true, nil
 		}
 
 		// App token expired — try auth token (valid ~1 year)
@@ -35,26 +41,30 @@ func resolveTokens(email, password string, debug, noCache bool) (string, string,
 				if !noCache {
 					saveTokenCache(email, cached.AuthToken, cached.RefreshToken, appToken, debug)
 				}
-				return cached.AuthToken, appToken, cached.RefreshToken, nil
+				return cached.AuthToken, appToken, true, nil
 			}
 			if debug {
 				fmt.Printf("[DEBUG] Failed to get app token with cached auth token: %v\n", err)
 			}
 		}
 
-		// Auth token expired — try refresh token
+		// Auth token expired or rejected — try refresh token
 		if cached.RefreshToken != "" {
 			if debug {
-				fmt.Println("[DEBUG] Auth token expired, trying refresh token")
+				fmt.Println("[DEBUG] Auth token expired or rejected, trying refresh token")
 			}
-			authToken, err := refreshAuthToken(cached.RefreshToken, debug)
+			authToken, refreshToken, err := refreshAuthToken(cached.RefreshToken, debug)
 			if err == nil {
+				// Keep using the old refresh token unless the server rotated it
+				if refreshToken == "" {
+					refreshToken = cached.RefreshToken
+				}
 				appToken, err := getApplicationToken(authToken, debug)
 				if err == nil {
 					if !noCache {
-						saveTokenCache(email, authToken, cached.RefreshToken, appToken, debug)
+						saveTokenCache(email, authToken, refreshToken, appToken, debug)
 					}
-					return authToken, appToken, cached.RefreshToken, nil
+					return authToken, appToken, false, nil
 				}
 				if debug {
 					fmt.Printf("[DEBUG] Failed to get app token after refresh: %v\n", err)
@@ -65,7 +75,7 @@ func resolveTokens(email, password string, debug, noCache bool) (string, string,
 		}
 
 		if debug {
-			fmt.Println("[DEBUG] All cached tokens expired, need password")
+			fmt.Println("[DEBUG] All cached tokens expired or rejected, need password")
 		}
 	}
 
@@ -77,21 +87,21 @@ func resolveTokens(email, password string, debug, noCache bool) (string, string,
 		fmt.Print("Enter VanMoof password: ")
 		passwordBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
 		if err != nil {
-			return "", "", "", fmt.Errorf("error reading password: %w", err)
+			return "", "", false, fmt.Errorf("error reading password: %w", err)
 		}
 		fmt.Println()
 		password = string(passwordBytes)
 	}
 	if password == "" {
-		return "", "", "", fmt.Errorf("password required")
+		return "", "", false, fmt.Errorf("password required")
 	}
 
 	authToken, refreshToken, err := authenticate(email, password, debug)
 	if err != nil {
-		return "", "", "", err
+		return "", "", false, err
 	}
 	if authToken == "" {
-		return "", "", "", fmt.Errorf("authentication returned empty token")
+		return "", "", false, fmt.Errorf("authentication returned empty token")
 	}
 
 	if debug {
@@ -100,16 +110,42 @@ func resolveTokens(email, password string, debug, noCache bool) (string, string,
 
 	appToken, err := getApplicationToken(authToken, debug)
 	if err != nil {
-		return "", "", "", err
+		return "", "", false, err
 	}
 	if appToken == "" {
-		return "", "", "", fmt.Errorf("application token request returned empty token")
+		return "", "", false, fmt.Errorf("application token request returned empty token")
 	}
 
 	if !noCache {
 		saveTokenCache(email, authToken, refreshToken, appToken, debug)
 	}
-	return authToken, appToken, refreshToken, nil
+	return authToken, appToken, false, nil
+}
+
+// login resolves the account's tokens and fetches its customer data, the first request
+// that needs a valid auth token. Cached tokens are only checked for expiry locally, so
+// if the server rejects them anyway (revoked early, e.g. after a password change), login
+// retries once without them: with the refresh token first, then the password.
+func login(email string, debug, noCache bool) (string, string, *CustomerData, error) {
+	authToken, appToken, fromCache, err := resolveTokens(email, "", false, debug, noCache)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("authentication failed: %w", err)
+	}
+
+	customerData, err := fetchCustomerData(authToken, debug)
+	if err != nil && fromCache && isUnauthorized(err) {
+		fmt.Println("Cached tokens were rejected by the server, logging in again")
+		authToken, appToken, _, err = resolveTokens(email, "", true, debug, noCache)
+		if err != nil {
+			return "", "", nil, fmt.Errorf("authentication failed: %w", err)
+		}
+		customerData, err = fetchCustomerData(authToken, debug)
+	}
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to get customer data: %w", err)
+	}
+
+	return authToken, appToken, customerData, nil
 }
 
 func GetCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
@@ -117,9 +153,9 @@ func GetCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 		fmt.Println("[DEBUG] Starting authentication...")
 	}
 
-	authToken, appToken, _, err := resolveTokens(email, "", debug, noCache)
+	authToken, appToken, customerData, err := login(email, debug, noCache)
 	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
+		return err
 	}
 
 	if debug {
@@ -128,11 +164,7 @@ func GetCert(email, bikeFilter, pubkey string, debug, noCache bool) error {
 
 	warnPendingInvitations(authToken, debug)
 
-	// Get customer data (bikes)
-	customerUUID, bikes, err := getCustomerData(authToken, debug)
-	if err != nil {
-		return fmt.Errorf("failed to get customer data: %w", err)
-	}
+	customerUUID, bikes := customerData.Data.UUID, customerData.Data.Bikes
 
 	if debug {
 		fmt.Printf("[DEBUG] Customer UUID: %s\n", customerUUID)

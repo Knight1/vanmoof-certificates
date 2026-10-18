@@ -10,7 +10,7 @@ Pull Requests are welcome! ❤️
 
 ## Features
 
-- Authenticate with VanMoof API with token cache (auth token, app token, refresh token) or username/password
+- Authenticate with VanMoof API with token cache (auth token, app token, refresh token) or username/password, logging in again automatically if the server rejects cached tokens
 - Retrieve and filter SA5 and S6 bikes from your account
 - Support for shared/guest bikes via VanMoof's Vehicle Registry API
 - Generate Ed25519 key pairs

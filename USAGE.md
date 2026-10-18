@@ -64,10 +64,12 @@ This will:
 ### Token Caching
 
 Tokens are cached in `~/.vanmoof-certificates/tokens.json` (file permissions `0600`). Multiple accounts are supported — each email's tokens are stored independently. On subsequent runs, the tool will:
-1. Reuse the app token if still valid (~2 hours)
+1. Reuse the app token if it and the auth token are still valid (~2 hours)
 2. Refresh the app token using the auth token if needed (~1 year validity)
-3. Use the refresh token if the auth token has expired
-4. Only prompt for password if all cached tokens are expired
+3. Use the refresh token if the auth token has expired (storing the new refresh token if the server issues one)
+4. Only prompt for password if all cached tokens are expired or rejected
+
+Cached tokens are only checked for expiry locally. If the server rejects them before they expire (e.g. after a password change), the tool logs in again, with the refresh token first and then the password, and replaces them in the cache.
 
 To encrypt the token cache, set the `VANMOOF_CACHE_KEY` environment variable:
 
@@ -83,6 +85,8 @@ To disable token caching entirely:
 ```console
 ./vanmoof-certificates -email user@vanmoof.com -no-cache
 ```
+
+To remove the cached tokens of all accounts, delete `~/.vanmoof-certificates/tokens.json`.
 
 
 ### Command-Line Mode
