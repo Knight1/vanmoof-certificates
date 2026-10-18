@@ -8,8 +8,6 @@ on:
 
 permissions:
   contents: read
-  checks: write
-  pull-requests: write
 
 jobs:
   build:
@@ -25,21 +23,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      # The dependencies are vendored, so there's nothing to download or cache for them
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go-version }}
-
-      - name: Cache Go modules
-        uses: actions/cache@v5
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-${{ matrix.go-version }}-
-
-      - name: Download dependencies
-        run: go mod download
 
       - name: Run go vet
         run: go vet ./...
@@ -58,9 +46,16 @@ jobs:
       - name: Run tests
         run: go test -v -race -coverprofile=coverage.out ./...
 
+      # Once, on the latest Go: an older one can have standard library vulnerabilities
+      # that are only fixed in the latest
+      - name: Check for known vulnerabilities
+        if: matrix.go-version == 'stable'
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v7
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.out
           flags: unittests
           name: codecov-umbrella

@@ -139,9 +139,9 @@ Decoded structure:
 - **Certificate ID**: `1337`
 - **Frame Module Serial (AFM)**: `SVTBKLdddddOA`
 - **Bike Module Serial (ABM)**: `SVTBKLdddddOA`
-- **Expiry**: `1767668550` (January 6, 2026 04:02:38 CET)
-- **Role**: `7` (Owner - Full Control)
-- **User UUID**: `1111111-1111-3111-1111-111111111111` (UUIDv3)
+- **Expiry**: `1767668550` (January 6, 2026 04:02:30 CET)
+- **Role**: `7` (Owner)
+- **User UUID**: `11111111-1111-3111-8111-111111111111` (UUIDv3)
 - **Public Key**: `KIQtqMxZ9Vdj3YLfNgNHjUB4WN4gLtDX/FwpiyFiUMs=`
 
 ### CBOR Encoding Details
@@ -151,7 +151,7 @@ The payload uses CBOR (Concise Binary Object Representation, RFC 8949) encoding:
 ```
 0xa7                    # Map with 7 entries
   0x61 0x69             # Text string "i"
-  0x1a 0x00 0x02 0xa7 0x66  # uint32: 1337 (Certificate ID)
+  0x19 0x05 0x39        # uint16: 1337 (Certificate ID; a bigger one takes 0x1a + 4 bytes)
   
   0x61 0x66             # Text string "f" 
   0x6d                  # Text string, 13 bytes

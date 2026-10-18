@@ -53,15 +53,13 @@ Privkey = ✂️
 Pubkey = Yd2bYMB3+vs4cCnDtPbcaM164KIl2zs05AK2jt/K6Gs=
 
 Bike ID: 1337
+Name: My bike
 Frame number: LLLLLLDDDDDLL
-Model: SA5 (ELECTRIFIED_2022)
+Model: SA5
 Certificate:
------------
 {"certificate":"BASE64_ENCODED_CERTIFICATE"}
------------
-
 Parsing certificate...
-Certificate valid: LLLLLLDDDDDLL, Owner (Full Control), expires 2026-01-06 04:02:38 CET, bike matched, pubkey ok, user ok
+Certificate valid: LLLLLLDDDDDLL, Owner, expires 2026-01-06 04:02:30 CET, bike matched, pubkey ok, user ok
 ```
 
 ## Usage
