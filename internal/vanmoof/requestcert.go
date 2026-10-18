@@ -258,14 +258,11 @@ func mergeSharedVehicles(bikes []BikeData, customerUUID, appToken string, debug 
 // It is shared by GetCert and ShowKeys (in "all" mode), which fetch the account's
 // bikes once and pass them in here rather than each fetching them separately.
 func requestCertificates(bikes []BikeData, customerUUID, appToken, bikeFilter, pubkey string, debug bool) error {
-	// Filter for supported bikes only
+	// Filter for supported (certificate) bikes only
 	var supported []BikeData
 	for _, bike := range bikes {
-		for _, profile := range supportedBleProfiles {
-			if bike.BleProfile == profile {
-				supported = append(supported, bike)
-				break
-			}
+		if isCertOnlyProfile(bike.BleProfile) {
+			supported = append(supported, bike)
 		}
 	}
 

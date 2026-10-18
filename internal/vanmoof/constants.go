@@ -18,14 +18,9 @@ const (
 	Version = "1.1.0"
 )
 
-var supportedBleProfiles = []string{
-	"ELECTRIFIED_2022",
-	"ELECTRIFIED_2023_TRACK_1",
-	"ELECTRIFIED_2025",
-}
-
 // certOnlyBleProfiles are the profiles that authenticate with certificates and
-// never use the BLE encryption key from getCustomerData (S5/A5 and S6).
+// never use the BLE encryption key from getCustomerData (S5/A5 and S6). They are
+// both the bikes certificates are requested for and the ones -show-keys skips.
 var certOnlyBleProfiles = []string{
 	"ELECTRIFIED_2022",
 	"ELECTRIFIED_2025",
