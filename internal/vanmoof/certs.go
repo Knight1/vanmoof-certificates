@@ -303,6 +303,9 @@ func printCompact(r certResult) {
 			fmt.Printf("  ⚠ %s\n", w)
 		}
 	}
+	for _, n := range r.notes {
+		fmt.Printf("  Note: %s\n", n)
+	}
 }
 
 // printVerbose prints the full detailed output (debug mode)
