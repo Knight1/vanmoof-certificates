@@ -58,6 +58,7 @@ func TestMain(m *testing.M) {
 	os.Unsetenv("VANMOOF_PASSWORD")
 	os.Stdin.Close()
 	http.DefaultTransport = noNetwork{}
+	hardenMemory = func(bool) {} // locking memory per run is pointless in tests, and may fail
 	code := m.Run()
 	os.RemoveAll(home)
 	os.Exit(code)

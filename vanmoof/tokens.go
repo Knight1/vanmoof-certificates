@@ -67,6 +67,10 @@ func getCacheKey() string {
 // With a 16 byte salt and a 32 byte key, none of the steps fails.
 func newCacheCipher(passphrase string, salt []byte, iterations int) cipher.AEAD {
 	key := must(pbkdf2.Key(sha256.New, passphrase, salt, iterations, 32))
+	// aes.NewCipher copies the key into its schedule, so wipe this copy once we have the
+	// cipher: defense in depth (the passphrase is a string we can't clear, and mlockall
+	// keeps it out of swap meanwhile)
+	defer clear(key)
 	return must(cipher.NewGCMWithRandomNonce(must(aes.NewCipher(key))))
 }
 

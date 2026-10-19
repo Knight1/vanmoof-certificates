@@ -22,6 +22,10 @@ const (
 // exit is os.Exit, which TestMainExits replaces to run main
 var exit = os.Exit
 
+// hardenMemory keeps secrets out of swap and core dumps (see main_harden_*.go); tests
+// replace it with a no-op, since locking memory per test run is pointless and may fail
+var hardenMemory = hardenMemoryImpl
+
 func main() {
 	exit(run(os.Args[1:]))
 }
@@ -88,6 +92,9 @@ func run(args []string) int {
 		fmt.Printf("OS: %s, Arch: %s, Go: %s, CPUs: %d, Compiler: %s\n", runtime.GOOS, runtime.GOARCH, runtime.Version(), runtime.NumCPU(), runtime.Compiler)
 		return 0
 	}
+
+	// Everything below handles secrets (keys, tokens, the password): keep them off disk
+	hardenMemory(*debug)
 
 	if genkey != nil && *genkey {
 		privKeyB64, pubKeyB64, err := vanmoof.GenerateED25519()

@@ -342,6 +342,31 @@ could otherwise use a revoked certificate.
 An OCSP request tells the CA which of its certificates you check, as a browser's does; a
 stapled response or the CRL doesn't.
 
+### Memory hardening
+
+On Linux, before it handles any secret, the tool keeps them off disk, best-effort:
+
+- It locks all of its memory into RAM (`mlockall`), so keys, tokens and your password
+  aren't written to swap.
+- It sets the core-dump size to zero, so a crash can't write memory to a core file.
+
+It locks the whole process because Go moves stacks and copies strings around, so an
+individual secret can't be locked on its own. For the same reason, secrets held as text
+(tokens, your password, `VANMOOF_CACHE_KEY`) can't be wiped after use; the tool does clear
+the key material it derives (the cache key, a signing key) once it's done with it, as
+defense in depth.
+
+`mlockall` needs enough `RLIMIT_MEMLOCK`, which an unprivileged user often lacks. If it
+can't lock memory, it prints a warning and carries on:
+
+```
+WARNING: couldn't lock memory to keep secrets out of swap: cannot allocate memory (raise the limit with 'ulimit -l', or ignore if this system has no swap)
+```
+
+Raise the limit (`ulimit -l unlimited` as root, or a `memlock` entry in
+`/etc/security/limits.conf`), or ignore it on a system without swap. macOS and Windows
+builds don't harden memory yet.
+
 ### Parse Existing Certificate
 
 Parse a certificate without fetching from API:

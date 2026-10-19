@@ -260,6 +260,7 @@ func generateCert(data []byte, debug bool) error {
 	if err != nil {
 		return err
 	}
+	defer clear(signingKey) // wipe the private key once we're done signing (defense in depth)
 	if params.ID == 0 {
 		params.ID = randomCertID()
 	}
