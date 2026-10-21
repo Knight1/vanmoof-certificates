@@ -27,7 +27,7 @@ puts it into `$(go env GOPATH)/bin`.
 | `-show-saved` | Show what the cache holds for the account: key pair, certificates, BLE keys, bike messages and customer data | `false` |
 | `-cleartext-keys` | Without `VANMOOF_CACHE_KEY`, save the key pair, certificates, BLE keys and customer data unencrypted (see [Cache](#cache)) | `false` |
 | `-no-cache` | Do not read or write the cache (tokens, key pair, certificates, BLE keys, bike messages, customer data) | `false` |
-| `-allow-unknown-revocation` | Connect even when neither OCSP nor the CRL can confirm that a VanMoof server's TLS certificate isn't revoked; a revoked one is always refused (see [TLS Certificate Revocation](#tls-certificate-revocation)) | `false` |
+| `-allow-unknown-revocation` | Connect even when a VanMoof server's TLS certificate can't be confirmed unrevoked — neither OCSP nor the CRL vouches for it, or Mozilla's OneCRL couldn't be fetched; a revoked one is always refused (see [TLS Certificate Revocation](#tls-certificate-revocation)) | `false` |
 | `-invitations` | Bike sharing invitations: `list`, `accept` or `decline` them (see [Bike Sharing Invitations](#bike-sharing-invitations)) | - |
 | `-sudo` | Skip all validation checks | `false` |
 | `-cert` | Base64 encoded certificate to parse | - |
@@ -317,30 +317,37 @@ the result even when the certificate is valid.
 
 Before the tool sends anything to one of VanMoof's servers, such as your password or a
 token, it checks that the server's TLS certificate and the CA certificates it chains to
-aren't revoked: with OCSP (the response the server staples, or else the CA's responder)
-and with the CA's CRL. A certificate that either reports revoked is refused, as someone
-may be using its stolen key. Each certificate is checked once per run, and the
-connections stay open, so this adds a few requests to the CA, not one per request to
-VanMoof.
+aren't revoked: with OCSP (the response the server staples, or else the CA's responder),
+with the CA's CRL, and against Mozilla's OneCRL. A certificate that any of them reports
+revoked is refused, as someone may be using its stolen key. Each certificate is checked
+once per run, and the connections stay open, so this adds a few requests, not one per
+request to VanMoof.
 
 The tool asks whichever OCSP responder and CRL each certificate names, so it keeps working
 when VanMoof's servers change CA (they use Amazon's and Let's Encrypt's now, the latter
 without OCSP). A certificate valid for 7 days at most that names neither, as a CA may
-issue it, has nothing to check, and is accepted.
+issue it, has nothing of its own to check.
+
+OneCRL is the list of certificates and keys Firefox distrusts, which the tool fetches once
+a run from [Firefox Remote Settings](https://firefox.settings.services.mozilla.com/v1/buckets/security-state/collections/onecrl/records).
+It matters because OCSP and the CRL come from the CA itself: a CA whose key is compromised
+can sign a certificate for `api.vanmoof-api.com` and vouch for it, but it can't take itself
+off Firefox's list. The list only ever distrusts, so a certificate it doesn't name is not
+thereby confirmed good — its OCSP or CRL still has to.
 
 A certificate that neither OCSP nor the CRL confirms, e.g. as the CA's servers can't be
-reached, is refused too:
+reached, or whose OneCRL couldn't be fetched, is refused too:
 
 ```
-Error: authentication failed: Post "https://api.vanmoof-api.com/v8/authenticate": vanmoof: TLS certificate revocation unknown: api.vanmoof-api.com (OCSP: …; CRL: …); -allow-unknown-revocation connects anyway
+Error: authentication failed: Post "https://api.vanmoof-api.com/v8/authenticate": vanmoof: TLS certificate revocation unknown: api.vanmoof-api.com (OCSP: …; CRL: …; OneCRL: …); -allow-unknown-revocation connects anyway
 ```
 
-`-allow-unknown-revocation` connects anyway, unless one of them reports the certificate
-revoked. Only use it while the CA's servers can't be reached: someone who blocks them
-could otherwise use a revoked certificate.
+`-allow-unknown-revocation` connects anyway, unless OCSP, the CRL or OneCRL reports the
+certificate revoked. Only use it while the CA's or Mozilla's servers can't be reached:
+someone who blocks them could otherwise use a revoked or distrusted certificate.
 
 An OCSP request tells the CA which of its certificates you check, as a browser's does; a
-stapled response or the CRL doesn't.
+stapled response, the CRL and OneCRL don't.
 
 ### Memory hardening
 
@@ -637,8 +644,9 @@ func main() {
 - A session can be used from several goroutines at once.
 - Its requests check the TLS certificates of VanMoof's servers for revocation, as the
   tool does (see [TLS Certificate Revocation](#tls-certificate-revocation)), over a copy of
-  `http.DefaultTransport`. A revoked certificate makes them fail with an error wrapping
-  `vanmoof.ErrRevoked`, and one that neither OCSP nor the CRL confirms with
+  `http.DefaultTransport`. A revoked certificate (by OCSP, the CRL or Mozilla's OneCRL)
+  makes them fail with an error wrapping `vanmoof.ErrRevoked`, and one left unconfirmed —
+  neither OCSP nor the CRL vouches for it, or OneCRL couldn't be fetched — with
   `vanmoof.ErrRevocationUnknown`, unless `vanmoof.SetAllowUnknownRevocation(true)`.
 - The tokens, your private key and the certificates let anyone unlock the bike: keep
   them out of logs.

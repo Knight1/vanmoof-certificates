@@ -6,10 +6,13 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -115,6 +118,8 @@ type revocationServers struct {
 	mu                      sync.Mutex     // for the test to change what the servers do
 	ocspRevoked, crlRevoked []*big.Int     // the serial numbers OCSP and the CRLs report revoked
 	ocspDown, crlDown       bool           // they answer HTTP 500
+	oneCRLDown              bool           // OneCRL answers HTTP 500
+	oneCRLRecords           []oneCRLRecord // what OneCRL serves (none, so nothing distrusted, by default)
 	staple                  func() []byte  // what the TLS server staples, if anything
 	fetches                 map[string]int // requests to the CA, by path
 
@@ -126,6 +131,9 @@ func newRevocationServers(t *testing.T) *revocationServers {
 	s := &revocationServers{leaves: make(map[string]pkiCert), fetches: make(map[string]int)}
 	s.ca = httptest.NewServer(http.HandlerFunc(s.serveCA))
 	t.Cleanup(s.ca.Close)
+	oldOneCRL := oneCRLURL
+	oneCRLURL = s.ca.URL + "/onecrl" // the CA server also stands in for Mozilla's OneCRL
+	t.Cleanup(func() { oneCRLURL = oldOneCRL })
 	s.root = newCA(t, nil, "Test Root CA", nil, nil)
 	s.intermediate = newCA(t, &s.root, "Test Intermediate CA", []string{s.ca.URL + "/ocsp/root"}, []string{s.ca.URL + "/crl/root.crl"})
 	for _, host := range hosts {
@@ -209,9 +217,35 @@ func (s *revocationServers) serveCA(w http.ResponseWriter, r *http.Request) {
 			revoked = append(revoked, x509.RevocationListEntry{SerialNumber: serial, RevocationTime: time.Now().Add(-time.Hour)})
 		}
 		w.Write(crlOf(issuer, x509.RevocationList{RevokedCertificateEntries: revoked}))
+	case strings.HasPrefix(r.URL.Path, "/onecrl") && !s.oneCRLDown:
+		w.Write(oneCRLJSON(s.oneCRLRecords...))
 	default:
 		http.Error(w, "down", http.StatusInternalServerError)
 	}
+}
+
+// oneCRLBySerial is a OneCRL record distrusting cert by its issuer and serial
+func oneCRLBySerial(cert *x509.Certificate) oneCRLRecord {
+	return oneCRLRecord{
+		IssuerName:   base64.StdEncoding.EncodeToString(cert.RawIssuer),
+		SerialNumber: base64.StdEncoding.EncodeToString(serialBytes(cert.SerialNumber)),
+	}
+}
+
+// oneCRLByKey is a OneCRL record distrusting cert's key by its subject and public key hash
+func oneCRLByKey(cert *x509.Certificate) oneCRLRecord {
+	hash := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
+	return oneCRLRecord{
+		Subject:    base64.StdEncoding.EncodeToString(cert.RawSubject),
+		PubKeyHash: base64.StdEncoding.EncodeToString(hash[:]),
+	}
+}
+
+// oneCRLJSON is the JSON Firefox Remote Settings serves for the records
+func oneCRLJSON(records ...oneCRLRecord) []byte {
+	return must(json.Marshal(struct {
+		Data []oneCRLRecord `json:"data"`
+	}{records}))
 }
 
 func containsSerial(serials []*big.Int, serial *big.Int) bool {
@@ -259,7 +293,7 @@ func TestRevocationChecked(t *testing.T) {
 		}
 		out.WriteString(o)
 	}
-	want := map[string]int{"/ocsp/intermediate": 3, "/crl/intermediate.crl": 1, "/ocsp/root": 1, "/crl/root.crl": 1}
+	want := map[string]int{"/ocsp/intermediate": 3, "/crl/intermediate.crl": 1, "/ocsp/root": 1, "/crl/root.crl": 1, "/onecrl": 1}
 	if got := s.fetched(); !maps.Equal(got, want) {
 		t.Errorf("fetched %v, want %v", got, want)
 	}
@@ -267,7 +301,7 @@ func TestRevocationChecked(t *testing.T) {
 		t.Errorf("%d connections, want one for each server", n)
 	}
 	for _, name := range append(slices.Clone(hosts), "Test Intermediate CA") {
-		line := "[DEBUG] TLS certificate " + name + " (OCSP: good; CRL: good): not revoked\n"
+		line := "[DEBUG] TLS certificate " + name + " (OCSP: good; CRL: good; OneCRL: not distrusted): not revoked\n"
 		if n := strings.Count(out.String(), line); n != 1 {
 			t.Errorf("%q %d times in the output:\n%s", line, n, out.String())
 		}
@@ -330,7 +364,7 @@ func TestRevocationUnknown(t *testing.T) {
 			if err != nil && !strings.HasSuffix(err.Error(), "; -allow-unknown-revocation connects anyway") {
 				t.Errorf("err = %v", err)
 			}
-			if tt.allow && !strings.Contains(out, "HTTP 500): not confirmed, connected anyway (-allow-unknown-revocation)") {
+			if tt.allow && !strings.Contains(out, "HTTP 500; OneCRL: not distrusted): not confirmed, connected anyway (-allow-unknown-revocation)") {
 				t.Errorf("output:\n%s", out)
 			}
 		})
@@ -382,14 +416,19 @@ func TestShortLivedCertificates(t *testing.T) {
 		return issue(t, &ca, &x509.Certificate{Subject: pkix.Name{CommonName: "server"}, NotBefore: anHourAgo, NotAfter: anHourAgo.Add(validity),
 			OCSPServer: ocspURLs, CRLDistributionPoints: crlURLs}).cert
 	}
-	checker := newRevocationChecker(roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("offline") }))
+	checker := newRevocationChecker(roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() == oneCRLURL { // OneCRL reachable and empty; the certificate's own CA offline
+			return httpResponse(r, http.StatusOK, string(oneCRLJSON())), nil
+		}
+		return nil, errors.New("offline")
+	}))
 	tests := []struct {
 		name    string
 		cert    *x509.Certificate
 		err     error
 		verdict string
 	}{
-		{"for 6 days", leaf(6*24*time.Hour, nil, nil), nil, "server (OCSP: no responder; CRL: no CRL): short-lived, so there's no revocation to check"},
+		{"for 6 days", leaf(6*24*time.Hour, nil, nil), nil, "server (OCSP: no responder; CRL: no CRL; OneCRL: not distrusted): short-lived, so there's no revocation to check"},
 		{"for 7 days", leaf(7*24*time.Hour, nil, nil), ErrRevocationUnknown, ""},
 		{"for 6 days, with an OCSP responder", leaf(6*24*time.Hour, []string{"http://ca.example/ocsp"}, nil), ErrRevocationUnknown, ""},
 		{"for 6 days, with a CRL", leaf(6*24*time.Hour, nil, []string{"http://ca.example/1.crl"}), ErrRevocationUnknown, ""},
@@ -663,4 +702,145 @@ func TestRevocationFetch(t *testing.T) {
 			t.Errorf("%s: err = %v, want %q", url, err, want)
 		}
 	}
+}
+
+// serialBytes is the serial's DER content: its value, with a leading zero when the top bit
+// would otherwise make it negative, as OneCRL and the certificate encode it
+func TestSerialBytes(t *testing.T) {
+	for _, tt := range []struct {
+		serial *big.Int
+		want   []byte
+	}{
+		{big.NewInt(0), []byte{0x00}},
+		{big.NewInt(0x7f), []byte{0x7f}},
+		{big.NewInt(0x80), []byte{0x00, 0x80}}, // a leading zero keeps it positive
+		{big.NewInt(0xff), []byte{0x00, 0xff}},
+		{big.NewInt(0x1234), []byte{0x12, 0x34}},
+	} {
+		if got := serialBytes(tt.serial); !slices.Equal(got, tt.want) {
+			t.Errorf("serialBytes(%#x) = %#x, want %#x", tt.serial, got, tt.want)
+		}
+	}
+}
+
+// parseOneCRL reads the records that name both the fields a lookup needs, by serial or by
+// key, and skips the rest; invalid JSON is an error
+func TestParseOneCRL(t *testing.T) {
+	list, err := parseOneCRL(oneCRLJSON(
+		oneCRLRecord{IssuerName: "aXNz", SerialNumber: "AQ=="},
+		oneCRLRecord{Subject: "c3Vi", PubKeyHash: "aGFzaA=="},
+		oneCRLRecord{IssuerName: "only-an-issuer"},
+		oneCRLRecord{},
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := list.bySerial["aXNz\x00AQ=="]; !ok || len(list.bySerial) != 1 {
+		t.Errorf("bySerial = %v", list.bySerial)
+	}
+	if _, ok := list.byKey["c3Vi\x00aGFzaA=="]; !ok || len(list.byKey) != 1 {
+		t.Errorf("byKey = %v", list.byKey)
+	}
+	if _, err := parseOneCRL([]byte("not json")); err == nil {
+		t.Error("parsed invalid JSON without an error")
+	}
+}
+
+// OneCRL distrusts a certificate it names by issuer and serial, or by subject and public key
+// hash, and no other
+func TestOneCRLRevokes(t *testing.T) {
+	ca := newCA(t, nil, "Test CA", nil, nil)
+	cert, other := newLeaf(t, &ca, "server", nil, nil), newLeaf(t, &ca, "other", nil, nil)
+	bySerial := must(parseOneCRL(oneCRLJSON(oneCRLBySerial(cert.cert))))
+	byKey := must(parseOneCRL(oneCRLJSON(oneCRLByKey(cert.cert))))
+	empty := must(parseOneCRL(oneCRLJSON()))
+	if !bySerial.revokes(cert.cert) || bySerial.revokes(other.cert) {
+		t.Error("by serial")
+	}
+	if !byKey.revokes(cert.cert) || byKey.revokes(other.cert) {
+		t.Error("by key")
+	}
+	if empty.revokes(cert.cert) {
+		t.Error("an empty list distrusts a certificate")
+	}
+}
+
+// checkOneCRL fetches the list once and reports a certificate it names as revoked, one it
+// doesn't as good (checked, not vouched for), and a list it can't fetch or parse as unknown
+func TestCheckOneCRL(t *testing.T) {
+	ca := newCA(t, nil, "Test CA", nil, nil)
+	cert := newLeaf(t, &ca, "server", nil, nil)
+	tests := []struct {
+		name    string
+		body    string
+		status  int
+		offline bool
+		want    revocationStatus
+		detail  string // the start of it
+	}{
+		{"not distrusted", string(oneCRLJSON()), http.StatusOK, false, statusGood, "not distrusted"},
+		{"distrusted", string(oneCRLJSON(oneCRLBySerial(cert.cert))), http.StatusOK, false, statusRevoked, "distrusted"},
+		{"invalid JSON", "garbage", http.StatusOK, false, statusUnknown, "not fetched: invalid OneCRL JSON"},
+		{"server down", "", http.StatusInternalServerError, false, statusUnknown, "not fetched:"},
+		{"offline", "", 0, true, statusUnknown, "not fetched:"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			checker := newRevocationChecker(roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if tt.offline {
+					return nil, errors.New("offline")
+				}
+				return httpResponse(r, tt.status, tt.body), nil
+			}))
+			if r := checker.checkOneCRL(cert.cert); r.status != tt.want || !strings.HasPrefix(r.detail, tt.detail) {
+				t.Errorf("%+v, want %v %q", r, tt.want, tt.detail)
+			}
+		})
+	}
+}
+
+// A certificate of a server's chain that Mozilla's OneCRL distrusts is refused, even with
+// SetAllowUnknownRevocation; and when OneCRL can't be fetched, the certificate is left
+// unconfirmed and refused unless that's allowed, even though OCSP and its CRL vouch for it
+func TestOneCRLRevocation(t *testing.T) {
+	t.Run("distrusted", func(t *testing.T) {
+		tests := []struct {
+			name   string
+			record func(s *revocationServers) oneCRLRecord
+		}{
+			{"the server's, by serial", func(s *revocationServers) oneCRLRecord { return oneCRLBySerial(s.leaves[hosts[0]].cert) }},
+			{"the server's, by key", func(s *revocationServers) oneCRLRecord { return oneCRLByKey(s.leaves[hosts[0]].cert) }},
+			{"the CA's, by key", func(s *revocationServers) oneCRLRecord { return oneCRLByKey(s.intermediate.cert) }},
+		}
+		for _, tt := range tests {
+			for _, allow := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s, allowing unknown %v", tt.name, allow), func(t *testing.T) {
+					s := newRevocationServers(t)
+					s.change(func() { s.oneCRLRecords = []oneCRLRecord{tt.record(s)} })
+					allowUnknown(t, allow)
+					out, err := get(t, hosts[0], false)
+					if !errors.Is(err, ErrRevoked) || s.requests.Load() != 0 || out != "" {
+						t.Errorf("err = %v, %d requests, output %q", err, s.requests.Load(), out)
+					}
+				})
+			}
+		}
+	})
+	t.Run("unreachable", func(t *testing.T) {
+		for _, allow := range []bool{false, true} {
+			t.Run(fmt.Sprintf("allowing unknown %v", allow), func(t *testing.T) {
+				s := newRevocationServers(t)
+				s.change(func() { s.oneCRLDown = true })
+				allowUnknown(t, allow)
+				out, err := get(t, hosts[0], true)
+				if allow {
+					if err != nil || s.requests.Load() != 1 || !strings.Contains(out, "OneCRL: not fetched") {
+						t.Errorf("err = %v, %d requests\n%s", err, s.requests.Load(), out)
+					}
+				} else if !errors.Is(err, ErrRevocationUnknown) || s.requests.Load() != 0 {
+					t.Errorf("err = %v, %d requests", err, s.requests.Load())
+				}
+			})
+		}
+	})
 }

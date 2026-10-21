@@ -51,7 +51,7 @@ func run(args []string) int {
 	invitations := flags.String("invitations", "", "Bike sharing invitations: 'list' them, or 'accept' or 'decline' them, asking which; 'accept=all', or numbers or GUIDs after '=', choose them")
 	cleartextKeys := flags.Bool("cleartext-keys", false, "Without VANMOOF_CACHE_KEY, save the key pair, certificates, BLE keys and customer data unencrypted (else they're only saved encrypted)")
 	noCache := flags.Bool("no-cache", false, "Do not read or write the cache (tokens, key pair, certificates, BLE keys, bike messages, customer data)")
-	allowUnknownRevocation := flags.Bool("allow-unknown-revocation", false, "Connect even when neither OCSP nor the CRL can confirm that a VanMoof server's TLS certificate isn't revoked, e.g. with the CA's servers unreachable (a revoked one is always refused)")
+	allowUnknownRevocation := flags.Bool("allow-unknown-revocation", false, "Connect even when a VanMoof server's TLS certificate can't be confirmed unrevoked: neither OCSP nor the CRL vouches for it, or Mozilla's OneCRL couldn't be fetched, e.g. with the CA's or Mozilla's servers unreachable (a revoked one is always refused)")
 	sudo := flags.Bool("sudo", false, "Skip all validation checks")
 	if err := flags.Parse(args); err != nil {
 		// The flag package has printed the error and the usage (or only the usage, for -h)

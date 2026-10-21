@@ -413,3 +413,30 @@ func FuzzCRL(f *testing.F) {
 		}
 	})
 }
+
+// Whatever bytes Firefox Remote Settings serves as OneCRL, parsing them never panics, and
+// no input can distrust a certificate whose random key and serial it can't name
+func FuzzOneCRL(f *testing.F) {
+	ca := newCA(f, nil, "Test CA", nil, nil)
+	listed := newLeaf(f, &ca, "server", nil, nil)
+	unlisted := newLeaf(f, &ca, "unlisted", nil, nil) // not named by any seed, so never distrusted
+	for _, seed := range [][]byte{
+		oneCRLJSON(),
+		oneCRLJSON(oneCRLBySerial(listed.cert)),
+		oneCRLJSON(oneCRLByKey(listed.cert)),
+		[]byte(`{"data":[{"issuerName":"!!","serialNumber":"!!"}]}`),
+		[]byte(`{"data":[{"subject":"","pubKeyHash":""}]}`),
+		[]byte("garbage"),
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, body []byte) {
+		list, err := parseOneCRL(body)
+		if err != nil {
+			return
+		}
+		if list.revokes(unlisted.cert) {
+			t.Errorf("a certificate no input can name is distrusted")
+		}
+	})
+}

@@ -26,8 +26,9 @@
 // VanMoof's. A stock bike trusts VanMoof's key alone and ignores it.
 //
 // Requests go over a copy of http.DefaultTransport that checks the TLS certificates of
-// VanMoof's servers for revocation, with OCSP and CRLs, once each: a revoked one fails
-// them with ErrRevoked, and one neither confirms with ErrRevocationUnknown, unless
+// VanMoof's servers for revocation, with OCSP, CRLs and Mozilla's OneCRL (the list Firefox
+// distrusts, fetched once a run), once each: a revoked one fails them with ErrRevoked, and
+// one left unconfirmed, OneCRL unfetchable included, with ErrRevocationUnknown, unless
 // SetAllowUnknownRevocation.
 //
 // The package's other exported functions, such as GetCert, ShowKeys and
