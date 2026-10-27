@@ -9,9 +9,11 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"maps"
 	"math"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -414,21 +416,33 @@ func FuzzCRL(f *testing.F) {
 	})
 }
 
-// Whatever bytes Firefox Remote Settings serves as OneCRL, parsing them never panics, and
-// no input can distrust a certificate whose random key and serial it can't name
+// Whatever bytes Firefox Remote Settings serves as OneCRL, parsing them never panics; no
+// input can distrust a certificate whose random key and serial it can't name; the list
+// distrusts exactly what the content its signature has to sign names, so nothing the
+// signature doesn't cover counts; and that content checks out only if it's what the test's
+// content signer signed
 func FuzzOneCRL(f *testing.F) {
 	ca := newCA(f, nil, "Test CA", nil, nil)
 	listed := newLeaf(f, &ca, "server", nil, nil)
 	unlisted := newLeaf(f, &ca, "unlisted", nil, nil) // not named by any seed, so never distrusted
+	signed := make(map[string]bool)                   // the content the seeds signed
 	for _, seed := range [][]byte{
 		oneCRLJSON(),
 		oneCRLJSON(oneCRLBySerial(listed.cert)),
-		oneCRLJSON(oneCRLByKey(listed.cert)),
-		[]byte(`{"data":[{"issuerName":"!!","serialNumber":"!!"}]}`),
-		[]byte(`{"data":[{"subject":"","pubKeyHash":""}]}`),
+		oneCRLJSON(oneCRLByKey(listed.cert), oneCRLBySerial(listed.cert)),
+		forgedContentSigner.changeset(oneCRLByKey(listed.cert)),
+		[]byte(`{"changes":[{"id":"a","issuerName":"!!","serialNumber":"!!"},{"id":"b","deleted":true,"subject":"c3Vi","pubKeyHash":"aGFzaA=="}]}`),
+		[]byte(`{"changes":[{"subject":"","pubKeyHash":""},null,{"id":1,"deleted":"true","subject":"c3Vi","Subject":"x","pubKeyHash":"aGFzaA==","subject":"dup"}]}`),
+		[]byte(`{"metadata":{"signature":{"mode":"p384ecdsa","signature":"=="}},"timestamp":"1","changes":[]}`),
 		[]byte("garbage"),
 	} {
 		f.Add(seed)
+		if list, err := parseOneCRL(seed); err == nil && checkOneCRLSignature(list) == nil {
+			signed[string(list.signed)] = true
+		}
+	}
+	if len(signed) != 3 {
+		f.Fatalf("%d of the seeds check out, want the 3 the test's signer signed", len(signed))
 	}
 	f.Fuzz(func(t *testing.T, body []byte) {
 		list, err := parseOneCRL(body)
@@ -437,6 +451,75 @@ func FuzzOneCRL(f *testing.F) {
 		}
 		if list.revokes(unlisted.cert) {
 			t.Errorf("a certificate no input can name is distrusted")
+		}
+		var content struct {
+			Data []map[string]any `json:"data"`
+		}
+		decoder := json.NewDecoder(bytes.NewReader(list.signed))
+		decoder.UseNumber()
+		if err := decoder.Decode(&content); err != nil {
+			t.Fatalf("the signed content %s: %v", list.signed, err)
+		}
+		bySerial, byKey := make(map[string]struct{}), make(map[string]struct{})
+		for _, rec := range content.Data {
+			if rec["deleted"] == true {
+				t.Errorf("a deleted record is signed: %v", rec)
+			}
+			if issuer, serial := text(rec["issuerName"]), text(rec["serialNumber"]); issuer != "" && serial != "" {
+				bySerial[issuer+"\x00"+serial] = struct{}{}
+			}
+			if subject, hash := text(rec["subject"]), text(rec["pubKeyHash"]); subject != "" && hash != "" {
+				byKey[subject+"\x00"+hash] = struct{}{}
+			}
+		}
+		if !maps.Equal(bySerial, list.bySerial) || !maps.Equal(byKey, list.byKey) {
+			t.Errorf("the list distrusts %v and %v, the signed content names %v and %v", list.bySerial, list.byKey, bySerial, byKey)
+		}
+		if checkOneCRLSignature(list) == nil && !signed[string(list.signed)] {
+			t.Errorf("content the test's signer never signed checks out: %s", list.signed)
+		}
+	})
+}
+
+// checkOneCRLSignature checks the list's signature, with testContentSigner's chain and root
+func checkOneCRLSignature(list *oneCRL) error {
+	return checkContentSignature(list.signed, list.signature, testContentSigner.chain, testContentSigner.pool(), time.Now())
+}
+
+// Whatever JSON the canonical form is made of, it's printable ASCII, valid JSON of the same
+// value, and its own canonical form
+func FuzzCanonicalJSON(f *testing.F) {
+	for _, seed := range []string{
+		`{ "b": [1, 2.50, -0, 1e3], "a": {"z": null, "é": true, "B": false} }`,
+		`"quote \" backslash \\ /\b\f\n\r\t \u0000 \u001f \u007f \ud83d\ude00 \ud800 \u2028"`,
+		"\"\xff caf\xc3\xa9\"",
+		`[[], {}, "", 0, {"": {"": []}}]`,
+		string(oneCRLJSON(oneCRLRecord{IssuerName: "aXNz", SerialNumber: "AQ=="})),
+		"garbage",
+	} {
+		f.Add([]byte(seed))
+	}
+	decode := func(b []byte) (any, error) {
+		var v any
+		decoder := json.NewDecoder(bytes.NewReader(b))
+		decoder.UseNumber()
+		return v, decoder.Decode(&v)
+	}
+	f.Fuzz(func(t *testing.T, in []byte) {
+		v, err := decode(in)
+		if err != nil {
+			return
+		}
+		out := canonicalJSON(v)
+		if i := bytes.IndexFunc(out, func(r rune) bool { return r < 0x20 || r >= 0x7f }); i >= 0 {
+			t.Errorf("%q isn't printable ASCII at %d", out, i)
+		}
+		again, err := decode(out)
+		if err != nil || !reflect.DeepEqual(again, v) {
+			t.Fatalf("%s decodes to %#v (%v), not %#v", out, again, err, v)
+		}
+		if twice := canonicalJSON(again); !bytes.Equal(twice, out) {
+			t.Errorf("canonical %s, then %s", out, twice)
 		}
 	})
 }

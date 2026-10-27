@@ -27,7 +27,7 @@ puts it into `$(go env GOPATH)/bin`.
 | `-show-saved` | Show what the cache holds for the account: key pair, certificates, BLE keys, bike messages and customer data | `false` |
 | `-cleartext-keys` | Without `VANMOOF_CACHE_KEY`, save the key pair, certificates, BLE keys and customer data unencrypted (see [Cache](#cache)) | `false` |
 | `-no-cache` | Do not read or write the cache (tokens, key pair, certificates, BLE keys, bike messages, customer data) | `false` |
-| `-allow-unknown-revocation` | Connect even when a VanMoof server's TLS certificate can't be confirmed unrevoked — neither OCSP nor the CRL vouches for it, or Mozilla's OneCRL couldn't be fetched; a revoked one is always refused (see [TLS Certificate Revocation](#tls-certificate-revocation)) | `false` |
+| `-allow-unknown-revocation` | Connect even when a VanMoof server's TLS certificate can't be confirmed unrevoked — neither OCSP nor the CRL vouches for it, or Mozilla's OneCRL couldn't be fetched or verified; a revoked one is always refused (see [TLS Certificate Revocation](#tls-certificate-revocation)) | `false` |
 | `-invitations` | Bike sharing invitations: `list`, `accept` or `decline` them (see [Bike Sharing Invitations](#bike-sharing-invitations)) | - |
 | `-sudo` | Skip all validation checks | `false` |
 | `-cert` | Base64 encoded certificate to parse | - |
@@ -346,14 +346,23 @@ without OCSP). A certificate valid for 7 days at most that names neither, as a C
 issue it, has nothing of its own to check.
 
 OneCRL is the list of certificates and keys Firefox distrusts, which the tool fetches once
-a run from [Firefox Remote Settings](https://firefox.settings.services.mozilla.com/v1/buckets/security-state/collections/onecrl/records).
+a run from [Firefox Remote Settings](https://firefox.settings.services.mozilla.com/v1/buckets/security-state/collections/onecrl/changeset?_expected=0).
 It matters because OCSP and the CRL come from the CA itself: a CA whose key is compromised
 can sign a certificate for `api.vanmoof-api.com` and vouch for it, but it can't take itself
 off Firefox's list. The list only ever distrusts, so a certificate it doesn't name is not
 thereby confirmed good — its OCSP or CRL still has to.
 
+The connection OneCRL comes over isn't itself checked for revocation, but the list is
+signed. The tool checks its content signature as Firefox does: ECDSA P-384 over the list's
+canonical JSON, by a certificate for `onecrl.content-signature.mozilla.org` (from the
+chain the list names) that chains up to Mozilla's content signing root,
+`root-ca-production-amo`, which the tool has built in. So whoever stands between you and
+Mozilla can't take a certificate off the list or serve a list of their own. They can only
+serve an older list that Mozilla signed, and only while the certificate that signed it is
+still valid, which is a few weeks.
+
 A certificate that neither OCSP nor the CRL confirms, e.g. as the CA's servers can't be
-reached, or whose OneCRL couldn't be fetched, is refused too:
+reached, or whose OneCRL couldn't be fetched or isn't signed by Mozilla, is refused too:
 
 ```
 Error: authentication failed: Post "https://api.vanmoof-api.com/v8/authenticate": vanmoof: TLS certificate revocation unknown: api.vanmoof-api.com (OCSP: …; CRL: …; OneCRL: …); -allow-unknown-revocation connects anyway
@@ -663,7 +672,7 @@ func main() {
   tool does (see [TLS Certificate Revocation](#tls-certificate-revocation)), over a copy of
   `http.DefaultTransport`. A revoked certificate (by OCSP, the CRL or Mozilla's OneCRL)
   makes them fail with an error wrapping `vanmoof.ErrRevoked`, and one left unconfirmed —
-  neither OCSP nor the CRL vouches for it, or OneCRL couldn't be fetched — with
+  neither OCSP nor the CRL vouches for it, or OneCRL couldn't be fetched or verified — with
   `vanmoof.ErrRevocationUnknown`, unless `vanmoof.SetAllowUnknownRevocation(true)`.
 - The tokens, your private key and the certificates let anyone unlock the bike: keep
   them out of logs.

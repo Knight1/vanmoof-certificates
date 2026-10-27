@@ -3,16 +3,19 @@ package vanmoof
 import (
 	"cmp"
 	"context"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -119,6 +122,7 @@ type revocationServers struct {
 	ocspRevoked, crlRevoked []*big.Int     // the serial numbers OCSP and the CRLs report revoked
 	ocspDown, crlDown       bool           // they answer HTTP 500
 	oneCRLDown              bool           // OneCRL answers HTTP 500
+	oneCRLForged            bool           // OneCRL is signed by a key that isn't Mozilla's
 	oneCRLRecords           []oneCRLRecord // what OneCRL serves (none, so nothing distrusted, by default)
 	staple                  func() []byte  // what the TLS server staples, if anything
 	fetches                 map[string]int // requests to the CA, by path
@@ -175,6 +179,8 @@ func (s *revocationServers) dial(ctx context.Context, network, addr string) (net
 	switch {
 	case slices.Contains(hosts, host):
 		addr = s.api.Listener.Addr().String()
+	case host == must(url.Parse(contentChainURL)).Hostname(): // the CA server also serves the chain OneCRL is signed with
+		addr = s.ca.Listener.Addr().String()
 	case addr != s.ca.Listener.Addr().String():
 		return nil, fmt.Errorf("the test tried to reach %s", addr)
 	}
@@ -189,7 +195,8 @@ func reachOnly(t *testing.T, transport *http.Transport) {
 }
 
 // serveCA answers the OCSP requests to /ocsp/<CA>, and serves the CA's CRL at
-// /crl/<CA>.crl, for the root CA or the intermediate one
+// /crl/<CA>.crl, for the root CA or the intermediate one; and OneCRL at /onecrl, with the
+// chain it's signed with at /onecrl.chain
 func (s *revocationServers) serveCA(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -217,7 +224,11 @@ func (s *revocationServers) serveCA(w http.ResponseWriter, r *http.Request) {
 			revoked = append(revoked, x509.RevocationListEntry{SerialNumber: serial, RevocationTime: time.Now().Add(-time.Hour)})
 		}
 		w.Write(crlOf(issuer, x509.RevocationList{RevokedCertificateEntries: revoked}))
-	case strings.HasPrefix(r.URL.Path, "/onecrl") && !s.oneCRLDown:
+	case r.URL.Path == "/onecrl.chain":
+		w.Write(testContentSigner.chain)
+	case r.URL.Path == "/onecrl" && s.oneCRLForged:
+		w.Write(forgedContentSigner.changeset(s.oneCRLRecords...))
+	case r.URL.Path == "/onecrl" && !s.oneCRLDown:
 		w.Write(oneCRLJSON(s.oneCRLRecords...))
 	default:
 		http.Error(w, "down", http.StatusInternalServerError)
@@ -241,11 +252,114 @@ func oneCRLByKey(cert *x509.Certificate) oneCRLRecord {
 	}
 }
 
-// oneCRLJSON is the JSON Firefox Remote Settings serves for the records
+// oneCRLRecord is one of OneCRL's entries: a certificate by its issuer and serial, or a key
+// by its subject and the hash of its public key info
+type oneCRLRecord struct {
+	IssuerName, SerialNumber, Subject, PubKeyHash string
+}
+
+// contentChainURL is where the test's OneCRL says its signer's certificate chain is
+const contentChainURL = "http://content-signature.example/onecrl.chain"
+
+// contentSigner signs as Mozilla's content signing does, with a PKI of its own: a root, an
+// intermediate CA, and a certificate for oneCRLSigner, for code signing, with key. chain is
+// the PEM of the signer's and the intermediate's certificates.
+type contentSigner struct {
+	root  *x509.Certificate
+	key   crypto.Signer
+	chain []byte
+}
+
+var (
+	// testContentSigner is the one the tests trust (TestMain makes its root
+	// contentSignatureRoots), whose chain is at contentChainURL
+	testContentSigner = newContentSigner(p384Key(), nil)
+	// forgedContentSigner signs with another key, as someone who isn't Mozilla would
+	forgedContentSigner = newContentSigner(p384Key(), nil)
+)
+
+func p384Key() *ecdsa.PrivateKey {
+	return must(ecdsa.GenerateKey(elliptic.P384(), rand.Reader))
+}
+
+// newContentSigner issues a content signing PKI, the signer's certificate for key, as change
+// changes it. All of it is valid for the hour before and after now.
+func newContentSigner(key crypto.Signer, change func(*x509.Certificate)) *contentSigner {
+	now := time.Now()
+	ca := func(name string) *x509.Certificate {
+		return &x509.Certificate{SerialNumber: big.NewInt(pkiSerial.Add(1)), Subject: pkix.Name{CommonName: name}, IsCA: true, BasicConstraintsValid: true,
+			KeyUsage: x509.KeyUsageCertSign, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageCodeSigning}, NotBefore: now.Add(-time.Hour), NotAfter: now.Add(time.Hour)}
+	}
+	sign := func(template, parent *x509.Certificate, key, parentKey crypto.Signer) *x509.Certificate {
+		return must(x509.ParseCertificate(must(x509.CreateCertificate(rand.Reader, template, parent, key.Public(), parentKey))))
+	}
+	rootKey, intermediateKey := p384Key(), p384Key()
+	rootTemplate := ca("Test Content Signing Root")
+	root := sign(rootTemplate, rootTemplate, rootKey, rootKey)
+	intermediate := sign(ca("Test Content Signing Intermediate"), root, intermediateKey, rootKey)
+	template := &x509.Certificate{SerialNumber: big.NewInt(pkiSerial.Add(1)), Subject: pkix.Name{CommonName: oneCRLSigner}, DNSNames: []string{oneCRLSigner},
+		KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageCodeSigning}, NotBefore: now.Add(-time.Hour), NotAfter: now.Add(time.Hour)}
+	if change != nil {
+		change(template)
+	}
+	signer := sign(template, intermediate, key, intermediateKey)
+	chain := append(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: signer.Raw}), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: intermediate.Raw})...)
+	return &contentSigner{root, key, chain}
+}
+
+// sign is the content signature of content, with s's ECDSA key: base64url of r || s, each
+// as wide as the key
+func (s *contentSigner) sign(content []byte) string {
+	key := s.key.(*ecdsa.PrivateKey)
+	hash := sha512.Sum384(append([]byte("Content-Signature:\x00"), content...))
+	r, sig := must2(ecdsa.Sign(rand.Reader, key, hash[:]))
+	size := (key.Curve.Params().BitSize + 7) / 8
+	return base64.RawURLEncoding.EncodeToString(append(r.FillBytes(make([]byte, size)), sig.FillBytes(make([]byte, size))...))
+}
+
+// must2 is must for two results
+func must2[T, U any](t T, u U, err error) (T, U) {
+	if err != nil {
+		panic(err)
+	}
+	return t, u
+}
+
+// changeset is the changeset Firefox Remote Settings serves for the records, which s signs,
+// its chain at contentChainURL. The records go out in the reverse order of their ids, the
+// signature signs them in order.
+func (s *contentSigner) changeset(records ...oneCRLRecord) []byte {
+	const timestamp = "1700000000000"
+	data, changes := make([]any, len(records)), make([]any, len(records))
+	for i, rec := range records {
+		data[i] = map[string]any{"id": fmt.Sprintf("%03d", i), "last_modified": json.Number(timestamp),
+			"issuerName": rec.IssuerName, "serialNumber": rec.SerialNumber, "subject": rec.Subject, "pubKeyHash": rec.PubKeyHash}
+		changes[len(records)-1-i] = data[i]
+	}
+	signature := s.sign(canonicalJSON(map[string]any{"data": data, "last_modified": timestamp}))
+	return must(json.Marshal(map[string]any{
+		"metadata":  map[string]any{"signature": contentSignature{X5U: contentChainURL, Mode: "p384ecdsa", Signature: signature}},
+		"timestamp": json.Number(timestamp),
+		"changes":   changes,
+	}))
+}
+
+// oneCRLJSON is the changeset Firefox Remote Settings serves for the records, signed by
+// testContentSigner
 func oneCRLJSON(records ...oneCRLRecord) []byte {
-	return must(json.Marshal(struct {
-		Data []oneCRLRecord `json:"data"`
-	}{records}))
+	return testContentSigner.changeset(records...)
+}
+
+// oneCRLResponse answers r, with body, if it's for OneCRL, or with testContentSigner's chain
+// if it's for that; for anything else it's nil
+func oneCRLResponse(r *http.Request, body []byte) *http.Response {
+	switch r.URL.String() {
+	case oneCRLURL:
+		return httpResponse(r, http.StatusOK, string(body))
+	case contentChainURL:
+		return httpResponse(r, http.StatusOK, string(testContentSigner.chain))
+	}
+	return nil
 }
 
 func containsSerial(serials []*big.Int, serial *big.Int) bool {
@@ -293,7 +407,7 @@ func TestRevocationChecked(t *testing.T) {
 		}
 		out.WriteString(o)
 	}
-	want := map[string]int{"/ocsp/intermediate": 3, "/crl/intermediate.crl": 1, "/ocsp/root": 1, "/crl/root.crl": 1, "/onecrl": 1}
+	want := map[string]int{"/ocsp/intermediate": 3, "/crl/intermediate.crl": 1, "/ocsp/root": 1, "/crl/root.crl": 1, "/onecrl": 1, "/onecrl.chain": 1}
 	if got := s.fetched(); !maps.Equal(got, want) {
 		t.Errorf("fetched %v, want %v", got, want)
 	}
@@ -417,8 +531,8 @@ func TestShortLivedCertificates(t *testing.T) {
 			OCSPServer: ocspURLs, CRLDistributionPoints: crlURLs}).cert
 	}
 	checker := newRevocationChecker(roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		if r.URL.String() == oneCRLURL { // OneCRL reachable and empty; the certificate's own CA offline
-			return httpResponse(r, http.StatusOK, string(oneCRLJSON())), nil
+		if resp := oneCRLResponse(r, oneCRLJSON()); resp != nil { // OneCRL reachable and empty; the certificate's own CA offline
+			return resp, nil
 		}
 		return nil, errors.New("offline")
 	}))
@@ -724,14 +838,17 @@ func TestSerialBytes(t *testing.T) {
 }
 
 // parseOneCRL reads the records that name both the fields a lookup needs, by serial or by
-// key, and skips the rest; invalid JSON is an error
+// key, and skips the rest and the deleted ones; what the signature has to sign is the
+// canonical JSON of the records, by id, and the timestamp. Invalid JSON is an error.
 func TestParseOneCRL(t *testing.T) {
-	list, err := parseOneCRL(oneCRLJSON(
-		oneCRLRecord{IssuerName: "aXNz", SerialNumber: "AQ=="},
-		oneCRLRecord{Subject: "c3Vi", PubKeyHash: "aGFzaA=="},
-		oneCRLRecord{IssuerName: "only-an-issuer"},
-		oneCRLRecord{},
-	))
+	list, err := parseOneCRL([]byte(`{"metadata": {"signature": {"x5u": "https://cdn.example/chain", "mode": "p384ecdsa", "signature": "c2ln"}},
+		"timestamp": 1700000000000,
+		"changes": [
+			{"id": "b", "subject": "c3Vi", "pubKeyHash": "aGFzaA==", "last_modified": 1700000000000},
+			{"id": "a", "issuerName": "aXNz", "serialNumber": "AQ==", "enabled": true, "details": {"why": "caf\u00e9\n"}},
+			{"id": "d", "issuerName": "only-an-issuer", "subject": 1, "pubKeyHash": "aGFzaA=="},
+			{"id": "c", "deleted": true, "subject": "ZGVs", "pubKeyHash": "aGFzaA=="}
+		]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -741,8 +858,19 @@ func TestParseOneCRL(t *testing.T) {
 	if _, ok := list.byKey["c3Vi\x00aGFzaA=="]; !ok || len(list.byKey) != 1 {
 		t.Errorf("byKey = %v", list.byKey)
 	}
-	if _, err := parseOneCRL([]byte("not json")); err == nil {
-		t.Error("parsed invalid JSON without an error")
+	want := `{"data":[{"details":{"why":"caf\u00e9\n"},"enabled":true,"id":"a","issuerName":"aXNz","serialNumber":"AQ=="},` +
+		`{"id":"b","last_modified":1700000000000,"pubKeyHash":"aGFzaA==","subject":"c3Vi"},` +
+		`{"id":"d","issuerName":"only-an-issuer","pubKeyHash":"aGFzaA==","subject":1}],"last_modified":"1700000000000"}`
+	if string(list.signed) != want {
+		t.Errorf("signed %s\nwant   %s", list.signed, want)
+	}
+	if sig := (contentSignature{X5U: "https://cdn.example/chain", Mode: "p384ecdsa", Signature: "c2ln"}); list.signature != sig {
+		t.Errorf("signature = %+v", list.signature)
+	}
+	for _, body := range []string{"not json", `{"changes": [1]}`, `{"changes": []} {}`} {
+		if _, err := parseOneCRL([]byte(body)); err == nil || !strings.HasPrefix(err.Error(), "invalid OneCRL JSON") {
+			t.Errorf("%s: err = %v", body, err)
+		}
 	}
 }
 
@@ -770,25 +898,41 @@ func TestOneCRLRevokes(t *testing.T) {
 func TestCheckOneCRL(t *testing.T) {
 	ca := newCA(t, nil, "Test CA", nil, nil)
 	cert := newLeaf(t, &ca, "server", nil, nil)
+	listed := oneCRLBySerial(cert.cert)
 	tests := []struct {
-		name    string
-		body    string
-		status  int
-		offline bool
-		want    revocationStatus
-		detail  string // the start of it
+		name      string
+		body      string
+		status    int
+		offline   bool
+		chainDown bool // the signer's certificate chain answers HTTP 404
+		want      revocationStatus
+		detail    string // the start of it
 	}{
-		{"not distrusted", string(oneCRLJSON()), http.StatusOK, false, statusGood, "not distrusted"},
-		{"distrusted", string(oneCRLJSON(oneCRLBySerial(cert.cert))), http.StatusOK, false, statusRevoked, "distrusted"},
-		{"invalid JSON", "garbage", http.StatusOK, false, statusUnknown, "not fetched: invalid OneCRL JSON"},
-		{"server down", "", http.StatusInternalServerError, false, statusUnknown, "not fetched:"},
-		{"offline", "", 0, true, statusUnknown, "not fetched:"},
+		{"not distrusted", string(oneCRLJSON()), http.StatusOK, false, false, statusGood, "not distrusted"},
+		{"distrusted", string(oneCRLJSON(listed)), http.StatusOK, false, false, statusRevoked, "distrusted"},
+		{"invalid JSON", "garbage", http.StatusOK, false, false, statusUnknown, "not fetched: invalid OneCRL JSON"},
+		{"server down", "", http.StatusInternalServerError, false, false, statusUnknown, "not fetched:"},
+		{"offline", "", 0, true, false, statusUnknown, "not fetched:"},
+		{"signed with another key", string(forgedContentSigner.changeset(listed)), http.StatusOK, false, false, statusUnknown,
+			"signature not verified: the signature doesn't match"},
+		{"with a record added", strings.Replace(string(oneCRLJSON()), `"changes":[]`,
+			`"changes":[{"id":"x","issuerName":"`+listed.IssuerName+`","serialNumber":"`+listed.SerialNumber+`"}]`, 1), http.StatusOK, false, false, statusUnknown,
+			"signature not verified: the signature doesn't match"},
+		{"with a record removed", strings.Replace(string(oneCRLJSON(listed)), `"changes":[{`, `"changes":[],"removed":[{`, 1), http.StatusOK, false, false, statusUnknown,
+			"signature not verified: the signature doesn't match"},
+		{"without the signer's certificate chain", string(oneCRLJSON()), http.StatusOK, false, true, statusUnknown,
+			"signature not verified: " + contentChainURL + ": HTTP 404"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			checker := newRevocationChecker(roundTripFunc(func(r *http.Request) (*http.Response, error) {
-				if tt.offline {
+				switch {
+				case tt.offline:
 					return nil, errors.New("offline")
+				case r.URL.String() == contentChainURL && tt.chainDown:
+					return httpResponse(r, http.StatusNotFound, ""), nil
+				case r.URL.String() == contentChainURL:
+					return oneCRLResponse(r, nil), nil
 				}
 				return httpResponse(r, tt.status, tt.body), nil
 			}))
@@ -826,21 +970,30 @@ func TestOneCRLRevocation(t *testing.T) {
 			}
 		}
 	})
-	t.Run("unreachable", func(t *testing.T) {
-		for _, allow := range []bool{false, true} {
-			t.Run(fmt.Sprintf("allowing unknown %v", allow), func(t *testing.T) {
-				s := newRevocationServers(t)
-				s.change(func() { s.oneCRLDown = true })
-				allowUnknown(t, allow)
-				out, err := get(t, hosts[0], true)
-				if allow {
-					if err != nil || s.requests.Load() != 1 || !strings.Contains(out, "OneCRL: not fetched") {
-						t.Errorf("err = %v, %d requests\n%s", err, s.requests.Load(), out)
+	// A OneCRL that isn't Mozilla's counts as none, even one that distrusts nothing
+	for name, tt := range map[string]struct {
+		change func(s *revocationServers)
+		detail string
+	}{
+		"unreachable": {func(s *revocationServers) { s.oneCRLDown = true }, "OneCRL: not fetched"},
+		"forged":      {func(s *revocationServers) { s.oneCRLForged = true }, "OneCRL: signature not verified: the signature doesn't match"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, allow := range []bool{false, true} {
+				t.Run(fmt.Sprintf("allowing unknown %v", allow), func(t *testing.T) {
+					s := newRevocationServers(t)
+					s.change(func() { tt.change(s) })
+					allowUnknown(t, allow)
+					out, err := get(t, hosts[0], true)
+					if allow {
+						if err != nil || s.requests.Load() != 1 || !strings.Contains(out, tt.detail) {
+							t.Errorf("err = %v, %d requests\n%s", err, s.requests.Load(), out)
+						}
+					} else if !errors.Is(err, ErrRevocationUnknown) || !strings.Contains(err.Error(), tt.detail) || s.requests.Load() != 0 {
+						t.Errorf("err = %v, %d requests", err, s.requests.Load())
 					}
-				} else if !errors.Is(err, ErrRevocationUnknown) || s.requests.Load() != 0 {
-					t.Errorf("err = %v, %d requests", err, s.requests.Load())
-				}
-			})
-		}
-	})
+				})
+			}
+		})
+	}
 }

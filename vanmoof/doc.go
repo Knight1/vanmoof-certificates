@@ -27,8 +27,9 @@
 //
 // Requests go over a copy of http.DefaultTransport that checks the TLS certificates of
 // VanMoof's servers for revocation, with OCSP, CRLs and Mozilla's OneCRL (the list Firefox
-// distrusts, fetched once a run), once each: a revoked one fails them with ErrRevoked, and
-// one left unconfirmed, OneCRL unfetchable included, with ErrRevocationUnknown, unless
+// distrusts, fetched once a run, its content signature checked as Firefox checks it), once
+// each: a revoked one fails them with ErrRevoked, and one left unconfirmed, OneCRL
+// unfetchable or not signed by Mozilla included, with ErrRevocationUnknown, unless
 // SetAllowUnknownRevocation.
 //
 // The package's other exported functions, such as GetCert, ShowKeys and

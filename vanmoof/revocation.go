@@ -27,11 +27,11 @@ import (
 // Before a request goes out, the TLS certificate of the server it goes to, and each CA
 // certificate it chains to (but the root), is checked for revocation: with OCSP (the
 // response the server staples, or else the CA's responder), with its CRL, and against
-// Mozilla's OneCRL, the certificates and keys Firefox distrusts (fetched once a run). A
-// certificate OCSP, a CRL or OneCRL reports as revoked is refused. So is one left
-// unconfirmed: neither OCSP nor a CRL vouches for it and it isn't short-lived, or OneCRL
-// couldn't be fetched, so a distrusted key might slip through. SetAllowUnknownRevocation
-// connects anyway. OneCRL matters because a compromised CA can forge its own OCSP and CRL
+// Mozilla's OneCRL, the certificates and keys Firefox distrusts (fetched once a run, and
+// only counted if Mozilla signed it). A certificate OCSP, a CRL or OneCRL reports as
+// revoked is refused. So is one left unconfirmed: neither OCSP nor a CRL vouches for it and
+// it isn't short-lived, or OneCRL couldn't be fetched or verified, so a distrusted key
+// might slip through. SetAllowUnknownRevocation connects anyway. OneCRL matters because a compromised CA can forge its own OCSP and CRL
 // but can't take itself off Firefox's list. Each certificate is checked once, and the
 // connections are kept alive.
 
@@ -42,16 +42,17 @@ var ErrRevoked = errors.New("vanmoof: TLS certificate revoked")
 
 // ErrRevocationUnknown is wrapped by the error of a request to a server for whose TLS
 // certificate, or a CA certificate it chains to, neither OCSP nor a CRL confirms that it
-// isn't revoked, or whose OneCRL couldn't be fetched, e.g. as the CA's or Mozilla's servers
-// can't be reached. The request isn't sent, unless SetAllowUnknownRevocation allows it.
+// isn't revoked, or whose OneCRL couldn't be fetched or isn't signed by Mozilla, e.g. as
+// the CA's or Mozilla's servers can't be reached. The request isn't sent, unless
+// SetAllowUnknownRevocation allows it.
 var ErrRevocationUnknown = errors.New("vanmoof: TLS certificate revocation unknown")
 
 var allowUnknownRevocation atomic.Bool
 
 // SetAllowUnknownRevocation sets whether a request goes out to a server for whose TLS
 // certificate neither OCSP nor a CRL confirms that it isn't revoked, or whose OneCRL
-// couldn't be fetched (see ErrRevocationUnknown). One reported as revoked is refused either
-// way.
+// couldn't be fetched or verified (see ErrRevocationUnknown). One reported as revoked is
+// refused either way.
 func SetAllowUnknownRevocation(allow bool) {
 	allowUnknownRevocation.Store(allow)
 }
@@ -66,8 +67,11 @@ const (
 )
 
 // oneCRLURL is Mozilla's OneCRL, the certificates and keys Firefox distrusts, which Firefox
-// Remote Settings serves as JSON. A var so a test can point it at a local server.
-var oneCRLURL = "https://firefox.settings.services.mozilla.com/v1/buckets/security-state/collections/onecrl/records"
+// Remote Settings serves as JSON, with its content signature: the records, the timestamp
+// and the signature in one response, so they can't be from different versions of the list.
+// (_expected is the timestamp the client expects; any one will do, as a CDN cache key.)
+// A var so a test can point it at a local server.
+var oneCRLURL = "https://firefox.settings.services.mozilla.com/v1/buckets/security-state/collections/onecrl/changeset?_expected=0"
 
 var (
 	checkedMu   sync.Mutex
@@ -122,8 +126,8 @@ type revocation struct {
 	printed    atomic.Bool // whether debug output showed it
 }
 
-// status is revoked if any check reports it; else unknown if OneCRL couldn't be fetched, as
-// a distrusted key might have slipped through; else good if OCSP or a CRL confirms it, or
+// status is revoked if any check reports it; else unknown if OneCRL couldn't be fetched or
+// verified, as a distrusted key might have slipped through; else good if OCSP or a CRL confirms it, or
 // the certificate is short-lived. OneCRL alone never makes a certificate good: it lists what
 // Firefox distrusts, so a certificate it doesn't name may still be revoked by its own CA.
 func (r *revocation) status() revocationStatus {
@@ -480,37 +484,55 @@ func distributionPointURLs(der []byte) []string {
 // oneCRL is Mozilla's OneCRL: the certificates and keys Firefox distrusts, as two sets to
 // look a certificate up in. It never vouches for a certificate, only distrusts one.
 type oneCRL struct {
-	bySerial map[string]struct{} // base64(issuer DN) + NUL + base64(serial): a specific certificate
-	byKey    map[string]struct{} // base64(subject DN) + NUL + base64(SHA-256 of the SPKI): a key
+	bySerial  map[string]struct{} // base64(issuer DN) + NUL + base64(serial): a specific certificate
+	byKey     map[string]struct{} // base64(subject DN) + NUL + base64(SHA-256 of the SPKI): a key
+	signed    []byte              // what signature has to sign for the list to be Mozilla's
+	signature contentSignature
 }
 
-// oneCRLRecord is one of OneCRL's entries: a certificate by its issuer and serial, or a key
-// by its subject and the hash of its public key info
-type oneCRLRecord struct {
-	IssuerName   string `json:"issuerName"`
-	SerialNumber string `json:"serialNumber"`
-	Subject      string `json:"subject"`
-	PubKeyHash   string `json:"pubKeyHash"`
-}
-
-// parseOneCRL parses the JSON Firefox Remote Settings serves: {"data": [record, ...]}
+// parseOneCRL parses the changeset Firefox Remote Settings serves: {"metadata": {"signature":
+// {...}}, "timestamp": N, "changes": [record, ...]}. A record names a certificate by its
+// "issuerName" and "serialNumber", or a key by its "subject" and "pubKeyHash" (the hash of
+// its public key info). The records are read from what the signature signs, the canonical
+// JSON of {"data": the records but deleted ones, by "id", "last_modified": "N"}, so nothing
+// the signature doesn't cover can distrust a certificate, or keep one from being distrusted.
 func parseOneCRL(body []byte) (*oneCRL, error) {
 	var doc struct {
-		Data []oneCRLRecord `json:"data"`
+		Metadata struct {
+			Signature contentSignature `json:"signature"`
+		} `json:"metadata"`
+		Timestamp json.Number      `json:"timestamp"`
+		Changes   []map[string]any `json:"changes"`
 	}
-	if err := json.Unmarshal(body, &doc); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+	if err := decoder.Decode(&doc); err != nil {
 		return nil, fmt.Errorf("invalid OneCRL JSON: %w", err)
 	}
-	list := &oneCRL{bySerial: make(map[string]struct{}), byKey: make(map[string]struct{})}
-	for _, rec := range doc.Data {
-		if rec.IssuerName != "" && rec.SerialNumber != "" {
-			list.bySerial[rec.IssuerName+"\x00"+rec.SerialNumber] = struct{}{}
+	if _, err := decoder.Token(); err != io.EOF {
+		return nil, errors.New("invalid OneCRL JSON: more after the changeset")
+	}
+	records := slices.DeleteFunc(doc.Changes, func(rec map[string]any) bool { return rec["deleted"] == true })
+	slices.SortStableFunc(records, func(a, b map[string]any) int { return strings.Compare(text(a["id"]), text(b["id"])) })
+	data := make([]any, len(records))
+	list := &oneCRL{bySerial: make(map[string]struct{}), byKey: make(map[string]struct{}), signature: doc.Metadata.Signature}
+	for i, rec := range records {
+		data[i] = rec
+		if issuer, serial := text(rec["issuerName"]), text(rec["serialNumber"]); issuer != "" && serial != "" {
+			list.bySerial[issuer+"\x00"+serial] = struct{}{}
 		}
-		if rec.Subject != "" && rec.PubKeyHash != "" {
-			list.byKey[rec.Subject+"\x00"+rec.PubKeyHash] = struct{}{}
+		if subject, hash := text(rec["subject"]), text(rec["pubKeyHash"]); subject != "" && hash != "" {
+			list.byKey[subject+"\x00"+hash] = struct{}{}
 		}
 	}
+	list.signed = canonicalJSON(map[string]any{"data": data, "last_modified": doc.Timestamp.String()})
 	return list, nil
+}
+
+// text is v if it's a string, or else ""
+func text(v any) string {
+	s, _ := v.(string)
+	return s
 }
 
 // revokes reports whether OneCRL distrusts cert: by its issuer and serial, or by its subject
@@ -535,12 +557,21 @@ func serialBytes(serial *big.Int) []byte {
 	return raw.Bytes
 }
 
-// distrust returns Mozilla's OneCRL, fetched and parsed once for the whole run
+// distrust returns Mozilla's OneCRL, fetched, parsed and its signature checked once for the
+// whole run. One whose signature doesn't check out is an error, as it may not be Mozilla's.
 func (c *revocationChecker) distrust() (*oneCRL, error) {
 	c.onecrlOnce.Do(func() {
-		var body []byte
-		if body, c.onecrlErr = c.fetch(oneCRLURL, nil); c.onecrlErr == nil {
-			c.onecrl, c.onecrlErr = parseOneCRL(body)
+		body, err := c.fetch(oneCRLURL, nil)
+		var list *oneCRL
+		if err == nil {
+			list, err = parseOneCRL(body)
+		}
+		if err != nil {
+			c.onecrlErr = fmt.Errorf("not fetched: %w", err)
+		} else if err = c.verifyContentSignature(list.signed, list.signature); err != nil {
+			c.onecrlErr = fmt.Errorf("signature not verified: %w", err)
+		} else {
+			c.onecrl = list
 		}
 	})
 	return c.onecrl, c.onecrlErr
@@ -552,7 +583,7 @@ func (c *revocationChecker) distrust() (*oneCRL, error) {
 func (c *revocationChecker) checkOneCRL(cert *x509.Certificate) checkResult {
 	list, err := c.distrust()
 	if err != nil {
-		return checkResult{detail: "not fetched: " + err.Error()}
+		return checkResult{detail: err.Error()}
 	}
 	if list.revokes(cert) {
 		return checkResult{statusRevoked, "distrusted"}

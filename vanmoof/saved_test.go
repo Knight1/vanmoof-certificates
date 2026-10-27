@@ -2,6 +2,7 @@ package vanmoof
 
 import (
 	"bytes"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,6 +34,8 @@ func TestMain(m *testing.M) {
 	http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		return nil, fmt.Errorf("the test tried to reach %s", r.URL.Host)
 	})
+	contentSignatureRoots = x509.NewCertPool() // OneCRL is signed by the tests' own content signer
+	contentSignatureRoots.AddCert(testContentSigner.root)
 	code := m.Run()
 	os.RemoveAll(home)
 	os.Exit(code)
