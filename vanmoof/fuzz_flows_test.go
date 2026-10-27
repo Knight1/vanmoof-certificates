@@ -124,7 +124,7 @@ func fakeAccount(t *testing.T, secret, personal string) {
 	name, key := str(personal), str(secret)
 	customerData := `{"data":{"uuid":"` + leakUUID + `","name":` + name + `,"phone":` + name + `,"bikes":[` +
 		`{"id":1,"name":` + name + `,"frameNumber":"BBBBBB00001AA","bleProfile":"ELECTRIFIED_2022"},` +
-		`{"id":2,"name":` + name + `,"frameNumber":"LKY0000002","bleProfile":"ELECTRIFIED_2021"},` +
+		`{"id":2,"name":` + name + `,"frameNumber":"LKY0000002","bleProfile":"ELECTRIFIED_2021","customerRole":"user","startsAt":` + name + `,"endsAt":` + name + `},` +
 		`{"id":3,"name":` + name + `,"frameNumber":"LKY0000003","bleProfile":"ELECTRIFIED_2018"}],"bikeDetails":[` +
 		`{"id":2,"name":` + name + `,"frameNumber":"LKY0000002","macAddress":` + name + `,"bleProfile":"ELECTRIFIED_2021","key":{"encryptionKey":` + key + `,"passcode":` + key + `}},` +
 		`{"id":3,"name":` + name + `,"frameNumber":"LKY0000003","macAddress":` + name + `,"bleProfile":"ELECTRIFIED_2018","key":{"encryptionKey":""}}]}}`
@@ -147,7 +147,7 @@ func fakeAccount(t *testing.T, secret, personal string) {
 		case strings.HasPrefix(p, "/v8/getBikeMessages/"):
 			body = `[{"content":` + key + `}]`
 		case p == "/external/riders/"+leakUUID+"/vehicles":
-			body = `{"vehicle_access":[{"vehicle_id":"AAAAA000004AA","name":` + name + `,"rider_name":` + name + `,"owner_name":` + name + `,"ble_profile":"ELECTRIFIED_2025"}]}`
+			body = `{"vehicle_access":[{"vehicle_id":"AAAAA000004AA","name":` + name + `,"rider_name":` + name + `,"owner_name":` + name + `,"starts_at":` + name + `,"expires_at":` + name + `,"ble_profile":"ELECTRIFIED_2025"}]}`
 		case strings.HasSuffix(p, "/create_certificate"):
 			var req CertificateRequest
 			json.NewDecoder(r.Body).Decode(&req)

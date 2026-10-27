@@ -48,7 +48,6 @@ func ShowKeys(email, mode string, opts Options) error {
 
 	if debug {
 		fmt.Printf("[DEBUG] Customer UUID: %s\n", Redact(customerData.Data.UUID))
-		fmt.Printf("[DEBUG] Retrieved %d owned bikes\n", len(customerData.Data.Bikes))
 		debugPrintBikeProfiles(customerData.Data.Bikes)
 	}
 

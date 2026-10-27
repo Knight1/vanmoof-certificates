@@ -45,6 +45,12 @@ type Bike struct {
 	BleProfile    string `json:"bleProfile"`
 	MainEcuSerial string `json:"mainEcuSerial"`
 	Owner         string `json:"-"` // the owner's name, for a bike shared with the account
+	// The account's role for the bike in getCustomerData: "owner" for its own, another
+	// (e.g. "user") for a bike shared with it, with, in ISO 8601, when the sharing starts
+	// and ends
+	CustomerRole string `json:"customerRole"`
+	StartsAt     string `json:"startsAt"`
+	EndsAt       string `json:"endsAt"`
 }
 
 // BikeDetail is an entry of bikeDetails in the getCustomerData response

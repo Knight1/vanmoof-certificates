@@ -293,6 +293,23 @@ certificates. Frame numbers and IDs keep only their shape (e.g. `LLLLLLDDDDDLL`)
 To see everything, tokens included, add `-show-everything` (debug only). Never
 share that output: anyone with your tokens or keys can unlock your bike.
 
+Debug output lists the account's bikes with their name and BLE profile. A bike
+shared with you shows how long it's shared (times in UTC): one from `getCustomerData`
+(such as an S3, with a role other than `owner`) with its role, and one from the
+Vehicle Registry API (S5/S6) with its owner:
+
+```
+[DEBUG] Retrieved 2 bikes: 1 owned, 1 shared with you
+[DEBUG]   SVTBKL00001OA "My bike": ELECTRIFIED_2022 (SA5)
+[DEBUG]   ASY0000002 "Borrowed S3": ELECTRIFIED_2020 (S3/X3), shared with you as user until 2026-11-03 15:04 UTC (7 days left)
+[DEBUG] Retrieved 1 shared vehicles
+[DEBUG]   SVTBKL00003OA "Their bike": ELECTRIFIED_2025 (S6), shared by Alice until 2026-12-01 12:00 UTC (35 days left)
+```
+
+A sharing that hasn't started yet shows `from` its start, one without an end
+`without end`, and one that's over `(expired)`. `-redact` hides the names, and any
+time that isn't in the usual format.
+
 Debug output also shows, once for each, what the revocation checks found out about
 the TLS certificates of VanMoof's servers (see [TLS Certificate Revocation](#tls-certificate-revocation)):
 

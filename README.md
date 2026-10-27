@@ -15,7 +15,7 @@ Pull Requests are welcome! ❤️
 - Saves your key pair, the certificates, BLE keys, bike messages and `getCustomerData` response in its cache (encrypted with `VANMOOF_CACHE_KEY`, or unencrypted only if you accept that with `-cleartext-keys`), and requests every certificate for the saved key pair, so a BLE app needs the private key only once (`-new-key` makes a new one, `-show-saved` shows what's saved)
 - Retrieve and filter SA5 and S6 bikes from your account
 - List, accept and decline bike sharing invitations (`-invitations`)
-- Support for shared/guest bikes via VanMoof's Vehicle Registry API
+- Support for shared/guest bikes via VanMoof's Vehicle Registry API (debug mode shows how long each is shared)
 - Generate Ed25519 key pairs
 - Create and parse bike certificates
 - Generate a self-signed certificate with a key of your own from a JSON config (`-generate`): advanced, for a bike whose module firmware you've changed to trust your key, since a stock bike trusts only VanMoof's

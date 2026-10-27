@@ -198,7 +198,7 @@ func fakeVanMoof(t *testing.T) (certs, pubKeys *[]string) {
 		"uuid": leakUUID, "name": leakName, "email": leakEmail, "phone": leakPhone,
 		"bikes": []map[string]any{
 			{"id": leakSA5ID, "name": leakSA5Name, "frameNumber": leakSA5Frame, "frameSerial": leakSA5Frame, "mainEcuSerial": leakECU, "bleProfile": "ELECTRIFIED_2022"},
-			{"id": leakS3ID, "name": leakS3Name, "frameNumber": leakS3Frame, "bleProfile": "ELECTRIFIED_2021"},
+			{"id": leakS3ID, "name": leakS3Name, "frameNumber": leakS3Frame, "bleProfile": "ELECTRIFIED_2021", "customerRole": "user", "startsAt": "2026-01-01T00:00:00.000000Z", "endsAt": "2126-01-01T00:00:00.000000Z"},
 			{"id": leakS2ID, "name": leakS2Name, "frameNumber": leakS2Frame, "bleProfile": "ELECTRIFIED_2018"},
 		},
 		"bikeDetails": []map[string]any{
@@ -210,6 +210,7 @@ func fakeVanMoof(t *testing.T) (certs, pubKeys *[]string) {
 	vehicles, _ := json.Marshal(map[string]any{"rider_id": leakUUID, "vehicle_access": []map[string]any{{
 		"vehicle_id": leakS6Frame, "role": "guest", "rider_name": leakRiderName, "rider_email": leakEmail, "name": leakSharedName,
 		"ble_profile": "ELECTRIFIED_2025", "ble_id": leakMAC3, "owner_id": leakOwnerUUID, "owner_name": leakOwnerName, "owner_email": leakOwnerEmail,
+		"starts_at": "2026-01-01T00:00:00Z", "expires_at": "2126-01-01T00:00:00Z",
 	}}})
 
 	var mu sync.Mutex // the fake serves concurrent requests too

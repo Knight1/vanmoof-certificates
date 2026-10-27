@@ -37,6 +37,12 @@ func (b Bike) UsesCertificates() bool {
 	return isCertOnlyProfile(b.BleProfile)
 }
 
+// sharedWithAccount reports whether getCustomerData gave the bike as shared with the
+// account rather than its own: with a role other than owner
+func (b Bike) sharedWithAccount() bool {
+	return b.CustomerRole != "" && !strings.EqualFold(b.CustomerRole, "owner")
+}
+
 // displayName is the bike's name for output: for a shared bike, with its owner's name
 func displayName(b Bike) string {
 	if b.Owner != "" {

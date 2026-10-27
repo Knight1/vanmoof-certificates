@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"golang.org/x/term"
 )
@@ -168,7 +169,6 @@ func GetCert(email string, opts Options) error {
 
 	if debug {
 		fmt.Printf("[DEBUG] Customer UUID: %s\n", Redact(customerUUID))
-		fmt.Printf("[DEBUG] Retrieved %d owned bikes\n", len(bikes))
 		debugPrintBikeProfiles(bikes)
 	}
 
@@ -182,29 +182,77 @@ func GetCert(email string, opts Options) error {
 	return err
 }
 
-// debugPrintBikeProfiles prints each bike's BLE profile and, if it's one we recognize,
-// the model name we map it to (debug mode only; callers only call this under debug).
+// debugPrintBikeProfiles prints how many bikes getCustomerData returned, and each
+// bike's name, BLE profile and, if it's one we recognize, the model name we map it to
+// (debug mode only; callers only call this under debug). A bike shared with the account
+// also gets its role and how long it's shared.
 func debugPrintBikeProfiles(bikes []Bike) {
+	shared := 0
+	for _, b := range bikes {
+		if b.sharedWithAccount() {
+			shared++
+		}
+	}
+	fmt.Printf("[DEBUG] Retrieved %d bikes: %d owned, %d shared with you\n", len(bikes), len(bikes)-shared, shared)
+	now := time.Now()
 	for _, b := range bikes {
 		model := bleProfileModel[b.BleProfile]
 		if model == "" {
 			model = "unknown"
 		}
-		fmt.Printf("[DEBUG]   %s: %s (%s)\n", RedactID(b.FrameNumber), printable(b.BleProfile), model)
+		sharing := ""
+		if b.sharedWithAccount() {
+			sharing = fmt.Sprintf(", shared with you as %s %s", printable(b.CustomerRole), sharingPeriod(b.StartsAt, b.EndsAt, now))
+		}
+		fmt.Printf("[DEBUG]   %s \"%s\": %s (%s)%s\n", RedactID(b.FrameNumber), Redact(b.Name), printable(b.BleProfile), model, sharing)
 	}
 }
 
 // debugPrintVehicleAccessProfiles is debugPrintBikeProfiles for shared/guest bikes from
-// the Vehicle Registry API, which come back as VehicleAccess rather than Bike.
+// the Vehicle Registry API, which come back as VehicleAccess rather than Bike, with how
+// long they're shared.
 func debugPrintVehicleAccessProfiles(vehicles []VehicleAccess) {
+	now := time.Now()
 	for _, v := range vehicles {
 		model := bleProfileModel[v.BleProfile]
 		if model == "" {
 			model = "unknown"
 		}
-		fmt.Printf("[DEBUG]   %s: %s (%s)\n", RedactID(v.VehicleID), printable(v.BleProfile), model)
+		fmt.Printf("[DEBUG]   %s \"%s\": %s (%s), shared by %s %s\n", RedactID(v.VehicleID), Redact(v.Name), printable(v.BleProfile), model, Redact(v.OwnerName), sharingPeriod(v.StartsAt, v.ExpiresAt, now))
 	}
 }
+
+// sharingPeriod says how long a bike is shared, as of now: from when (if that's still
+// to come) until when, and the time left. A time that isn't RFC 3339 is shown as
+// VanMoof gives it, but hidden with -redact, as it could be anything.
+func sharingPeriod(startsAt, endsAt string, now time.Time) string {
+	var period string
+	if start, err := time.Parse(time.RFC3339, startsAt); err == nil && start.After(now) {
+		period = "from " + start.UTC().Format(sharingTimeFormat) + " "
+	} else if err != nil && startsAt != "" {
+		period = "from " + Redact(startsAt) + " "
+	}
+	if endsAt == "" {
+		return period + "without end"
+	}
+	end, err := time.Parse(time.RFC3339, endsAt)
+	if err != nil {
+		return period + "until " + Redact(endsAt)
+	}
+	period += "until " + end.UTC().Format(sharingTimeFormat)
+	left := end.Sub(now)
+	switch {
+	case left <= 0:
+		return period + " (expired)"
+	case left < time.Hour:
+		return period + " (less than an hour left)"
+	case left < 24*time.Hour:
+		return period + fmt.Sprintf(" (%d hours left)", int(left.Hours()))
+	}
+	return period + fmt.Sprintf(" (%d days left)", int(left.Hours()/24))
+}
+
+const sharingTimeFormat = "2006-01-02 15:04 UTC"
 
 // warnPendingInvitations prints a warning if the account has pending bike sharing
 // invitations. A lookup failure is only surfaced in debug mode, since it isn't fatal.
