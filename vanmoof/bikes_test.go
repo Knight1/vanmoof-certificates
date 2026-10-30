@@ -71,7 +71,7 @@ func TestSelectBikes(t *testing.T) {
 }
 
 // A bike's model is the one of its frame shape, both without it, and whether it works with
-// Find My is known for the S3/X3 and older
+// Find My is known for the S3/X3 and older, and the SA5 and later
 func TestBikeModel(t *testing.T) {
 	tests := []struct {
 		profile, shape, model     string
@@ -79,8 +79,13 @@ func TestBikeModel(t *testing.T) {
 		findMy, findMyKnown       bool
 		description, findMySuffix string
 	}{
-		{"ELECTRIFIED_2022", "S", "SA5", true, false, false, "SA5", ""},
-		{"ELECTRIFIED_2025", "", "S6", true, false, false, "S6", ""},
+		{"ELECTRIFIED_2022", "S", "S5", true, true, true, "S5, Find My", " (Find My)"},
+		{"ELECTRIFIED_2022", "a", "A5", true, true, true, "A5, Find My", " (Find My)"},
+		{"ELECTRIFIED_2022", "", "SA5", true, true, true, "SA5, Find My", " (Find My)"},
+		{"ELECTRIFIED_2022", "X", "SA5", true, true, true, "SA5, Find My", " (Find My)"}, // shapes it doesn't come in
+		{"ELECTRIFIED_2022", "SA", "SA5", true, true, true, "SA5, Find My", " (Find My)"},
+		{"ELECTRIFIED_2025", "", "S6", true, true, true, "S6, Find My", " (Find My)"},
+		{"ELECTRIFIED_2025", "S", "S6", true, true, true, "S6, Find My", " (Find My)"},
 		{"ELECTRIFIED_2023_TRACK1", "", "S4/X4", false, false, false, "S4/X4", ""},
 		{"ELECTRIFIED_2023_TRACK_1", "x", "X4", false, false, false, "X4", ""},
 		{"ELECTRIFIED_2021", "S", "S3", false, true, true, "S3, Find My", " (Find My)"},

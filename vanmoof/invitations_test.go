@@ -16,7 +16,7 @@ func TestSessionInvitations(t *testing.T) {
 		t.Fatalf("Invitations() = %+v, %v", invitations, err)
 	}
 	inv := invitations[0]
-	if inv.GUID != leakInviteGUID || inv.OwnerName != leakOwnerName || inv.BikeName != leakInvitedName || inv.Model() != "SA5" || inv.ExpiresAt == "" {
+	if inv.GUID != leakInviteGUID || inv.OwnerName != leakOwnerName || inv.BikeName != leakInvitedName || inv.Model() != "S5" || inv.ExpiresAt == "" {
 		t.Errorf("invitation %+v", inv)
 	}
 
@@ -80,7 +80,7 @@ func TestInvitations(t *testing.T) {
 	}
 
 	out, err := run(InvitationsList, "")
-	for _, want := range []string{"Invitation 1\n", "Bike: " + leakInvitedName, "Model: SA5", "Owner: " + leakOwnerName, "GUID: " + leakInviteGUID} {
+	for _, want := range []string{"Invitation 1\n", "Bike: " + leakInvitedName, "Model: S5 (Find My)", "Owner: " + leakOwnerName, "GUID: " + leakInviteGUID} {
 		if !strings.Contains(out, want) {
 			t.Errorf("list lacks %q:\n%s", want, out)
 		}
@@ -200,7 +200,7 @@ func TestPrintInvitationModel(t *testing.T) {
 	out := captureStdout(t, func() {
 		printInvitations([]Invitation{{BleProfile: "ELECTRIFIED_2021", FrameShape: "X"}, {BleProfile: "ELECTRIFIED_2022"}, {ModelName: "B-05S-E01EU-XX"}})
 	})
-	for _, want := range []string{"Model: X3 (Find My)\n", "Model: SA5\n", "Model: B-05S-E01EU-XX\n"} {
+	for _, want := range []string{"Model: X3 (Find My)\n", "Model: SA5 (Find My)\n", "Model: B-05S-E01EU-XX\n"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q:\n%s", want, out)
 		}

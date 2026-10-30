@@ -61,7 +61,7 @@ Pubkey = Yd2bYMB3+vs4cCnDtPbcaM164KIl2zs05AK2jt/K6Gs=
 Bike ID: 1337
 Name: My bike
 Frame number: LLLLLLDDDDDLL
-Model: SA5
+Model: S5 (Find My)
 Certificate:
 {"certificate":"BASE64_ENCODED_CERTIFICATE"}
 Parsing certificate...
@@ -223,9 +223,11 @@ bleSecret: 00112233445566778899aabbccddeeff
 ```
 
 `model` is the bike's model for its frame shape (`frameShape`: `S` or `X`, e.g. an S3 or an
-X3; both, `S3/X3`, if VanMoof doesn't say), and whether it works with Apple's Find My: of the
+X3, or for the SA5 `S` or `A`, an S5 or an A5; both, `S3/X3` or `SA5`, if VanMoof doesn't
+say), and whether it works with Apple's Find My: the SA5 and later always do, and of the
 S3/X3, the `ELECTRIFIED_2021` ones do and the `ELECTRIFIED_2020` ones don't, nor do older
-bikes. For the other models it isn't known, and nothing is said.
+bikes. For the S4/X4 it isn't known, and nothing is said. The certificate flow and the
+invitations show the model the same way.
 
 **Keep the BLE secret private.** Anyone who has it can control the bike over Bluetooth.
 
@@ -258,7 +260,7 @@ Each invitation is listed like this (the model as for `-show-keys`, e.g. `X3 (Fi
 ```
 Invitation 1
 Bike: Their bike
-Model: SA5
+Model: S5 (Find My)
 Owner: Their name
 Expires: 2026-12-24T12:00:00+0100
 GUID: 0f0f0000-0000-3000-8000-000000000000
@@ -290,7 +292,12 @@ names and frame numbers, and the regular output, such as the private key, a
 
 To share output, for example in an issue or pull request, add `-redact`. It hides
 secrets and personal data in all output, including the private key, BLE keys and
-certificates. Frame numbers and IDs keep only their shape (e.g. `LLLLLLDDDDDLL`):
+certificates. Frame numbers and IDs keep only their shape (e.g. `LLLLLLDDDDDLL`).
+What identifies nobody but helps to debug stays: in `getCustomerData`, among others,
+a bike's `controller`, `customerRole`, `customerRoleFamily`, `frameShape`, `gsmModule`,
+`manufacturer`, `modelColor`, `modelDetails`, `permissions`, `smartmoduleCurrentVersion`,
+`smartmoduleDesiredVersion` and `updateMethod`, and its `links` but for the IDs in them.
+Everything in `stolen` is hidden, down to whether a field is set at all:
 
 ```console
 ./vanmoof-certificates -email user@vanmoof.com -debug -redact
@@ -307,10 +314,10 @@ Vehicle Registry API (S5/S6) with its owner:
 
 ```
 [DEBUG] Retrieved 2 bikes: 1 owned, 1 shared with you
-[DEBUG]   SVTBKL00001OA "My bike": ELECTRIFIED_2022 (SA5)
+[DEBUG]   SVTBKL00001OA "My bike": ELECTRIFIED_2022 (S5, Find My)
 [DEBUG]   ASY0000002 "Borrowed S3": ELECTRIFIED_2020 (S3, no Find My), shared with you as user until 2026-11-03 15:04 UTC (7 days left)
 [DEBUG] Retrieved 1 shared vehicles
-[DEBUG]   SVTBKL00003OA "Their bike": ELECTRIFIED_2025 (S6), shared by Alice until 2026-12-01 12:00 UTC (35 days left)
+[DEBUG]   SVTBKL00003OA "Their bike": ELECTRIFIED_2025 (S6, Find My), shared by Alice until 2026-12-01 12:00 UTC (35 days left)
 ```
 
 A sharing that hasn't started yet shows `from` its start, one without an end
@@ -559,7 +566,7 @@ For each bike, the line after `Certificate:` is VanMoof's JSON response, and its
 Bike ID: 1337
 Name: My bike
 Frame number: LLLLLLDDDDDLL
-Model: SA5
+Model: S5 (Find My)
 Certificate:
 {"certificate":"BASE64_ENCODED_CERTIFICATE"}
 Parsing certificate...

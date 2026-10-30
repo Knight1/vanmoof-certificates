@@ -22,15 +22,17 @@ func ReadLine() (string, error) {
 	return strings.TrimSpace(line), nil
 }
 
-// Model returns the bike's model, such as "SA5", "S3" or "S6", or its BLE profile if it's
+// Model returns the bike's model, such as "S5", "S3" or "S6", or its BLE profile if it's
 // one this package doesn't know. A profile shared by two frame shapes, such as the
-// S3/X3's, gives the one of the bike's FrameShape, or both ("S3/X3") without it.
+// S3/X3's or the S5/A5's, gives the one of the bike's FrameShape, or both ("S3/X3",
+// "SA5") without it.
 func (b Bike) Model() string {
 	return bikeModel(b.BleProfile, b.FrameShape)
 }
 
 // FindMy reports whether the bike works with Apple's Find My, and whether that's known:
-// for an S3/X3 it is, by its BLE profile, but not for every model
+// for an S3/X3 it is, by its BLE profile, and the SA5 and later always do, but it isn't
+// known for every model
 func (b Bike) FindMy() (supported, known bool) {
 	supported, known = bleProfileFindMy[b.BleProfile]
 	return supported, known
@@ -42,7 +44,11 @@ func bikeModel(bleProfile, frameShape string) string {
 	if model == "" {
 		return bleProfile
 	}
-	switch strings.ToUpper(frameShape) {
+	shape := strings.ToUpper(frameShape)
+	if m := shapesModelRegexp.FindStringSubmatch(model); m != nil && len(shape) == 1 && strings.Contains(m[1], shape) {
+		return shape + m[2]
+	}
+	switch shape {
 	case "S":
 		return sModelRegexp.ReplaceAllString(model, "")
 	case "X":

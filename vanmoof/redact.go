@@ -137,20 +137,60 @@ func ScrubText(s string) string {
 }
 
 var (
-	// harmlessFields are kept even with -redact: they're needed to debug, and identify nobody
+	// harmlessFields are kept even with -redact, along with everything in them (such as
+	// modelColor's name and colors): they're needed to debug, and identify nobody
 	harmlessFields = map[string]bool{
 		"bleprofile": true, "ble_profile": true, "messagesviable": true, "role": true, "sku": true,
 		"status": true, "code": true, "model": true, "expires": true,
+		"controller": true, "customerrole": true, "customerrolefamily": true, "frameshape": true, "gsmmodule": true,
+		"manufacturer": true, "modelcolor": true, "modeldetails": true, "permissions": true,
+		"smartmodulecurrentversion": true, "smartmoduledesiredversion": true, "updatemethod": true,
 		"alg": true, "typ": true, "kid": true, "exp": true, "iat": true, "nbf": true, "iss": true, "aud": true, // JWT
 	}
-	// messageFields hold error messages, kept with -redact apart from personal data in them
+	// messageFields hold error messages, and linkFields API URLs, which -redact keeps
+	// apart from the personal data and IDs in them (see ScrubText). A linkField counts for
+	// everything in it.
 	messageFields = map[string]bool{"err": true, "error": true, "message": true}
+	linkFields    = map[string]bool{"links": true}
+	// hiddenFields are hidden whole with -redact, down to whether a field in them is set
+	// at all: stolen tells whether, when and where a bike was stolen, with a tracking link
+	hiddenFields = map[string]bool{"stolen": true}
 	// idFields hold identifiers, of which -redact keeps only the shape
 	idFields = map[string]bool{
 		"id": true, "bikeid": true, "bike_id": true, "vehicle_id": true,
 		"framenumber": true, "frame_number": true, "frameserial": true, "mainecuserial": true,
 	}
 )
+
+// redactScope is what a JSON field is within: what redactValue does with the values in it
+type redactScope int
+
+const (
+	scopeDefault  redactScope = iota // a field on its own
+	scopeSecret                      // within a secret field: hidden unless -show-everything
+	scopeHidden                      // within a hiddenField: hidden whole with -redact
+	scopeHarmless                    // within a harmlessField: kept
+	scopeLinks                       // within a linkField: scrubbed with -redact
+)
+
+// fieldScope is the scope of field key (lower case) within scope. A secret field is
+// secret wherever it is, and nothing within a hidden field shows, but otherwise the
+// outermost field decides.
+func fieldScope(scope redactScope, key string) redactScope {
+	switch {
+	case scope == scopeSecret || isSecretField(key):
+		return scopeSecret
+	case scope == scopeHidden || hiddenFields[key]:
+		return scopeHidden
+	case scope != scopeDefault:
+		return scope
+	case harmlessFields[key]:
+		return scopeHarmless
+	case linkFields[key]:
+		return scopeLinks
+	}
+	return scopeDefault
+}
 
 // isSecretField reports whether a JSON field (lower case) holds a credential or key,
 // such as a token, a BLE key, or a bike's key object or messages.
@@ -176,7 +216,7 @@ func redactJSON(doc string) string {
 	if !json.Valid([]byte(doc)) || dec.Decode(&v) != nil {
 		return ScrubText(doc)
 	}
-	v, changed := redactValue(v, "", false)
+	v, changed := redactValue(v, "", scopeDefault)
 	if !changed {
 		return printable(doc)
 	}
@@ -187,25 +227,32 @@ func redactJSON(doc string) string {
 	return printable(strings.TrimSuffix(out.String(), "\n"))
 }
 
-// redactValue redacts the decoded JSON value v of field key (lower case), recursively.
-// inSecret is set within a secret field. It reports whether it hid anything.
-func redactValue(v any, key string, inSecret bool) (any, bool) {
-	inSecret = inSecret || isSecretField(key)
+// redactValue redacts the decoded JSON value v of field key (lower case) within scope,
+// recursively. It reports whether it hid anything.
+func redactValue(v any, key string, scope redactScope) (any, bool) {
+	scope = fieldScope(scope, key)
 	changed := false
 	switch val := v.(type) {
 	case map[string]any:
 		for k, fv := range val {
-			nv, c := redactValue(fv, strings.ToLower(k), inSecret)
+			nv, c := redactValue(fv, strings.ToLower(k), scope)
 			val[k], changed = nv, changed || c
 		}
 		return val, changed
 	case []any:
 		for i, ev := range val {
-			nv, c := redactValue(ev, key, inSecret)
+			nv, c := redactValue(ev, key, scope)
 			val[i], changed = nv, changed || c
 		}
 		return val, changed
-	case nil, bool:
+	}
+	if scope == scopeHidden && redactOutput {
+		return redacted, true // even null, false or "", which would tell what's hidden
+	}
+	if v == nil {
+		return v, false
+	}
+	if _, ok := v.(bool); ok {
 		return v, false
 	}
 
@@ -214,11 +261,11 @@ func redactValue(v any, key string, inSecret bool) (any, bool) {
 	switch {
 	case s == "":
 		return v, false
-	case inSecret:
+	case scope == scopeSecret:
 		out = debugSecret(s)
-	case !redactOutput || harmlessFields[key]:
+	case !redactOutput || scope == scopeHarmless:
 		return v, false
-	case messageFields[key]:
+	case scope == scopeLinks || messageFields[key]:
 		out = ScrubText(s)
 	case idFields[key]:
 		out = idShape(s)

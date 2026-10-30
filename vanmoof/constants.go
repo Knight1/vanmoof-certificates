@@ -27,7 +27,7 @@ var certOnlyBleProfiles = []string{
 }
 
 // bleProfileModel maps BLE profiles to human-readable model names. A profile covers both
-// frame shapes, S and X (see bikeModel).
+// frame shapes, S and X, or for the SA5 S and A (see bikeModel).
 var bleProfileModel = map[string]string{
 	"SMARTBIKE_2016":           "Smartbike",
 	"SMARTBIKE_2018":           "Smart S/X",
@@ -43,8 +43,8 @@ var bleProfileModel = map[string]string{
 }
 
 // bleProfileFindMy is whether the bikes of a BLE profile work with Apple's Find My: the
-// S3/X3 of ELECTRIFIED_2021 do, the ones of ELECTRIFIED_2020 and the older ones don't. A
-// profile that isn't here isn't known either way.
+// S3/X3 of ELECTRIFIED_2021 and the SA5 and later do, the S3/X3 of ELECTRIFIED_2020 and
+// the older ones don't. A profile that isn't here isn't known either way.
 var bleProfileFindMy = map[string]bool{
 	"SMARTBIKE_2016":   false,
 	"SMARTBIKE_2018":   false,
@@ -53,13 +53,17 @@ var bleProfileFindMy = map[string]bool{
 	"ELECTRIFIED_2018": false,
 	"ELECTRIFIED_2020": false,
 	"ELECTRIFIED_2021": true,
+	"ELECTRIFIED_2022": true,
+	"ELECTRIFIED_2025": true,
 }
 
 // sModelRegexp and xModelRegexp are the parts of a model like "S3/X3" or "Smart S/X" to
-// remove for its S and its X frame shape
+// remove for its S and its X frame shape. shapesModelRegexp matches a model like "SA5"
+// whose letters are its frame shapes, S and A: the S5 and the A5.
 var (
-	sModelRegexp = regexp.MustCompile(`/X\d*`)
-	xModelRegexp = regexp.MustCompile(`S\d*/`)
+	sModelRegexp      = regexp.MustCompile(`/X\d*`)
+	xModelRegexp      = regexp.MustCompile(`S\d*/`)
+	shapesModelRegexp = regexp.MustCompile(`^([A-Z]{2,})(\d+)$`)
 )
 
 // frameNumberRegexp matches SA5 and S6 frame numbers (frameNumberPattern)

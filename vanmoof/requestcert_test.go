@@ -373,8 +373,8 @@ func TestDebugProfiles(t *testing.T) {
 			{Name: "Tracked", FrameNumber: "LKY0000006", BleProfile: "ELECTRIFIED_2021", FrameShape: "X"}})
 		debugPrintVehicleAccessProfiles([]VehicleAccess{{VehicleID: "AAAAA000001AA", Name: "Theirs", OwnerName: "Alice", BleProfile: "ELECTRIFIED_2030"}})
 	})
-	for _, want := range []string{`BBBBBB00001AA "Mine": ELECTRIFIED_2022 (SA5)`, `BBBBBB00002AA "": ELECTRIFIED_2030 (unknown)`, `AAAAA000001AA "Theirs": ELECTRIFIED_2030 (unknown), shared by Alice without end`,
-		"Retrieved 5 bikes: 4 owned, 1 shared with you\n", `BBBBBB00001AA "Mine": ELECTRIFIED_2022 (SA5)` + "\n",
+	for _, want := range []string{`BBBBBB00001AA "Mine": ELECTRIFIED_2022 (SA5, Find My)`, `BBBBBB00002AA "": ELECTRIFIED_2030 (unknown)`, `AAAAA000001AA "Theirs": ELECTRIFIED_2030 (unknown), shared by Alice without end`,
+		"Retrieved 5 bikes: 4 owned, 1 shared with you\n", `BBBBBB00001AA "Mine": ELECTRIFIED_2022 (SA5, Find My)` + "\n",
 		`LKY0000004 "Lent": ELECTRIFIED_2020 (S3/X3, no Find My), shared with you as user until 2020-01-01 00:00 UTC (expired)`,
 		`LKY0000005 "Lent2": ELECTRIFIED_2020 (S3/X3, no Find My)` + "\n", `LKY0000006 "Tracked": ELECTRIFIED_2021 (X3, Find My)` + "\n"} {
 		if !strings.Contains(out, want) {
@@ -419,7 +419,7 @@ func TestDebugProfilesRedacted(t *testing.T) {
 	if got := sharingPeriod("soon", "later", time.Now()); got != "from [REDACTED] until [REDACTED]" {
 		t.Errorf("sharingPeriod with times it can't parse = %q", got)
 	}
-	if !strings.Contains(out, "(SA5)\n") {
+	if !strings.Contains(out, "(SA5, Find My)\n") {
 		t.Errorf("an own bike shows sharing:\n%s", out)
 	}
 	for _, leak := range []string{"Mine", "Theirs", "Alice"} {

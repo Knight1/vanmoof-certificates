@@ -135,6 +135,9 @@ func FuzzRedactJSONSecrets(f *testing.F) {
 			"refreshToken": secret,
 			"data":         map[string]any{"bikeDetails": []any{map[string]any{"key": map[string]any{"encryptionKey": secret, "passcode": secret}}}},
 			"messages":     []any{map[string]any{"content": secret}},
+			"links":        map[string]any{"addFcmToken": secret},
+			"stolen":       map[string]any{"token": secret},
+			"modelColor":   map[string]any{"secret": secret},
 		})
 		if err != nil {
 			t.Skip()

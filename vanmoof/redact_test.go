@@ -57,6 +57,51 @@ func TestRedactJSON(t *testing.T) {
 	}
 }
 
+// -redact keeps the fields that identify nobody, with everything in them, the links but
+// for the IDs in them, and hides everything about a stolen bike, even whether it's set
+func TestRedactJSONFields(t *testing.T) {
+	body := `{"controller":"2020 X","customerRole":"user","customerRoleFamily":"User","frameShape":"X","gsmModule":"2G",` +
+		`"manufacturer":"muco","smartmoduleCurrentVersion":"1.8.2","smartmoduleDesiredVersion":"1.9.1","updateMethod":"OAD (encrypted)",` +
+		`"modelColor":{"name":"Dark","primary":"#25282a"},"modelDetails":{"Edition":"EX3 - 2G","Top Speed":"25 km/h"},` +
+		`"permissions":["UNLOCK","LIGHTS"],"links":{"hash":"https://api.vanmoof-api.com/v8/getBikeDataHash/103272",` +
+		`"thumbnail":"https://my.vanmoof.com/image/model/84","addFcmToken":"fcmVALUE"},"name":"nameVALUE",` +
+		`"stolen":{"dateStolen":null,"isStolen":false,"status":"unconfirmed","latestLocation":{"latitude":50.27,"date":""},` +
+		`"publicTrackingUrl":"https://my.vanmoof.com/findmybike/show/trackVALUE","token":"stolenTokVALUE"}}`
+	kept := []string{`"controller":"2020 X"`, `"customerRole":"user"`, `"customerRoleFamily":"User"`, `"frameShape":"X"`,
+		`"gsmModule":"2G"`, `"manufacturer":"muco"`, `"smartmoduleCurrentVersion":"1.8.2"`, `"smartmoduleDesiredVersion":"1.9.1"`,
+		`"updateMethod":"OAD (encrypted)"`, `"modelColor":{"name":"Dark","primary":"#25282a"}`,
+		`"modelDetails":{"Edition":"EX3 - 2G","Top Speed":"25 km/h"}`, `"permissions":["UNLOCK","LIGHTS"]`,
+		`"thumbnail":"https://my.vanmoof.com/image/model/84"`}
+
+	setRedaction(t, true, false)
+	got := redactJSON(body)
+	for _, w := range append(kept, `"hash":"https://api.vanmoof-api.com/v8/getBikeDataHash/DDDDDD"`, `"addFcmToken":"[REDACTED]"`,
+		`"name":"[REDACTED]"`, `"dateStolen":"[REDACTED]"`, `"isStolen":"[REDACTED]"`, `"status":"[REDACTED]"`,
+		`"latestLocation":{"date":"[REDACTED]","latitude":"[REDACTED]"}`, `"publicTrackingUrl":"[REDACTED]"`, `"token":"[REDACTED]"`) {
+		if !strings.Contains(got, w) {
+			t.Errorf("-redact: %s lacks %s", got, w)
+		}
+	}
+	for _, w := range []string{"103272", "fcmVALUE", "nameVALUE", "unconfirmed", "50.27", "trackVALUE", "stolenTokVALUE"} {
+		if strings.Contains(got, w) {
+			t.Errorf("-redact: %s still contains %s", got, w)
+		}
+	}
+
+	// Without -redact, debug output hides only the secrets, wherever they are
+	setRedaction(t, false, false)
+	got = redactJSON(body)
+	for _, w := range append(kept, `"hash":"https://api.vanmoof-api.com/v8/getBikeDataHash/103272"`, `"addFcmToken":"[REDACTED]"`,
+		`"name":"nameVALUE"`, `"dateStolen":null`, `"isStolen":false`, `"status":"unconfirmed"`, `"latitude":50.27`, `"token":"[REDACTED]"`) {
+		if !strings.Contains(got, w) {
+			t.Errorf("debug: %s lacks %s", got, w)
+		}
+	}
+	if strings.Contains(got, "fcmVALUE") || strings.Contains(got, "stolenTokVALUE") {
+		t.Errorf("debug shows a secret: %s", got)
+	}
+}
+
 func TestScrubText(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

@@ -127,9 +127,10 @@ func fakeAccount(t *testing.T, secret, personal string) {
 	customerData := `{"data":{"uuid":"` + leakUUID + `","name":` + name + `,"phone":` + name + `,"bikes":[` +
 		`{"id":1,"name":` + name + `,"frameNumber":"BBBBBB00001AA","bleProfile":"ELECTRIFIED_2022"},` +
 		`{"id":2,"name":` + name + `,"frameNumber":"LKY0000002","bleProfile":"ELECTRIFIED_2021","frameShape":"X","customerRole":"user","startsAt":` + name + `,"endsAt":` + name + `},` +
-		`{"id":3,"name":` + name + `,"frameNumber":"LKY0000003","bleProfile":"ELECTRIFIED_2018","frameShape":` + name + `}],"bikeDetails":[` +
+		`{"id":3,"name":` + name + `,"frameNumber":"LKY0000003","bleProfile":"ELECTRIFIED_2018","frameShape":"S",` +
+		`"stolen":{"isStolen":true,"status":` + name + `,"latestLocation":{"date":` + name + `,"latitude":50.27},"publicTrackingUrl":` + name + `}}],"bikeDetails":[` +
 		`{"id":2,"name":` + name + `,"frameNumber":"LKY0000002","macAddress":` + name + `,"bleProfile":"ELECTRIFIED_2021","frameShape":"X","key":{"encryptionKey":` + key + `,"passcode":` + key + `}},` +
-		`{"id":3,"name":` + name + `,"frameNumber":"LKY0000003","macAddress":` + name + `,"bleProfile":"ELECTRIFIED_2018","frameShape":` + name + `,"key":{"encryptionKey":""}}]}}`
+		`{"id":3,"name":` + name + `,"frameNumber":"LKY0000003","macAddress":` + name + `,"bleProfile":"ELECTRIFIED_2018","frameShape":"S","key":{"encryptionKey":""}}]}}`
 
 	respondWith(t, func(r *http.Request) (*http.Response, error) {
 		var body string
@@ -178,9 +179,22 @@ func FuzzNoLeaks(f *testing.F) {
 		f.Add(s[0], s[1])
 	}
 	const controlSecret, controlPersonal = "ControlSecretValue", "ControlPersonalValue"
+	forms := func(value string) []string {
+		j, _ := json.Marshal(value)
+		return []string{value, printable(value), strings.Trim(string(j), `"`)}
+	}
+	// overlap reports whether a form of a has b in it: then b shows up wherever a does
+	overlap := func(a, b string) bool {
+		for _, form := range forms(a) {
+			if strings.Contains(form, b) {
+				return true
+			}
+		}
+		return false
+	}
 	f.Fuzz(func(t *testing.T, secret, personal string) {
 		if len(secret) < 6 || len(personal) < 6 || !utf8.ValidString(secret) || !utf8.ValidString(personal) ||
-			strings.Contains(secret, personal) || strings.Contains(personal, secret) ||
+			overlap(secret, personal) || overlap(personal, secret) ||
 			strings.Contains(controlSecret+controlPersonal, secret) || strings.Contains(controlSecret+controlPersonal, personal) {
 			t.Skip()
 		}
@@ -199,10 +213,6 @@ func FuzzNoLeaks(f *testing.F) {
 					ShowSaved(leakEmail, true) // without -redact it shows the keys on purpose
 				}
 			})
-		}
-		forms := func(value string) []string {
-			j, _ := json.Marshal(value)
-			return []string{value, printable(value), strings.Trim(string(j), `"`)}
 		}
 		leaks := func(out, control, value string) bool {
 			for _, form := range forms(value) {
