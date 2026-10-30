@@ -24,7 +24,7 @@ Pull Requests are welcome! ❤️
 - Exit status for scripts: `1` if logging in or a certificate failed (including an invalid one), `2` for invalid flags
 - Checks the TLS certificates of VanMoof's servers for revocation before sending them anything: with OCSP, the CRL, and Mozilla's OneCRL (the keys and certificates Firefox distrusts, fetched once a run, its content signature checked against Mozilla's root as Firefox checks it), keeping the connections alive. A revoked certificate is refused, and so is one left unconfirmed — including when OneCRL can't be fetched or its signature doesn't check out — unless `-allow-unknown-revocation`. OneCRL catches a compromised CA, which can forge its own OCSP and CRL but can't take itself off Firefox's list
 - Keeps secrets (keys, tokens, the password) off disk on Linux, best-effort: locks the process's memory into RAM (`mlockall`, so nothing is swapped) and disables core dumps; it warns and carries on if the `memlock` limit is too low (`ulimit -l`)
-- Debug mode for troubleshooting, with `-redact` to share its output without secrets or personal data (it keeps what helps to debug, such as a bike's controller, firmware versions and permissions, and hides everything about a stolen bike)
+- Debug mode for troubleshooting, with `-redact` to share its output without secrets or personal data (it keeps what helps to debug, such as a bike's controller, model name, firmware versions and permissions, and hides everything about a stolen bike)
 - Go package for your own programs: log in, list the bikes, and request and check certificates, with the results as values
 
 ## Usage & Installation

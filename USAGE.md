@@ -295,9 +295,9 @@ secrets and personal data in all output, including the private key, BLE keys and
 certificates. Frame numbers and IDs keep only their shape (e.g. `LLLLLLDDDDDLL`).
 What identifies nobody but helps to debug stays: in `getCustomerData`, among others,
 a bike's `controller`, `customerRole`, `customerRoleFamily`, `frameShape`, `gsmModule`,
-`manufacturer`, `modelColor`, `modelDetails`, `permissions`, `smartmoduleCurrentVersion`,
-`smartmoduleDesiredVersion` and `updateMethod`, and its `links` but for the IDs in them.
-Everything in `stolen` is hidden, down to whether a field is set at all:
+`manufacturer`, `modelName`, `modelColor`, `modelDetails`, `permissions`,
+`smartmoduleCurrentVersion`, `smartmoduleDesiredVersion` and `updateMethod`. Everything in
+`links` is hidden, and everything in `stolen`, down to whether a field is set at all:
 
 ```console
 ./vanmoof-certificates -email user@vanmoof.com -debug -redact

@@ -128,7 +128,7 @@ func fakeAccount(t *testing.T, secret, personal string) {
 		`{"id":1,"name":` + name + `,"frameNumber":"BBBBBB00001AA","bleProfile":"ELECTRIFIED_2022"},` +
 		`{"id":2,"name":` + name + `,"frameNumber":"LKY0000002","bleProfile":"ELECTRIFIED_2021","frameShape":"X","customerRole":"user","startsAt":` + name + `,"endsAt":` + name + `},` +
 		`{"id":3,"name":` + name + `,"frameNumber":"LKY0000003","bleProfile":"ELECTRIFIED_2018","frameShape":"S",` +
-		`"stolen":{"isStolen":true,"status":` + name + `,"latestLocation":{"date":` + name + `,"latitude":50.27},"publicTrackingUrl":` + name + `}}],"bikeDetails":[` +
+		`"stolen":{"isStolen":true,"status":` + name + `,"latestLocation":{"date":` + name + `,"latitude":12.34},"publicTrackingUrl":` + name + `}}],"bikeDetails":[` +
 		`{"id":2,"name":` + name + `,"frameNumber":"LKY0000002","macAddress":` + name + `,"bleProfile":"ELECTRIFIED_2021","frameShape":"X","key":{"encryptionKey":` + key + `,"passcode":` + key + `}},` +
 		`{"id":3,"name":` + name + `,"frameNumber":"LKY0000003","macAddress":` + name + `,"bleProfile":"ELECTRIFIED_2018","frameShape":"S","key":{"encryptionKey":""}}]}}`
 

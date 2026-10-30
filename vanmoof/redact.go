@@ -143,15 +143,12 @@ var (
 		"bleprofile": true, "ble_profile": true, "messagesviable": true, "role": true, "sku": true,
 		"status": true, "code": true, "model": true, "expires": true,
 		"controller": true, "customerrole": true, "customerrolefamily": true, "frameshape": true, "gsmmodule": true,
-		"manufacturer": true, "modelcolor": true, "modeldetails": true, "permissions": true,
+		"manufacturer": true, "modelname": true, "modelcolor": true, "modeldetails": true, "permissions": true,
 		"smartmodulecurrentversion": true, "smartmoduledesiredversion": true, "updatemethod": true,
 		"alg": true, "typ": true, "kid": true, "exp": true, "iat": true, "nbf": true, "iss": true, "aud": true, // JWT
 	}
-	// messageFields hold error messages, and linkFields API URLs, which -redact keeps
-	// apart from the personal data and IDs in them (see ScrubText). A linkField counts for
-	// everything in it.
+	// messageFields hold error messages, kept with -redact apart from personal data in them
 	messageFields = map[string]bool{"err": true, "error": true, "message": true}
-	linkFields    = map[string]bool{"links": true}
 	// hiddenFields are hidden whole with -redact, down to whether a field in them is set
 	// at all: stolen tells whether, when and where a bike was stolen, with a tracking link
 	hiddenFields = map[string]bool{"stolen": true}
@@ -170,7 +167,6 @@ const (
 	scopeSecret                      // within a secret field: hidden unless -show-everything
 	scopeHidden                      // within a hiddenField: hidden whole with -redact
 	scopeHarmless                    // within a harmlessField: kept
-	scopeLinks                       // within a linkField: scrubbed with -redact
 )
 
 // fieldScope is the scope of field key (lower case) within scope. A secret field is
@@ -186,8 +182,6 @@ func fieldScope(scope redactScope, key string) redactScope {
 		return scope
 	case harmlessFields[key]:
 		return scopeHarmless
-	case linkFields[key]:
-		return scopeLinks
 	}
 	return scopeDefault
 }
@@ -265,7 +259,7 @@ func redactValue(v any, key string, scope redactScope) (any, bool) {
 		out = debugSecret(s)
 	case !redactOutput || scope == scopeHarmless:
 		return v, false
-	case scope == scopeLinks || messageFields[key]:
+	case messageFields[key]:
 		out = ScrubText(s)
 	case idFields[key]:
 		out = idShape(s)

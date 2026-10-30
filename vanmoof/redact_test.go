@@ -57,32 +57,32 @@ func TestRedactJSON(t *testing.T) {
 	}
 }
 
-// -redact keeps the fields that identify nobody, with everything in them, the links but
-// for the IDs in them, and hides everything about a stolen bike, even whether it's set
+// -redact keeps the fields that identify nobody, with everything in them, and hides the
+// links and everything about a stolen bike, even whether it's set
 func TestRedactJSONFields(t *testing.T) {
 	body := `{"controller":"2020 X","customerRole":"user","customerRoleFamily":"User","frameShape":"X","gsmModule":"2G",` +
-		`"manufacturer":"muco","smartmoduleCurrentVersion":"1.8.2","smartmoduleDesiredVersion":"1.9.1","updateMethod":"OAD (encrypted)",` +
+		`"manufacturer":"muco","modelName":"VM01-212-EU","smartmoduleCurrentVersion":"1.8.2","smartmoduleDesiredVersion":"1.9.1","updateMethod":"OAD (encrypted)",` +
 		`"modelColor":{"name":"Dark","primary":"#25282a"},"modelDetails":{"Edition":"EX3 - 2G","Top Speed":"25 km/h"},` +
-		`"permissions":["UNLOCK","LIGHTS"],"links":{"hash":"https://api.vanmoof-api.com/v8/getBikeDataHash/103272",` +
+		`"permissions":["UNLOCK","LIGHTS"],"links":{"hash":"https://api.vanmoof-api.com/v8/getBikeDataHash/424242",` +
 		`"thumbnail":"https://my.vanmoof.com/image/model/84","addFcmToken":"fcmVALUE"},"name":"nameVALUE",` +
-		`"stolen":{"dateStolen":null,"isStolen":false,"status":"unconfirmed","latestLocation":{"latitude":50.27,"date":""},` +
+		`"stolen":{"dateStolen":null,"isStolen":false,"status":"unconfirmed","latestLocation":{"latitude":12.34,"date":""},` +
 		`"publicTrackingUrl":"https://my.vanmoof.com/findmybike/show/trackVALUE","token":"stolenTokVALUE"}}`
 	kept := []string{`"controller":"2020 X"`, `"customerRole":"user"`, `"customerRoleFamily":"User"`, `"frameShape":"X"`,
-		`"gsmModule":"2G"`, `"manufacturer":"muco"`, `"smartmoduleCurrentVersion":"1.8.2"`, `"smartmoduleDesiredVersion":"1.9.1"`,
+		`"gsmModule":"2G"`, `"manufacturer":"muco"`, `"modelName":"VM01-212-EU"`, `"smartmoduleCurrentVersion":"1.8.2"`, `"smartmoduleDesiredVersion":"1.9.1"`,
 		`"updateMethod":"OAD (encrypted)"`, `"modelColor":{"name":"Dark","primary":"#25282a"}`,
 		`"modelDetails":{"Edition":"EX3 - 2G","Top Speed":"25 km/h"}`, `"permissions":["UNLOCK","LIGHTS"]`,
-		`"thumbnail":"https://my.vanmoof.com/image/model/84"`}
+	}
 
 	setRedaction(t, true, false)
 	got := redactJSON(body)
-	for _, w := range append(kept, `"hash":"https://api.vanmoof-api.com/v8/getBikeDataHash/DDDDDD"`, `"addFcmToken":"[REDACTED]"`,
+	for _, w := range append(kept, `"links":{"addFcmToken":"[REDACTED]","hash":"[REDACTED]","thumbnail":"[REDACTED]"}`,
 		`"name":"[REDACTED]"`, `"dateStolen":"[REDACTED]"`, `"isStolen":"[REDACTED]"`, `"status":"[REDACTED]"`,
 		`"latestLocation":{"date":"[REDACTED]","latitude":"[REDACTED]"}`, `"publicTrackingUrl":"[REDACTED]"`, `"token":"[REDACTED]"`) {
 		if !strings.Contains(got, w) {
 			t.Errorf("-redact: %s lacks %s", got, w)
 		}
 	}
-	for _, w := range []string{"103272", "fcmVALUE", "nameVALUE", "unconfirmed", "50.27", "trackVALUE", "stolenTokVALUE"} {
+	for _, w := range []string{"vanmoof.com", "fcmVALUE", "nameVALUE", "unconfirmed", "12.34", "trackVALUE", "stolenTokVALUE"} {
 		if strings.Contains(got, w) {
 			t.Errorf("-redact: %s still contains %s", got, w)
 		}
@@ -91,8 +91,9 @@ func TestRedactJSONFields(t *testing.T) {
 	// Without -redact, debug output hides only the secrets, wherever they are
 	setRedaction(t, false, false)
 	got = redactJSON(body)
-	for _, w := range append(kept, `"hash":"https://api.vanmoof-api.com/v8/getBikeDataHash/103272"`, `"addFcmToken":"[REDACTED]"`,
-		`"name":"nameVALUE"`, `"dateStolen":null`, `"isStolen":false`, `"status":"unconfirmed"`, `"latitude":50.27`, `"token":"[REDACTED]"`) {
+	for _, w := range append(kept, `"hash":"https://api.vanmoof-api.com/v8/getBikeDataHash/424242"`,
+		`"thumbnail":"https://my.vanmoof.com/image/model/84"`, `"addFcmToken":"[REDACTED]"`,
+		`"name":"nameVALUE"`, `"dateStolen":null`, `"isStolen":false`, `"status":"unconfirmed"`, `"latitude":12.34`, `"token":"[REDACTED]"`) {
 		if !strings.Contains(got, w) {
 			t.Errorf("debug: %s lacks %s", got, w)
 		}
