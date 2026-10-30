@@ -369,13 +369,14 @@ func TestDebugProfiles(t *testing.T) {
 	out := captureStdout(t, func() {
 		debugPrintBikeProfiles([]Bike{{Name: "Mine", FrameNumber: "BBBBBB00001AA", BleProfile: "ELECTRIFIED_2022", CustomerRole: "owner", StartsAt: "2020-01-01T00:00:00Z"}, {FrameNumber: "BBBBBB00002AA", BleProfile: "ELECTRIFIED_2030"},
 			{Name: "Lent", FrameNumber: "LKY0000004", BleProfile: "ELECTRIFIED_2020", CustomerRole: "user", EndsAt: "2020-01-01T00:00:00Z"},
-			{Name: "Lent2", FrameNumber: "LKY0000005", BleProfile: "ELECTRIFIED_2020", CustomerRole: "Owner"}})
+			{Name: "Lent2", FrameNumber: "LKY0000005", BleProfile: "ELECTRIFIED_2020", CustomerRole: "Owner"},
+			{Name: "Tracked", FrameNumber: "LKY0000006", BleProfile: "ELECTRIFIED_2021", FrameShape: "X"}})
 		debugPrintVehicleAccessProfiles([]VehicleAccess{{VehicleID: "AAAAA000001AA", Name: "Theirs", OwnerName: "Alice", BleProfile: "ELECTRIFIED_2030"}})
 	})
 	for _, want := range []string{`BBBBBB00001AA "Mine": ELECTRIFIED_2022 (SA5)`, `BBBBBB00002AA "": ELECTRIFIED_2030 (unknown)`, `AAAAA000001AA "Theirs": ELECTRIFIED_2030 (unknown), shared by Alice without end`,
-		"Retrieved 4 bikes: 3 owned, 1 shared with you\n", `BBBBBB00001AA "Mine": ELECTRIFIED_2022 (SA5)` + "\n",
-		`LKY0000004 "Lent": ELECTRIFIED_2020 (S3/X3), shared with you as user until 2020-01-01 00:00 UTC (expired)`,
-		`LKY0000005 "Lent2": ELECTRIFIED_2020 (S3/X3)` + "\n"} {
+		"Retrieved 5 bikes: 4 owned, 1 shared with you\n", `BBBBBB00001AA "Mine": ELECTRIFIED_2022 (SA5)` + "\n",
+		`LKY0000004 "Lent": ELECTRIFIED_2020 (S3/X3, no Find My), shared with you as user until 2020-01-01 00:00 UTC (expired)`,
+		`LKY0000005 "Lent2": ELECTRIFIED_2020 (S3/X3, no Find My)` + "\n", `LKY0000006 "Tracked": ELECTRIFIED_2021 (X3, Find My)` + "\n"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q:\n%s", want, out)
 		}

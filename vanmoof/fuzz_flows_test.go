@@ -126,10 +126,10 @@ func fakeAccount(t *testing.T, secret, personal string) {
 	name, key := str(personal), str(secret)
 	customerData := `{"data":{"uuid":"` + leakUUID + `","name":` + name + `,"phone":` + name + `,"bikes":[` +
 		`{"id":1,"name":` + name + `,"frameNumber":"BBBBBB00001AA","bleProfile":"ELECTRIFIED_2022"},` +
-		`{"id":2,"name":` + name + `,"frameNumber":"LKY0000002","bleProfile":"ELECTRIFIED_2021","customerRole":"user","startsAt":` + name + `,"endsAt":` + name + `},` +
-		`{"id":3,"name":` + name + `,"frameNumber":"LKY0000003","bleProfile":"ELECTRIFIED_2018"}],"bikeDetails":[` +
-		`{"id":2,"name":` + name + `,"frameNumber":"LKY0000002","macAddress":` + name + `,"bleProfile":"ELECTRIFIED_2021","key":{"encryptionKey":` + key + `,"passcode":` + key + `}},` +
-		`{"id":3,"name":` + name + `,"frameNumber":"LKY0000003","macAddress":` + name + `,"bleProfile":"ELECTRIFIED_2018","key":{"encryptionKey":""}}]}}`
+		`{"id":2,"name":` + name + `,"frameNumber":"LKY0000002","bleProfile":"ELECTRIFIED_2021","frameShape":"X","customerRole":"user","startsAt":` + name + `,"endsAt":` + name + `},` +
+		`{"id":3,"name":` + name + `,"frameNumber":"LKY0000003","bleProfile":"ELECTRIFIED_2018","frameShape":` + name + `}],"bikeDetails":[` +
+		`{"id":2,"name":` + name + `,"frameNumber":"LKY0000002","macAddress":` + name + `,"bleProfile":"ELECTRIFIED_2021","frameShape":"X","key":{"encryptionKey":` + key + `,"passcode":` + key + `}},` +
+		`{"id":3,"name":` + name + `,"frameNumber":"LKY0000003","macAddress":` + name + `,"bleProfile":"ELECTRIFIED_2018","frameShape":` + name + `,"key":{"encryptionKey":""}}]}}`
 
 	respondWith(t, func(r *http.Request) (*http.Response, error) {
 		var body string
@@ -257,10 +257,11 @@ func FuzzBikeList(f *testing.F) {
 // Whatever a bike sharing invitation has in it, its listing has nothing for a terminal to
 // interpret, and any choice of invitations selects each at most once
 func FuzzInvitationList(f *testing.F) {
-	f.Add("1eaf0000-0000-3000-8000-0000000000cc", "Owner", "Their bike", "B-05S-E01EU-XX", "ELECTRIFIED_2022", "2026-12-24T12:00:00+0100", "", "1", "")
-	f.Add("\x1b[2J", "\xe2\x80\xae", "\x00", "\x1b", "ELECTRIFIED_\x1b", "\xff", "\x07", "", "all\n")
-	f.Fuzz(func(t *testing.T, guid, owner, bike, model, profile, expires, ends, selection, answer string) {
-		invitations := []Invitation{{GUID: guid, OwnerName: owner, BikeName: bike, ModelName: model, BleProfile: profile, ExpiresAt: expires, EndsAt: ends}, {GUID: "bbbb-2"}}
+	f.Add("1eaf0000-0000-3000-8000-0000000000cc", "Owner", "Their bike", "B-05S-E01EU-XX", "ELECTRIFIED_2022", "S", "2026-12-24T12:00:00+0100", "", "1", "")
+	f.Add("1eaf0000-0000-3000-8000-0000000000dd", "Owner", "Their S3", "", "ELECTRIFIED_2021", "X", "", "", "", "all\n")
+	f.Add("\x1b[2J", "\xe2\x80\xae", "\x00", "\x1b", "ELECTRIFIED_\x1b", "\x1b", "\xff", "\x07", "", "all\n")
+	f.Fuzz(func(t *testing.T, guid, owner, bike, model, profile, shape, expires, ends, selection, answer string) {
+		invitations := []Invitation{{GUID: guid, OwnerName: owner, BikeName: bike, ModelName: model, BleProfile: profile, FrameShape: shape, ExpiresAt: expires, EndsAt: ends}, {GUID: "bbbb-2"}}
 		if out := captureStdout(t, func() { printInvitations(invitations) }); unescaped(out) {
 			t.Errorf("listing not escaped: %q", out)
 		}

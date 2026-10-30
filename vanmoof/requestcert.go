@@ -196,10 +196,7 @@ func debugPrintBikeProfiles(bikes []Bike) {
 	fmt.Printf("[DEBUG] Retrieved %d bikes: %d owned, %d shared with you\n", len(bikes), len(bikes)-shared, shared)
 	now := time.Now()
 	for _, b := range bikes {
-		model := bleProfileModel[b.BleProfile]
-		if model == "" {
-			model = "unknown"
-		}
+		model := modelDescription(b.BleProfile, b.FrameShape)
 		sharing := ""
 		if b.sharedWithAccount() {
 			sharing = fmt.Sprintf(", shared with you as %s %s", printable(b.CustomerRole), sharingPeriod(b.StartsAt, b.EndsAt, now))
@@ -214,10 +211,7 @@ func debugPrintBikeProfiles(bikes []Bike) {
 func debugPrintVehicleAccessProfiles(vehicles []VehicleAccess) {
 	now := time.Now()
 	for _, v := range vehicles {
-		model := bleProfileModel[v.BleProfile]
-		if model == "" {
-			model = "unknown"
-		}
+		model := modelDescription(v.BleProfile, "")
 		fmt.Printf("[DEBUG]   %s \"%s\": %s (%s), shared by %s %s\n", RedactID(v.VehicleID), Redact(v.Name), printable(v.BleProfile), model, Redact(v.OwnerName), sharingPeriod(v.StartsAt, v.ExpiresAt, now))
 	}
 }
@@ -370,7 +364,7 @@ func requestCertificates(bikes []Bike, customerUUID string, s *Session, account 
 		}
 		fmt.Printf("Name: %s\n", Redact(displayName(bike)))
 		fmt.Printf("Frame number: %s\n", RedactID(bike.FrameNumber))
-		fmt.Printf("Model: %s\n", printable(bike.Model()))
+		fmt.Printf("Model: %s%s\n", printable(bike.Model()), findMySuffix(bike.BleProfile))
 
 		if debug {
 			fmt.Printf("[DEBUG] Creating certificate for %s\n", RedactID(bike.FrameNumber))

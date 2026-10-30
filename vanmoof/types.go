@@ -43,6 +43,7 @@ type Bike struct {
 	FrameNumber   string `json:"frameNumber"`
 	FrameSerial   string `json:"frameSerial"`
 	BleProfile    string `json:"bleProfile"`
+	FrameShape    string `json:"frameShape"` // "S" or "X", which tells an S3 from an X3 (see Model)
 	MainEcuSerial string `json:"mainEcuSerial"`
 	Owner         string `json:"-"` // the owner's name, for a bike shared with the account
 	// The account's role for the bike in getCustomerData: "owner" for its own, another
@@ -60,6 +61,7 @@ type BikeDetail struct {
 	FrameNumber    string `json:"frameNumber"`
 	MacAddress     string `json:"macAddress"`
 	BleProfile     string `json:"bleProfile"`
+	FrameShape     string `json:"frameShape"`
 	MessagesViaBLE string `json:"messagesViaBLE"`
 	Key            struct {
 		EncryptionKey string `json:"encryptionKey"`
@@ -118,6 +120,7 @@ type Invitation struct {
 	BikeName   string `json:"bikeName"`
 	ModelName  string `json:"modelName"`  // e.g. "B-05S-E01EU-XX"
 	BleProfile string `json:"bleProfile"` // see Model
+	FrameShape string `json:"frameShape"` // "S" or "X"
 	ExpiresAt  string `json:"expiresAt"`  // when the invitation expires
 	StartsAt   string `json:"startsAt"`   // when the sharing starts and ends, if it's limited
 	EndsAt     string `json:"endsAt"`

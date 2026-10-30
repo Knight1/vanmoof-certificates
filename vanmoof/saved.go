@@ -80,7 +80,7 @@ func (a *savedAccount) bike(frameNumber string) *savedBike {
 // describes it
 func (a *savedAccount) staticBike(d BikeDetail) *savedBike {
 	b := a.bike(d.FrameNumber)
-	b.BikeID, b.Name, b.Model = d.BikeID, d.Name, Bike{BleProfile: d.BleProfile}.Model()
+	b.BikeID, b.Name, b.Model = d.BikeID, d.Name, bikeModel(d.BleProfile, d.FrameShape)
 	return b
 }
 

@@ -193,3 +193,16 @@ func TestDeclineNotConfirmed(t *testing.T) {
 		t.Error("no error")
 	}
 }
+
+// An invitation names the model of the bike's frame shape, with whether it works with
+// Find My if that's known, or the model name VanMoof gives without a BLE profile
+func TestPrintInvitationModel(t *testing.T) {
+	out := captureStdout(t, func() {
+		printInvitations([]Invitation{{BleProfile: "ELECTRIFIED_2021", FrameShape: "X"}, {BleProfile: "ELECTRIFIED_2022"}, {ModelName: "B-05S-E01EU-XX"}})
+	})
+	for _, want := range []string{"Model: X3 (Find My)\n", "Model: SA5\n", "Model: B-05S-E01EU-XX\n"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+}

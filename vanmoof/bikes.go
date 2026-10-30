@@ -22,13 +22,66 @@ func ReadLine() (string, error) {
 	return strings.TrimSpace(line), nil
 }
 
-// Model returns the bike's model, such as "SA5" or "S6", or its BLE profile if it's one
-// this package doesn't know
+// Model returns the bike's model, such as "SA5", "S3" or "S6", or its BLE profile if it's
+// one this package doesn't know. A profile shared by two frame shapes, such as the
+// S3/X3's, gives the one of the bike's FrameShape, or both ("S3/X3") without it.
 func (b Bike) Model() string {
-	if model := bleProfileModel[b.BleProfile]; model != "" {
-		return model
+	return bikeModel(b.BleProfile, b.FrameShape)
+}
+
+// FindMy reports whether the bike works with Apple's Find My, and whether that's known:
+// for an S3/X3 it is, by its BLE profile, but not for every model
+func (b Bike) FindMy() (supported, known bool) {
+	supported, known = bleProfileFindMy[b.BleProfile]
+	return supported, known
+}
+
+// bikeModel is Bike.Model of a bike with the BLE profile and frame shape
+func bikeModel(bleProfile, frameShape string) string {
+	model := bleProfileModel[bleProfile]
+	if model == "" {
+		return bleProfile
 	}
-	return b.BleProfile
+	switch strings.ToUpper(frameShape) {
+	case "S":
+		return sModelRegexp.ReplaceAllString(model, "")
+	case "X":
+		return xModelRegexp.ReplaceAllString(model, "")
+	}
+	return model
+}
+
+// modelDescription is the model for output, "unknown" if the BLE profile isn't one this
+// package knows, with whether it works with Find My if that's known: e.g. "S3, no Find My"
+func modelDescription(bleProfile, frameShape string) string {
+	model := "unknown"
+	if bleProfileModel[bleProfile] != "" {
+		model = bikeModel(bleProfile, frameShape)
+	}
+	if note := findMyNote(bleProfile); note != "" {
+		model += ", " + note
+	}
+	return model
+}
+
+// findMyNote says whether bikes of the BLE profile work with Find My, "" if not known
+func findMyNote(bleProfile string) string {
+	supported, known := Bike{BleProfile: bleProfile}.FindMy()
+	switch {
+	case !known:
+		return ""
+	case supported:
+		return "Find My"
+	}
+	return "no Find My"
+}
+
+// findMySuffix is findMyNote in parentheses after a model, e.g. " (Find My)"
+func findMySuffix(bleProfile string) string {
+	if note := findMyNote(bleProfile); note != "" {
+		return " (" + note + ")"
+	}
+	return ""
 }
 
 // UsesCertificates reports whether the bike is unlocked with certificates (S5/A5 and S6),

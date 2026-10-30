@@ -17,7 +17,7 @@ const (
 
 // Model returns the model of the bike the invitation is for, as Bike.Model does
 func (i Invitation) Model() string {
-	return Bike{BleProfile: i.BleProfile}.Model()
+	return bikeModel(i.BleProfile, i.FrameShape)
 }
 
 // Invitations lists the account's pending bike sharing invitations, or accepts or declines
@@ -74,7 +74,7 @@ func printInvitations(invitations []Invitation) {
 	for i, inv := range invitations {
 		fmt.Printf("Invitation %d\n", i+1)
 		fmt.Printf("Bike: %s\n", Redact(inv.BikeName))
-		fmt.Printf("Model: %s\n", printable(cmp.Or(inv.Model(), inv.ModelName)))
+		fmt.Printf("Model: %s%s\n", printable(cmp.Or(inv.Model(), inv.ModelName)), findMySuffix(inv.BleProfile))
 		fmt.Printf("Owner: %s\n", Redact(inv.OwnerName))
 		if inv.ExpiresAt != "" {
 			fmt.Printf("Expires: %s\n", printable(inv.ExpiresAt))

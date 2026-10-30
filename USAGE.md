@@ -218,8 +218,14 @@ Output per bike:
 bikeName: Wooosh
 frameNumber: ASY0000000
 macAddress: 00:11:22:33:44:55
+model: S3 (Find My)
 bleSecret: 00112233445566778899aabbccddeeff
 ```
+
+`model` is the bike's model for its frame shape (`frameShape`: `S` or `X`, e.g. an S3 or an
+X3; both, `S3/X3`, if VanMoof doesn't say), and whether it works with Apple's Find My: of the
+S3/X3, the `ELECTRIFIED_2021` ones do and the `ELECTRIFIED_2020` ones don't, nor do older
+bikes. For the other models it isn't known, and nothing is said.
 
 **Keep the BLE secret private.** Anyone who has it can control the bike over Bluetooth.
 
@@ -247,7 +253,7 @@ List the invitations, and accept or decline them:
 ./vanmoof-certificates -email user@vanmoof.com -invitations decline
 ```
 
-Each invitation is listed like this:
+Each invitation is listed like this (the model as for `-show-keys`, e.g. `X3 (Find My)`):
 
 ```
 Invitation 1
@@ -293,7 +299,8 @@ certificates. Frame numbers and IDs keep only their shape (e.g. `LLLLLLDDDDDLL`)
 To see everything, tokens included, add `-show-everything` (debug only). Never
 share that output: anyone with your tokens or keys can unlock your bike.
 
-Debug output lists the account's bikes with their name and BLE profile. A bike
+Debug output lists the account's bikes with their name, BLE profile and model (for
+its frame shape, with whether it works with Find My where that's known). A bike
 shared with you shows how long it's shared (times in UTC): one from `getCustomerData`
 (such as an S3, with a role other than `owner`) with its role, and one from the
 Vehicle Registry API (S5/S6) with its owner:
@@ -301,7 +308,7 @@ Vehicle Registry API (S5/S6) with its owner:
 ```
 [DEBUG] Retrieved 2 bikes: 1 owned, 1 shared with you
 [DEBUG]   SVTBKL00001OA "My bike": ELECTRIFIED_2022 (SA5)
-[DEBUG]   ASY0000002 "Borrowed S3": ELECTRIFIED_2020 (S3/X3), shared with you as user until 2026-11-03 15:04 UTC (7 days left)
+[DEBUG]   ASY0000002 "Borrowed S3": ELECTRIFIED_2020 (S3, no Find My), shared with you as user until 2026-11-03 15:04 UTC (7 days left)
 [DEBUG] Retrieved 1 shared vehicles
 [DEBUG]   SVTBKL00003OA "Their bike": ELECTRIFIED_2025 (S6), shared by Alice until 2026-12-01 12:00 UTC (35 days left)
 ```

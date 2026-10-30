@@ -77,7 +77,7 @@ func printStaticKeys(details []BikeDetail, authToken string, account *savedAccou
 	// Reuse the regular bike selection (-bikes all / IDs / frame numbers / ask)
 	list := make([]Bike, len(candidates))
 	for i, d := range candidates {
-		list[i] = Bike{Name: d.Name, BikeID: d.BikeID, FrameNumber: d.FrameNumber, BleProfile: d.BleProfile}
+		list[i] = Bike{Name: d.Name, BikeID: d.BikeID, FrameNumber: d.FrameNumber, BleProfile: d.BleProfile, FrameShape: d.FrameShape}
 	}
 	selected, err := selectBikes(list, opts.BikeFilter)
 	if err != nil {
@@ -100,6 +100,7 @@ func printStaticKeys(details []BikeDetail, authToken string, account *savedAccou
 			fmt.Printf("bikeName: %s\n", Redact(d.Name))
 			fmt.Printf("frameNumber: %s\n", RedactID(d.FrameNumber))
 			fmt.Printf("macAddress: %s\n", Redact(d.MacAddress))
+			fmt.Printf("model: %s%s\n", printable(bikeModel(d.BleProfile, d.FrameShape)), findMySuffix(d.BleProfile))
 			fmt.Printf("bleSecret: %s\n", secret)
 
 			// No key set yet on a non-certificate (pre-S5) bike means the key itself may
@@ -120,11 +121,7 @@ func printStaticKeys(details []BikeDetail, authToken string, account *savedAccou
 				}
 			}
 			if debug {
-				model := bleProfileModel[d.BleProfile]
-				if model == "" {
-					model = "unknown"
-				}
-				fmt.Printf("[DEBUG] bleProfile: %s (%s)\n", printable(d.BleProfile), model)
+				fmt.Printf("[DEBUG] bleProfile: %s (%s)\n", printable(d.BleProfile), modelDescription(d.BleProfile, d.FrameShape))
 			}
 			fmt.Println()
 			break

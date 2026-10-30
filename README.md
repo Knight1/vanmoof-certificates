@@ -19,7 +19,7 @@ Pull Requests are welcome! ❤️
 - Generate Ed25519 key pairs
 - Create and parse bike certificates
 - Generate a self-signed certificate with a key of your own from a JSON config (`-generate`): advanced, for a bike whose module firmware you've changed to trust your key, since a stock bike trusts only VanMoof's
-- Show the BLE encryption key of S2/S3/S4 and older bikes (`-show-keys`), including a check for a pending key delivery over BLE (`getBikeMessages`) when no key is available yet
+- Show the BLE encryption key of S2/S3/S4 and older bikes (`-show-keys`), including a check for a pending key delivery over BLE (`getBikeMessages`) when no key is available yet, and each bike's model by its frame shape (S3 or X3) with whether it works with Apple's Find My
 - Interactive or command-line bike selection (by ID or frame number, of any generation)
 - Exit status for scripts: `1` if logging in or a certificate failed (including an invalid one), `2` for invalid flags
 - Checks the TLS certificates of VanMoof's servers for revocation before sending them anything: with OCSP, the CRL, and Mozilla's OneCRL (the keys and certificates Firefox distrusts, fetched once a run, its content signature checked against Mozilla's root as Firefox checks it), keeping the connections alive. A revoked certificate is refused, and so is one left unconfirmed — including when OneCRL can't be fetched or its signature doesn't check out — unless `-allow-unknown-revocation`. OneCRL catches a compromised CA, which can forge its own OCSP and CRL but can't take itself off Firefox's list

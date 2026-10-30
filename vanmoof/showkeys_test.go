@@ -77,16 +77,21 @@ func TestShowKeysWarnsAboutFailedLookups(t *testing.T) {
 // without a key yet, and in debug output calls a BLE profile it doesn't know unknown
 func TestPrintStaticKeys(t *testing.T) {
 	respondWith(t, func(r *http.Request) (*http.Response, error) { return httpResponse(r, http.StatusOK, `[]`), nil })
-	details := []BikeDetail{detail(1, "ELECTRIFIED_2030", "")}
+	details := []BikeDetail{detail(1, "ELECTRIFIED_2030", ""), detail(2, "ELECTRIFIED_2021", "")}
+	details[1].FrameNumber, details[1].FrameShape = "LKY0000002", "S"
 	var account savedAccount
 	out := captureStdout(t, func() { printStaticKeys(details, leakAuthToken, &account, Options{BikeFilter: "all", Debug: true}) })
-	for _, want := range []string{"bikeMessage: none waiting", "[DEBUG] bleProfile: ELECTRIFIED_2030 (unknown)"} {
+	for _, want := range []string{"bikeMessage: none waiting", "model: ELECTRIFIED_2030\n", "[DEBUG] bleProfile: ELECTRIFIED_2030 (unknown)",
+		"model: S3 (Find My)\n", "[DEBUG] bleProfile: ELECTRIFIED_2021 (S3, Find My)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q:\n%s", want, out)
 		}
 	}
+	if b := savedBikeOf(account, details[1].FrameNumber); b == nil || b.Model != "S3" {
+		t.Errorf("saved bike %+v, want model S3", b)
+	}
 
-	if out := captureStdout(t, func() { printStaticKeys(details, leakAuthToken, &account, Options{BikeFilter: "2"}) }); out != "No bikes selected\n" {
+	if out := captureStdout(t, func() { printStaticKeys(details, leakAuthToken, &account, Options{BikeFilter: "3"}) }); out != "No bikes selected\n" {
 		t.Errorf("output %q when picking a bike the account doesn't have", out)
 	}
 }

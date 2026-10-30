@@ -70,22 +70,47 @@ func TestSelectBikes(t *testing.T) {
 	}
 }
 
+// A bike's model is the one of its frame shape, both without it, and whether it works with
+// Find My is known for the S3/X3 and older
 func TestBikeModel(t *testing.T) {
 	tests := []struct {
-		profile, model   string
-		usesCertificates bool
+		profile, shape, model     string
+		usesCertificates          bool
+		findMy, findMyKnown       bool
+		description, findMySuffix string
 	}{
-		{"ELECTRIFIED_2022", "SA5", true},
-		{"ELECTRIFIED_2025", "S6", true},
-		{"ELECTRIFIED_2023_TRACK1", "S4/X4", false},
-		{"ELECTRIFIED_2018", "S2/X2", false},
-		{"ELECTRIFIED_2099", "ELECTRIFIED_2099", false}, // unknown: shown as it is
-		{"", "", false},
+		{"ELECTRIFIED_2022", "S", "SA5", true, false, false, "SA5", ""},
+		{"ELECTRIFIED_2025", "", "S6", true, false, false, "S6", ""},
+		{"ELECTRIFIED_2023_TRACK1", "", "S4/X4", false, false, false, "S4/X4", ""},
+		{"ELECTRIFIED_2023_TRACK_1", "x", "X4", false, false, false, "X4", ""},
+		{"ELECTRIFIED_2021", "S", "S3", false, true, true, "S3, Find My", " (Find My)"},
+		{"ELECTRIFIED_2021", "X", "X3", false, true, true, "X3, Find My", " (Find My)"},
+		{"ELECTRIFIED_2021", "", "S3/X3", false, true, true, "S3/X3, Find My", " (Find My)"},
+		{"ELECTRIFIED_2020", "S", "S3", false, false, true, "S3, no Find My", " (no Find My)"},
+		{"ELECTRIFIED_2020", "A", "S3/X3", false, false, true, "S3/X3, no Find My", " (no Find My)"}, // a shape it doesn't come in
+		{"ELECTRIFIED_2018", "X", "X2", false, false, true, "X2, no Find My", " (no Find My)"},
+		{"ELECTRIFIED_2016", "S", "S", false, false, true, "S, no Find My", " (no Find My)"},
+		{"SMARTBIKE_2018", "X", "Smart X", false, false, true, "Smart X, no Find My", " (no Find My)"},
+		{"SMARTBIKE_2018", "S", "Smart S", false, false, true, "Smart S, no Find My", " (no Find My)"},
+		{"ELECTRIFIED_2099", "S", "ELECTRIFIED_2099", false, false, false, "unknown", ""}, // unknown: shown as it is
+		{"", "", "", false, false, false, "unknown", ""},
 	}
 	for _, tt := range tests {
-		b := Bike{BleProfile: tt.profile}
+		b := Bike{BleProfile: tt.profile, FrameShape: tt.shape}
 		if b.Model() != tt.model || b.UsesCertificates() != tt.usesCertificates {
-			t.Errorf("%q: model %q, uses certificates %v", tt.profile, b.Model(), b.UsesCertificates())
+			t.Errorf("%q %q: model %q, uses certificates %v", tt.profile, tt.shape, b.Model(), b.UsesCertificates())
+		}
+		if findMy, known := b.FindMy(); findMy != tt.findMy || known != tt.findMyKnown {
+			t.Errorf("%q: FindMy() = %v, %v; want %v, %v", tt.profile, findMy, known, tt.findMy, tt.findMyKnown)
+		}
+		if got := modelDescription(tt.profile, tt.shape); got != tt.description {
+			t.Errorf("modelDescription(%q, %q) = %q, want %q", tt.profile, tt.shape, got, tt.description)
+		}
+		if got := findMySuffix(tt.profile); got != tt.findMySuffix {
+			t.Errorf("findMySuffix(%q) = %q, want %q", tt.profile, got, tt.findMySuffix)
+		}
+		if inv := (Invitation{BleProfile: tt.profile, FrameShape: tt.shape}); inv.Model() != tt.model {
+			t.Errorf("%q %q: invitation model %q", tt.profile, tt.shape, inv.Model())
 		}
 	}
 }
