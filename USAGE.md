@@ -88,7 +88,19 @@ This will:
 
 ### Cache
 
-The tool keeps what it gets in `~/.vanmoof-certificates` (file permissions `0600`), for each account (email address) separately:
+The tool keeps what it gets in its folder in your config directory, not in your home
+directory:
+
+| System | Folder |
+|--------|--------|
+| Linux and other Unix systems | `~/.config/vanmoof-certificates`, or `$XDG_CONFIG_HOME/vanmoof-certificates` if you set that |
+| macOS | `~/Library/Application Support/vanmoof-certificates` |
+| Windows | `%AppData%\vanmoof-certificates` |
+
+Earlier versions kept the cache in `~/.vanmoof-certificates`. The first run that uses
+the cache moves that folder to the new place and tells you.
+
+The folder has these files (file permissions `0600`), with an entry for each account (email address):
 
 | File | What it holds |
 |------|---------------|
@@ -145,8 +157,9 @@ To neither read nor write the cache, so that every run also makes a new key pair
 ./vanmoof-certificates -email user@vanmoof.com -no-cache
 ```
 
-To remove the cached tokens of all accounts, delete `~/.vanmoof-certificates/tokens.json`;
-to remove everything the tool has saved, delete the whole folder.
+To remove the cached tokens of all accounts, delete `tokens.json` in the cache folder (on
+Linux `~/.config/vanmoof-certificates/tokens.json`); to remove everything the tool has
+saved, delete the whole folder.
 
 
 ### Command-Line Mode
@@ -293,6 +306,8 @@ names and frame numbers, and the regular output, such as the private key, a
 To share output, for example in an issue or pull request, add `-redact`. It hides
 secrets and personal data in all output, including the private key, BLE keys and
 certificates. Frame numbers and IDs keep only their shape (e.g. `LLLLLLDDDDDLL`).
+In paths, such as the cache's, your home directory shows as `~`, and a config directory
+outside it (with `$XDG_CONFIG_HOME` or `%AppData%`) as `[REDACTED]`.
 What identifies nobody but helps to debug stays: in `getCustomerData`, among others,
 a bike's `controller`, `customerRole`, `customerRoleFamily`, `frameShape`, `gsmModule`,
 `manufacturer`, `modelName`, `modelColor`, `modelDetails`, `permissions`,

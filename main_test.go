@@ -45,7 +45,8 @@ func (noNetwork) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 // The tests never reach VanMoof or the real cache, and never wait for input: requests fail
-// and are counted, the home directory is empty, and standard input is closed
+// and are counted, the home directory is empty, with the config directory (where the cache
+// is) in it, and standard input is closed
 func TestMain(m *testing.M) {
 	home, err := os.MkdirTemp("", "vanmoof-main-test-home")
 	if err != nil {
@@ -54,6 +55,8 @@ func TestMain(m *testing.M) {
 	}
 	os.Setenv("HOME", home)
 	os.Setenv("USERPROFILE", home)
+	os.Unsetenv("XDG_CONFIG_HOME")
+	os.Setenv("AppData", filepath.Join(home, "AppData", "Roaming"))
 	os.Unsetenv("VANMOOF_CACHE_KEY")
 	os.Unsetenv("VANMOOF_PASSWORD")
 	os.Stdin.Close()
@@ -254,13 +257,26 @@ func TestMainExits(t *testing.T) {
 	}
 }
 
-// A cache that -show-saved can't read is an error
-func TestRunShowSavedUnreadable(t *testing.T) {
+// setHome makes a new, empty home directory the user's for the rest of the test, with the
+// config directory (where the cache is) in it, and returns the config directory
+func setHome(t *testing.T) string {
+	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	dir := filepath.Join(home, ".vanmoof-certificates")
-	if err := os.Mkdir(dir, 0700); err != nil {
+	t.Setenv("USERPROFILE", home)                                  // Windows
+	t.Setenv("XDG_CONFIG_HOME", "")                                // ~/.config
+	t.Setenv("AppData", filepath.Join(home, "AppData", "Roaming")) // Windows
+	config, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return config
+}
+
+// A cache that -show-saved can't read is an error
+func TestRunShowSavedUnreadable(t *testing.T) {
+	dir := filepath.Join(setHome(t), "vanmoof-certificates")
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "bikes.json"), []byte("not JSON"), 0600); err != nil {
@@ -279,9 +295,7 @@ func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { retu
 // path, and sets the test up for it: with an empty home directory, and the password
 func fakeAccount(t *testing.T) map[string]string {
 	t.Helper()
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	setHome(t)
 	t.Setenv("VANMOOF_PASSWORD", "password")
 	claims := base64.RawURLEncoding.EncodeToString(fmt.Appendf(nil, `{"exp":%d}`, time.Now().Add(time.Hour).Unix()))
 	token := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256"}`)) + "." + claims + ".c2lnbmF0dXJl"
@@ -337,6 +351,35 @@ func TestRunLogsIn(t *testing.T) {
 	t.Setenv("VANMOOF_PASSWORD", "")
 	if status, out := runTool(t, "-show-keys", "static", "-email", email); status != 1 || !strings.Contains(out, "Error: authentication failed: error reading password") {
 		t.Errorf("without a password: status %d:\n%s", status, out)
+	}
+}
+
+// A run keeps the cache in the config directory, with nothing in the home directory, and
+// moves the one an earlier version kept there: the run after it logs in with its tokens
+func TestRunMovesCacheOutOfHome(t *testing.T) {
+	fakeVanMoof(t)
+	if status, out := runTool(t, "-email", "user@example.com"); status != 0 {
+		t.Fatalf("status %d:\n%s", status, out)
+	}
+	home, _ := os.UserHomeDir()
+	config, _ := os.UserConfigDir()
+	dir, legacy := filepath.Join(config, "vanmoof-certificates"), filepath.Join(home, ".vanmoof-certificates")
+	if _, err := os.Stat(filepath.Join(dir, "tokens.json")); err != nil {
+		t.Fatalf("tokens not cached in the config directory: %v", err)
+	}
+	if _, err := os.Lstat(legacy); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("%s made: %v", legacy, err)
+	}
+
+	if err := os.Rename(dir, legacy); err != nil { // where an earlier version kept it
+		t.Fatal(err)
+	}
+	t.Setenv("VANMOOF_PASSWORD", "") // and standard input is closed: only the cached tokens log in
+	if status, out := runTool(t, "-email", "user@example.com"); status != 0 || !strings.Contains(out, "Note: moved the cache from "+legacy+" to "+dir+"\n") {
+		t.Errorf("status %d:\n%s", status, out)
+	}
+	if _, err := os.Lstat(legacy); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("%s left: %v", legacy, err)
 	}
 }
 

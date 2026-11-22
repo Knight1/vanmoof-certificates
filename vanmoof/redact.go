@@ -121,14 +121,19 @@ var (
 )
 
 // ScrubText hides secrets and personal data in free text, such as an error message or
-// URL, with -redact: the home directory, tokens, keys, UUIDs, email and MAC addresses,
-// and (keeping their shape) frame numbers and IDs.
+// URL, with -redact: the home and config directories, tokens, keys, UUIDs, email and MAC
+// addresses, and (keeping their shape) frame numbers and IDs.
 func ScrubText(s string) string {
 	if !redactOutput {
 		return printable(s)
 	}
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		s = strings.ReplaceAll(s, home, "~")
+	}
+	// The cache's folder is in the config directory, which is in the home directory (and
+	// so shown in ~ by now) unless $XDG_CONFIG_HOME or %AppData% puts it elsewhere
+	if config, err := os.UserConfigDir(); err == nil {
+		s = strings.ReplaceAll(s, config, redacted)
 	}
 	for _, p := range scrubPatterns {
 		s = p.ReplaceAllString(s, redacted)

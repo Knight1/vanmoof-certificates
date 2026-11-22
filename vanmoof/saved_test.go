@@ -18,8 +18,9 @@ import (
 
 // The tests never reach the network or the real cache, and never wait for input: a request
 // fails unless the test answers it (fakeVanMoof, newRevocationServers), they start with an
-// empty home directory, without VANMOOF_CACHE_KEY and VANMOOF_PASSWORD, and with standard
-// input closed (setStdin and typePassword give the prompts their input)
+// empty home directory, with the config directory (where the cache is) in it, without
+// VANMOOF_CACHE_KEY and VANMOOF_PASSWORD, and with standard input closed (setStdin and
+// typePassword give the prompts their input)
 func TestMain(m *testing.M) {
 	home, err := os.MkdirTemp("", "vanmoof-test-home")
 	if err != nil {
@@ -28,6 +29,8 @@ func TestMain(m *testing.M) {
 	}
 	os.Setenv("HOME", home)
 	os.Setenv("USERPROFILE", home)
+	os.Unsetenv("XDG_CONFIG_HOME")
+	os.Setenv("AppData", filepath.Join(home, "AppData", "Roaming"))
 	os.Unsetenv("VANMOOF_CACHE_KEY")
 	os.Unsetenv("VANMOOF_PASSWORD")
 	os.Stdin.Close()

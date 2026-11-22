@@ -104,12 +104,13 @@ func TestRedactJSONFields(t *testing.T) {
 }
 
 func TestScrubText(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	home := setHome(t)
+	setConfigDir(t, t.TempDir()) // outside the home directory
+	config, _ := os.UserConfigDir()
 	in := "GET /external/riders/1eaf0000-0000-4000-8000-00000000beef/vehicles for x@example.com: bike 987654, " +
 		"frame ABCDEF12345GH, MAC C0:FF:EE:00:00:01, key 1eaf1eaf1eaf1eaf1eaf1eaf1eaf1eaf, " +
-		"token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl, cache " + filepath.Join(home, ".vanmoof-certificates")
+		"token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl, cache " + filepath.Join(home, ".vanmoof-certificates") +
+		" moved to " + filepath.Join(config, "vanmoof-certificates")
 
 	if got := ScrubText(in); got != in {
 		t.Errorf("ScrubText changed text without -redact: %s", got)
@@ -117,12 +118,16 @@ func TestScrubText(t *testing.T) {
 
 	setRedaction(t, true, false)
 	got := ScrubText(in)
-	for _, leak := range []string{"1eaf0000", "x@example.com", "987654", "ABCDEF12345GH", "C0:FF:EE", "1eaf1eaf", "eyJ", home} {
+	for _, leak := range []string{"1eaf0000", "x@example.com", "987654", "ABCDEF12345GH", "C0:FF:EE", "1eaf1eaf", "eyJ", home, config} {
 		if strings.Contains(got, leak) {
 			t.Errorf("ScrubText kept %q: %s", leak, got)
 		}
 	}
-	for _, want := range []string{"bike DDDDDD", "frame LLLLLLDDDDDLL", "cache ~"} {
+	wants := []string{"bike DDDDDD", "frame LLLLLLDDDDDLL", "cache ~"}
+	if !strings.HasPrefix(config, home) { // but on macOS
+		wants = append(wants, "moved to "+filepath.Join(redacted, "vanmoof-certificates"))
+	}
+	for _, want := range wants {
 		if !strings.Contains(got, want) {
 			t.Errorf("ScrubText output lacks %q: %s", want, got)
 		}
@@ -315,11 +320,15 @@ func fakeVanMoof(t *testing.T) (certs, pubKeys *[]string) {
 
 // runEverything runs every flow that prints account data, with debug output: requesting
 // certificates (logging in, then with cached tokens), showing keys, checking a certificate
-// offline against the wrong frame number, and an unreadable token cache.
+// offline against the wrong frame number, and an unreadable token cache. It starts with
+// the cache of an earlier version in the home directory, which the first flow moves to a
+// config directory outside of it.
 func runEverything(t *testing.T) (out string, certs, pubKeys []string) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	home := setHome(t)
+	setConfigDir(t, t.TempDir())
+	if err := os.Mkdir(filepath.Join(home, ".vanmoof-certificates"), 0700); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("VANMOOF_CACHE_KEY", "")
 	t.Setenv("VANMOOF_PASSWORD", leakPassword)
 	certsP, pubKeysP := fakeVanMoof(t)
@@ -383,7 +392,8 @@ func TestRedactLeaks(t *testing.T) {
 		setRedaction(t, true, false)
 		out, certs, pubKeys := runEverything(t)
 		home, _ := os.UserHomeDir()
-		for _, s := range append(append(append(append([]string{home}, leakSecrets...), leakPersonal...), certs...), pubKeys...) {
+		config, _ := os.UserConfigDir()
+		for _, s := range append(append(append(append([]string{home, config}, leakSecrets...), leakPersonal...), certs...), pubKeys...) {
 			if strings.Contains(out, s) {
 				t.Errorf("redacted output contains %q", s)
 			}

@@ -9,9 +9,7 @@ import (
 
 // Failing to pick bikes (here: no answer to -bikes ask) is an error, not just a message
 func TestShowKeysReportsSelectionError(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	setHome(t)
 	t.Setenv("VANMOOF_PASSWORD", leakPassword)
 	fakeVanMoof(t)
 	setStdin(t, "")
@@ -25,9 +23,7 @@ func TestShowKeysReportsSelectionError(t *testing.T) {
 
 // Both -bikes ask prompts of -show-keys all can be answered from piped input
 func TestShowKeysAllAskWithPipedInput(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	setHome(t)
 	t.Setenv("VANMOOF_PASSWORD", leakPassword)
 	fakeVanMoof(t)
 	setStdin(t, "1\n1\n")
@@ -41,9 +37,7 @@ func TestShowKeysAllAskWithPipedInput(t *testing.T) {
 
 // A failed optional lookup is shown even without -debug, and the rest still works
 func TestShowKeysWarnsAboutFailedLookups(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	setHome(t)
 	t.Setenv("VANMOOF_PASSWORD", leakPassword)
 	fakeVanMoof(t)
 	api := http.DefaultTransport

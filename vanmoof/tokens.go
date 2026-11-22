@@ -18,8 +18,16 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// cacheDir is the cache's folder in the home directory
-const cacheDir = ".vanmoof-certificates"
+// The cache is the folder cacheDirName in the user's config directory (os.UserConfigDir),
+// such as ~/.config/vanmoof-certificates, rather than in the home directory, where earlier
+// versions kept it as legacyCacheDirName. It isn't in the cache directory
+// (os.UserCacheDir), which the system or a cleanup tool may empty: it has the key pair,
+// whose private key a BLE app uses, and the BLE keys.
+const (
+	cacheDirName       = "vanmoof-certificates"
+	legacyCacheDirName = ".vanmoof-certificates"
+)
+
 const saltSize = 16
 const nonceSize = 12
 
@@ -37,7 +45,7 @@ const (
 // cacheFile is one of the cache's files: a JSON object with an entry of type T for each
 // account (email address), encrypted with VANMOOF_CACHE_KEY if it's set
 type cacheFile[T any] struct {
-	name string // the file's name in cacheDir
+	name string // the file's name in the cache's folder (cacheDir)
 	what string // what it holds, for messages
 }
 
@@ -50,11 +58,54 @@ func tokenCachePath() (string, error) {
 
 // path returns the file's full path
 func (c cacheFile[T]) path() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := cacheDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, cacheDir, c.name), nil
+	return filepath.Join(dir, c.name), nil
+}
+
+// cacheNotMoved is the cache from an earlier version that couldn't be moved in this run,
+// if any: the run keeps using it where it is, without trying (and warning) again
+var cacheNotMoved string
+
+// cacheDir returns the cache's folder. The first time, it moves the folder an earlier
+// version made in the home directory there; if that fails, it uses that folder where it
+// is. A link (or anything else that isn't a folder) in the old folder's place is left
+// alone and used, as earlier versions did.
+func cacheDir() (string, error) {
+	config, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(config, cacheDirName)
+	if _, err := os.Lstat(dir); err == nil {
+		return dir, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return dir, nil // so there's no cache from before either
+	}
+	legacy := filepath.Join(home, legacyCacheDirName)
+	info, err := os.Lstat(legacy)
+	if err != nil {
+		return dir, nil // there's none from before
+	}
+	if !info.IsDir() || legacy == cacheNotMoved {
+		return legacy, nil
+	}
+
+	err = os.MkdirAll(config, 0700)
+	if err == nil {
+		err = os.Rename(legacy, dir)
+	}
+	if err != nil {
+		cacheNotMoved = legacy
+		fmt.Printf("WARNING: Can't move the cache to %s, so it stays in %s: %v\n", ScrubText(dir), ScrubText(legacy), ScrubText(err.Error()))
+		return legacy, nil
+	}
+	fmt.Printf("Note: moved the cache from %s to %s\n", ScrubText(legacy), ScrubText(dir))
+	return dir, nil
 }
 
 // getCacheKey returns the encryption key from VANMOOF_CACHE_KEY env var, or empty if unset

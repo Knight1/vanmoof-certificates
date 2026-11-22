@@ -118,12 +118,30 @@ func TestTokenCacheUnencryptedNote(t *testing.T) {
 	}
 }
 
-// useTempCache points the token cache at a fresh home directory and sets VANMOOF_CACHE_KEY.
-func useTempCache(t *testing.T, key string) string {
+// setHome makes a new, empty home directory the user's for the rest of the test, with the
+// config directory (where the cache is) in it, and returns it
+func setHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	t.Setenv("USERPROFILE", home)                                  // Windows
+	t.Setenv("XDG_CONFIG_HOME", "")                                // ~/.config
+	t.Setenv("AppData", filepath.Join(home, "AppData", "Roaming")) // Windows
+	return home
+}
+
+// setConfigDir makes dir the config directory for the rest of the test, where a variable
+// sets it: $XDG_CONFIG_HOME, or %AppData% on Windows (on macOS, it's in the home directory)
+func setConfigDir(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("AppData", dir)
+}
+
+// useTempCache points the token cache at a fresh home directory and sets VANMOOF_CACHE_KEY.
+func useTempCache(t *testing.T, key string) string {
+	t.Helper()
+	setHome(t)
 	t.Setenv("VANMOOF_CACHE_KEY", key)
 	path, err := tokenCachePath()
 	if err != nil {
@@ -257,9 +275,7 @@ func TestCacheWriteFailure(t *testing.T) {
 		t.Errorf("files left in the cache folder: %v", entries)
 	}
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	home := setHome(t)
 	if err := os.Chmod(home, 0500); err != nil {
 		t.Fatal(err)
 	}
@@ -286,11 +302,12 @@ func TestCacheEncryptionPassphrases(t *testing.T) {
 	}
 }
 
-// Without a home directory there's no cache: nothing is read or written, and debug output
-// says why
+// Without a home or config directory there's no cache: nothing is read or written, and
+// debug output says why
 func TestCacheWithoutHome(t *testing.T) {
 	t.Setenv("HOME", "")
 	t.Setenv("USERPROFILE", "")
+	setConfigDir(t, "")
 	var entries map[string]Tokens
 	var err error
 	out := captureStdout(t, func() {
@@ -299,6 +316,174 @@ func TestCacheWithoutHome(t *testing.T) {
 	})
 	if entries != nil || err != nil || strings.Count(out, "[DEBUG] Cache path error: ") != 2 {
 		t.Errorf("loadAll = %v, %v\n%s", entries, err, out)
+	}
+
+	// A config directory without a home directory has the cache, with none from before
+	config := t.TempDir()
+	setConfigDir(t, config)
+	if _, err := os.UserConfigDir(); err != nil {
+		t.Skip("the config directory is in the home directory here:", err)
+	}
+	if path, err := tokenCachePath(); path != filepath.Join(config, "vanmoof-certificates", "tokens.json") || err != nil {
+		t.Errorf("tokenCachePath = %s, %v", path, err)
+	}
+}
+
+// The cache is in the config directory, with nothing in the home directory but that:
+// ~/.config/vanmoof-certificates (on macOS ~/Library/Application Support/vanmoof-certificates,
+// on Windows %AppData%\vanmoof-certificates), or $XDG_CONFIG_HOME/vanmoof-certificates
+func TestCacheInConfigDir(t *testing.T) {
+	home := setHome(t)
+	config, top := filepath.Join(home, ".config"), ".config"
+	switch runtime.GOOS {
+	case "darwin", "ios":
+		config, top = filepath.Join(home, "Library", "Application Support"), "Library"
+	case "windows":
+		config, top = filepath.Join(home, "AppData", "Roaming"), "AppData"
+	}
+	captureStdout(t, func() { saveTokenCache("a@example.com", "authA", "refreshA", "appA", false) })
+	if _, err := os.Stat(filepath.Join(config, "vanmoof-certificates", "tokens.json")); err != nil {
+		t.Errorf("tokens not cached in %s: %v", config, err)
+	}
+	if entries, _ := os.ReadDir(home); len(entries) != 1 || entries[0].Name() != top {
+		t.Errorf("home directory has %v, want only %s", entries, top)
+	}
+
+	if runtime.GOOS == "darwin" || runtime.GOOS == "ios" {
+		return // where no variable moves the config directory
+	}
+	elsewhere := t.TempDir()
+	setConfigDir(t, elsewhere)
+	if path, _ := tokenCachePath(); path != filepath.Join(elsewhere, "vanmoof-certificates", "tokens.json") {
+		t.Errorf("with the config directory elsewhere, the cache is %s", path)
+	}
+}
+
+// legacyCache makes the cache folder an earlier version kept in the home directory, with
+// tokens.json for a@example.com, and returns it
+func legacyCache(t *testing.T, home string) string {
+	t.Helper()
+	legacy := filepath.Join(home, ".vanmoof-certificates")
+	if err := os.Mkdir(legacy, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacy, "tokens.json"), []byte(`{"a@example.com":{"auth_token":"authA"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return legacy
+}
+
+// The cache an earlier version kept in the home directory is moved to the config directory
+// the first time, with all its files, and used there
+func TestCacheMovedFromHome(t *testing.T) {
+	legacy := legacyCache(t, setHome(t))
+	if err := os.WriteFile(filepath.Join(legacy, "bikes.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var c *Tokens
+	out := captureStdout(t, func() {
+		c = loadTokenCache("a@example.com", false)
+		saveTokenCache("b@example.com", "authB", "refreshB", "appB", false)
+	})
+	path, _ := tokenCachePath()
+	dir := filepath.Dir(path)
+	if want := "Note: moved the cache from " + legacy + " to " + dir + "\n"; out != want {
+		t.Errorf("output %q, want %q", out, want)
+	}
+	if c == nil || c.AuthToken != "authA" {
+		t.Errorf("tokens from before not used: %+v", c)
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, "bikes.json")); string(b) != `{}` {
+		t.Errorf("bikes.json not moved: %q, %v", b, err)
+	}
+	if _, err := os.Lstat(legacy); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("%s still there: %v", legacy, err)
+	}
+	if c := loadTokenCache("b@example.com", false); c == nil || c.AuthToken != "authB" {
+		t.Errorf("tokens not saved in the moved cache: %+v", c)
+	}
+}
+
+// A cache in the config directory is the one used: one in the home directory as well, such
+// as from an earlier version run again, is left alone
+func TestCacheInHomeAsWell(t *testing.T) {
+	home := setHome(t)
+	captureStdout(t, func() { saveTokenCache("a@example.com", "authNew", "refreshNew", "appNew", false) })
+	legacy := legacyCache(t, home)
+
+	var c *Tokens
+	if out := captureStdout(t, func() { c = loadTokenCache("a@example.com", false) }); out != "" || c == nil || c.AuthToken != "authNew" {
+		t.Errorf("loaded %+v:\n%s", c, out)
+	}
+	if b, _ := os.ReadFile(filepath.Join(legacy, "tokens.json")); !strings.Contains(string(b), "authA") {
+		t.Errorf("cache from before changed: %s", b)
+	}
+}
+
+// A cache from an earlier version that can't be moved, here as a file is where the config
+// directory should be, is used where it is, with one warning a run, until a run moves it
+func TestCacheNotMoved(t *testing.T) {
+	home := setHome(t)
+	t.Cleanup(func() { cacheNotMoved = "" })
+	legacy := legacyCache(t, home)
+	config, _ := os.UserConfigDir()
+	if err := os.MkdirAll(filepath.Dir(config), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var c *Tokens
+	out := captureStdout(t, func() {
+		c = loadTokenCache("a@example.com", false)
+		saveTokenCache("b@example.com", "authB", "refreshB", "appB", false)
+	})
+	dir := filepath.Join(config, "vanmoof-certificates")
+	if want := "WARNING: Can't move the cache to " + dir + ", so it stays in " + legacy + ": "; !strings.HasPrefix(out, want) || strings.Count(out, "\n") != 1 {
+		t.Errorf("output %q, want one line starting with %q", out, want)
+	}
+	if c == nil || c.AuthToken != "authA" {
+		t.Errorf("tokens from before not used: %+v", c)
+	}
+	if b, _ := os.ReadFile(filepath.Join(legacy, "tokens.json")); !strings.Contains(string(b), "authB") {
+		t.Errorf("tokens not saved where the cache is: %s", b)
+	}
+
+	// The next run, which can, moves it
+	cacheNotMoved = ""
+	if err := os.Remove(config); err != nil {
+		t.Fatal(err)
+	}
+	out = captureStdout(t, func() { c = loadTokenCache("b@example.com", false) })
+	if !strings.HasPrefix(out, "Note: moved the cache from ") || c == nil || c.AuthToken != "authB" {
+		t.Errorf("loaded %+v:\n%s", c, out)
+	}
+}
+
+// A link in the home directory to a cache elsewhere, which no earlier version made, is left
+// alone and used
+func TestCacheLinkNotMoved(t *testing.T) {
+	home := setHome(t)
+	target := t.TempDir()
+	legacy := filepath.Join(home, ".vanmoof-certificates")
+	if err := os.Symlink(target, legacy); err != nil {
+		t.Skip("can't make a link here:", err)
+	}
+
+	if out := captureStdout(t, func() { saveTokenCache("a@example.com", "authA", "refreshA", "appA", false) }); strings.Contains(out, "moved") {
+		t.Errorf("output: %s", out)
+	}
+	if _, err := os.Stat(filepath.Join(target, "tokens.json")); err != nil {
+		t.Errorf("tokens not saved through the link: %v", err)
+	}
+	if info, err := os.Lstat(legacy); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("link changed: %v, %v", info, err)
+	}
+	config, _ := os.UserConfigDir()
+	if _, err := os.Lstat(filepath.Join(config, "vanmoof-certificates")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("cache made in the config directory as well: %v", err)
 	}
 }
 
