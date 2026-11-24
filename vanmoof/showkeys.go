@@ -55,7 +55,7 @@ func ShowKeys(email, mode string, opts Options) error {
 	account.setBLEKeys(customerData.Data.BikeDetails)
 	err = printStaticKeys(customerData.Data.BikeDetails, tokens.AuthToken, &account, opts)
 	if err == nil && mode == ShowKeysAll {
-		bikes := mergeSharedVehicles(customerData.Data.Bikes, customerData.Data.UUID, tokens.AppToken, debug)
+		bikes := mergeRegistryVehicles(customerData.Data.Bikes, customerData.Data.UUID, tokens.AppToken, debug)
 		err = requestCertificates(bikes, customerData.Data.UUID, s, &account, opts)
 	}
 	saveAccount(email, account, opts)

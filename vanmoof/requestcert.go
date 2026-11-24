@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/term"
@@ -172,7 +173,7 @@ func GetCert(email string, opts Options) error {
 		debugPrintBikeProfiles(bikes)
 	}
 
-	bikes = mergeSharedVehicles(bikes, customerUUID, tokens.AppToken, debug)
+	bikes = mergeRegistryVehicles(bikes, customerUUID, tokens.AppToken, debug)
 
 	account := loadAccount(email, opts)
 	account.setBLEKeys(customerData.Data.BikeDetails)
@@ -205,14 +206,18 @@ func debugPrintBikeProfiles(bikes []Bike) {
 	}
 }
 
-// debugPrintVehicleAccessProfiles is debugPrintBikeProfiles for shared/guest bikes from
-// the Vehicle Registry API, which come back as VehicleAccess rather than Bike, with how
-// long they're shared.
-func debugPrintVehicleAccessProfiles(vehicles []VehicleAccess) {
+// debugPrintVehicleAccessProfiles is debugPrintBikeProfiles for the bikes of the Vehicle
+// Registry API, which come back as VehicleAccess rather than Bike: the account's own S6s,
+// and the bikes shared with it, with how long they're shared.
+func debugPrintVehicleAccessProfiles(vehicles []VehicleAccess, customerUUID string) {
 	now := time.Now()
 	for _, v := range vehicles {
 		model := modelDescription(v.BleProfile, "")
-		fmt.Printf("[DEBUG]   %s \"%s\": %s (%s), shared by %s %s\n", RedactID(v.VehicleID), Redact(v.Name), printable(v.BleProfile), model, Redact(v.OwnerName), sharingPeriod(v.StartsAt, v.ExpiresAt, now))
+		sharing := ", yours"
+		if !ownVehicle(v, customerUUID) {
+			sharing = fmt.Sprintf(", shared by %s %s", Redact(v.OwnerName), sharingPeriod(v.StartsAt, v.ExpiresAt, now))
+		}
+		fmt.Printf("[DEBUG]   %s \"%s\": %s (%s)%s\n", RedactID(v.VehicleID), Redact(v.Name), printable(v.BleProfile), model, sharing)
 	}
 }
 

@@ -92,13 +92,13 @@ func (s *Session) Bikes() ([]Bike, error) {
 	var shared []VehicleAccess
 	err = s.call(true, func(t Tokens) error {
 		var err error
-		shared, err = getSharedVehicles(data.Data.UUID, t.AppToken, s.debug)
+		shared, err = getRegistryVehicles(data.Data.UUID, t.AppToken, s.debug)
 		return err
 	})
 	if err != nil {
 		return data.Data.Bikes, fmt.Errorf("%w: %w", ErrSharedBikes, err)
 	}
-	return addSharedBikes(data.Data.Bikes, shared), nil
+	return addRegistryBikes(data.Data.Bikes, shared, data.Data.UUID), nil
 }
 
 // RequestCertificate requests a certificate for one of the account's bikes that
