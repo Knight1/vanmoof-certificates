@@ -299,11 +299,7 @@ func fakeVanMoof(t *testing.T) (certs, pubKeys *[]string) {
 			frame := strings.Split(p, "/")[2]
 			fields := testCertFields(frame)
 			fields["u"], fields["p"] = userID, pub
-			key := ca
-			if frame == leakS6Frame {
-				key = nil // no S6 signing key known
-			}
-			cert := testCert(t, key, fields)
+			cert := testCert(t, ca, fields)
 			mu.Lock()
 			*certs, *pubKeys = append(*certs, cert), append(*pubKeys, req.PublicKey)
 			mu.Unlock()
@@ -393,7 +389,7 @@ func TestRedactLeaks(t *testing.T) {
 		out, certs, pubKeys := runEverything(t)
 		home, _ := os.UserHomeDir()
 		config, _ := os.UserConfigDir()
-		for _, s := range append(append(append(append([]string{home, config}, leakSecrets...), leakPersonal...), certs...), pubKeys...) {
+		for _, s := range slices.Concat([]string{home, config}, leakSecrets, leakPersonal, certs, pubKeys, srpSecrets) {
 			if strings.Contains(out, s) {
 				t.Errorf("redacted output contains %q", s)
 			}
