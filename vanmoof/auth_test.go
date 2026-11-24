@@ -12,7 +12,7 @@ func TestBrokenResponses(t *testing.T) {
 		"authenticate":        func() error { _, _, err := authenticate(leakEmail, leakPassword, false); return err },
 		"refreshAuthToken":    func() error { _, _, err := refreshAuthToken(leakRefresh, false); return err },
 		"getApplicationToken": func() error { _, err := getApplicationToken(leakAuthToken, false); return err },
-		"getSharedVehicles":   func() error { _, err := getSharedVehicles(leakUUID, leakAppToken, false); return err },
+		"getRegistryVehicles": func() error { _, err := getRegistryVehicles(leakUUID, leakAppToken, false); return err },
 		"getBikeSharingInvitations": func() error {
 			_, err := getBikeSharingInvitations(leakAuthToken, false)
 			return err
