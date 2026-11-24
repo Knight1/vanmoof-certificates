@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -386,7 +387,7 @@ func TestRedactLeaks(t *testing.T) {
 
 	t.Run("-debug -redact hides secrets and personal data", func(t *testing.T) {
 		setRedaction(t, true, false)
-		out, certs, pubKeys := runEverything(t)
+		out, certs, pubKeys, srpSecrets := runEverything(t)
 		home, _ := os.UserHomeDir()
 		config, _ := os.UserConfigDir()
 		for _, s := range slices.Concat([]string{home, config}, leakSecrets, leakPersonal, certs, pubKeys, srpSecrets) {
