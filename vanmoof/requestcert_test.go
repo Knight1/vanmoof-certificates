@@ -371,9 +371,11 @@ func TestDebugProfiles(t *testing.T) {
 			{Name: "Lent", FrameNumber: "LKY0000004", BleProfile: "ELECTRIFIED_2020", CustomerRole: "user", EndsAt: "2020-01-01T00:00:00Z"},
 			{Name: "Lent2", FrameNumber: "LKY0000005", BleProfile: "ELECTRIFIED_2020", CustomerRole: "Owner"},
 			{Name: "Tracked", FrameNumber: "LKY0000006", BleProfile: "ELECTRIFIED_2021", FrameShape: "X"}})
-		debugPrintVehicleAccessProfiles([]VehicleAccess{{VehicleID: "AAAAA000001AA", Name: "Theirs", OwnerName: "Alice", BleProfile: "ELECTRIFIED_2030"}})
+		debugPrintVehicleAccessProfiles([]VehicleAccess{{VehicleID: "AAAAA000001AA", Name: "Theirs", OwnerName: "Alice", OwnerID: "alice", BleProfile: "ELECTRIFIED_2030"},
+			{VehicleID: "AAAAA000003AA", Name: "My S6", OwnerName: "Me", OwnerID: "me", BleProfile: "ELECTRIFIED_2025"}}, "me")
 	})
 	for _, want := range []string{`BBBBBB00001AA "Mine": ELECTRIFIED_2022 (SA5, Find My)`, `BBBBBB00002AA "": ELECTRIFIED_2030 (unknown)`, `AAAAA000001AA "Theirs": ELECTRIFIED_2030 (unknown), shared by Alice without end`,
+		`AAAAA000003AA "My S6": ELECTRIFIED_2025 (S6, Find My), yours` + "\n",
 		"Retrieved 5 bikes: 4 owned, 1 shared with you\n", `BBBBBB00001AA "Mine": ELECTRIFIED_2022 (SA5, Find My)` + "\n",
 		`LKY0000004 "Lent": ELECTRIFIED_2020 (S3/X3, no Find My), shared with you as user until 2020-01-01 00:00 UTC (expired)`,
 		`LKY0000005 "Lent2": ELECTRIFIED_2020 (S3/X3, no Find My)` + "\n", `LKY0000006 "Tracked": ELECTRIFIED_2021 (X3, Find My)` + "\n"} {
@@ -414,7 +416,7 @@ func TestDebugProfilesRedacted(t *testing.T) {
 	t.Cleanup(func() { SetRedaction(false, false) })
 	out := captureStdout(t, func() {
 		debugPrintBikeProfiles([]Bike{{Name: "Mine", FrameNumber: "BBBBBB00001AA", BleProfile: "ELECTRIFIED_2022"}})
-		debugPrintVehicleAccessProfiles([]VehicleAccess{{VehicleID: "AAAAA000001AA", Name: "Theirs", OwnerName: "Alice", BleProfile: "ELECTRIFIED_2030"}})
+		debugPrintVehicleAccessProfiles([]VehicleAccess{{VehicleID: "AAAAA000001AA", Name: "Theirs", OwnerName: "Alice", BleProfile: "ELECTRIFIED_2030"}}, "")
 	})
 	if got := sharingPeriod("soon", "later", time.Now()); got != "from [REDACTED] until [REDACTED]" {
 		t.Errorf("sharingPeriod with times it can't parse = %q", got)
@@ -429,16 +431,27 @@ func TestDebugProfilesRedacted(t *testing.T) {
 	}
 }
 
-// A bike that's both the account's own and shared with it is listed once, as its own
-func TestAddSharedBikes(t *testing.T) {
+// The vehicle registry adds the bikes getCustomerData leaves out: the account's own S6s,
+// which aren't shared (by its owner ID, or its role), and the bikes shared with it. A bike
+// in both is listed once, as getCustomerData has it.
+func TestAddRegistryBikes(t *testing.T) {
+	const me = "1eaf0000-0000-4000-8000-0000000000aa"
 	owned := []Bike{{BikeID: 1, Name: "mine", FrameNumber: "BBBBBB00001AA", BleProfile: "ELECTRIFIED_2022"}}
-	shared := []VehicleAccess{
+	vehicles := []VehicleAccess{
 		{VehicleID: "BBBBBB00001AA", Name: "also mine"},
-		{VehicleID: "AAAAA000002AA", Name: "theirs", BleProfile: "ELECTRIFIED_2025", OwnerName: "Owner"},
+		{VehicleID: "AAAAA000002AA", Name: "theirs", BleProfile: "ELECTRIFIED_2025", OwnerName: "Owner", OwnerID: "1eaf0000-0000-4000-8000-0000000000bb", Role: "guest"},
+		{VehicleID: "AAAAA000003AA", Name: "my S6", BleProfile: "ELECTRIFIED_2025", OwnerName: "Me", OwnerID: me},
+		{VehicleID: "AAAAA000004AA", Name: "my other S6", BleProfile: "ELECTRIFIED_2025", OwnerName: "Me", Role: "Owner"},
 	}
-	want := []Bike{owned[0], {Name: "theirs", FrameNumber: "AAAAA000002AA", BleProfile: "ELECTRIFIED_2025", Owner: "Owner"}}
-	if got := addSharedBikes(owned, shared); !slices.Equal(got, want) {
-		t.Errorf("addSharedBikes = %+v, want %+v", got, want)
+	want := []Bike{owned[0], {Name: "theirs", FrameNumber: "AAAAA000002AA", BleProfile: "ELECTRIFIED_2025", Owner: "Owner"},
+		{Name: "my S6", FrameNumber: "AAAAA000003AA", BleProfile: "ELECTRIFIED_2025"},
+		{Name: "my other S6", FrameNumber: "AAAAA000004AA", BleProfile: "ELECTRIFIED_2025"}}
+	if got := addRegistryBikes(owned, vehicles, me); !slices.Equal(got, want) {
+		t.Errorf("addRegistryBikes = %+v, want %+v", got, want)
+	}
+	// Without the account's UUID, a vehicle without an owner ID isn't the account's
+	if got := addRegistryBikes(nil, []VehicleAccess{{VehicleID: "AAAAA000005AA", OwnerName: "Owner"}}, ""); len(got) != 1 || got[0].Owner != "Owner" {
+		t.Errorf("addRegistryBikes without a UUID = %+v", got)
 	}
 }
 

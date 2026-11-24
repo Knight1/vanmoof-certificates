@@ -261,26 +261,34 @@ func warnPendingInvitations(authToken string, debug bool) {
 	}
 }
 
-// mergeSharedVehicles appends shared/guest bikes from the Vehicle Registry API to
-// bikes, skipping any already present as an owned bike.
-func mergeSharedVehicles(bikes []Bike, customerUUID, appToken string, debug bool) []Bike {
-	sharedVehicles, err := getSharedVehicles(customerUUID, appToken, debug)
+// mergeRegistryVehicles appends the bikes of the Vehicle Registry API to bikes (from
+// getCustomerData), skipping any already there. The registry is the only place an S6 is
+// listed, the account's own too, and the one with the bikes shared with the account.
+func mergeRegistryVehicles(bikes []Bike, customerUUID, appToken string, debug bool) []Bike {
+	vehicles, err := getRegistryVehicles(customerUUID, appToken, debug)
 	if err != nil {
-		// Not fatal, the owned bikes still work, but without this a guest only sees no bikes
-		fmt.Printf("WARNING: Couldn't look up the bikes shared with you: %v\n", ScrubText(err.Error()))
+		// Not fatal, the bikes of getCustomerData still work, but without this an S6, or a
+		// guest's bikes, aren't listed
+		fmt.Printf("WARNING: Couldn't look up your bikes in VanMoof's vehicle registry, which lists the S6s and the bikes shared with you: %v\n", ScrubText(err.Error()))
 		return bikes
 	}
 	if debug {
-		fmt.Printf("[DEBUG] Retrieved %d shared vehicles\n", len(sharedVehicles))
-		debugPrintVehicleAccessProfiles(sharedVehicles)
+		fmt.Printf("[DEBUG] Retrieved %d vehicles from the vehicle registry (S6s and shared bikes)\n", len(vehicles))
+		debugPrintVehicleAccessProfiles(vehicles, customerUUID)
 	}
-	return addSharedBikes(bikes, sharedVehicles)
+	return addRegistryBikes(bikes, vehicles, customerUUID)
 }
 
-// addSharedBikes appends the shared vehicles to bikes, skipping any already present as an
-// owned bike
-func addSharedBikes(bikes []Bike, sharedVehicles []VehicleAccess) []Bike {
-	for _, v := range sharedVehicles {
+// ownVehicle reports whether the Vehicle Registry API gives v as the account's own bike
+// (the account's UUID is customerUUID) rather than one shared with it
+func ownVehicle(v VehicleAccess, customerUUID string) bool {
+	return strings.EqualFold(v.Role, "owner") || (v.OwnerID != "" && v.OwnerID == customerUUID)
+}
+
+// addRegistryBikes appends the vehicles of the Vehicle Registry API to bikes, skipping any
+// already there. One that's the account's own gets no Owner, as it isn't shared.
+func addRegistryBikes(bikes []Bike, vehicles []VehicleAccess, customerUUID string) []Bike {
+	for _, v := range vehicles {
 		// Skip if we already have this bike as an owned bike
 		alreadyOwned := false
 		for _, b := range bikes {
@@ -293,12 +301,11 @@ func addSharedBikes(bikes []Bike, sharedVehicles []VehicleAccess) []Bike {
 			continue
 		}
 
-		bikes = append(bikes, Bike{
-			Name:        v.Name,
-			FrameNumber: v.VehicleID,
-			BleProfile:  v.BleProfile,
-			Owner:       v.OwnerName,
-		})
+		bike := Bike{Name: v.Name, FrameNumber: v.VehicleID, BleProfile: v.BleProfile, Owner: v.OwnerName}
+		if ownVehicle(v, customerUUID) {
+			bike.Owner = ""
+		}
+		bikes = append(bikes, bike)
 	}
 	return bikes
 }

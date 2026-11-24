@@ -90,8 +90,10 @@ func getApplicationToken(authToken string, debug bool) (string, error) {
 	return appTokenResp.Token, nil
 }
 
-// getSharedVehicles uses the Vehicle Registry API which does not require the Api-Key header.
-func getSharedVehicles(riderUUID, appToken string, debug bool) ([]VehicleAccess, error) {
+// getRegistryVehicles returns the account's vehicles in the Vehicle Registry API, the only
+// place that lists S6s, the account's own too, and the bikes shared with it. It doesn't
+// require the Api-Key header.
+func getRegistryVehicles(riderUUID, appToken string, debug bool) ([]VehicleAccess, error) {
 	headers := map[string]string{
 		"Authorization": "Bearer " + appToken,
 	}

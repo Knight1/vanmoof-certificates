@@ -24,8 +24,8 @@ import (
 )
 
 // A certificate is only valid if each of its fields is right: of its type and in range, not
-// expired, for the bike and key expected, and signed by VanMoof (except on S6, whose key
-// isn't known). What CheckCertificate says it contains is then what it does.
+// expired, for the bike and key expected, and signed by VanMoof. What CheckCertificate says
+// it contains is then what it does.
 func FuzzCertificateFields(f *testing.F) {
 	ca := trustTestCA(f)
 	user := make([]byte, 16)
@@ -59,7 +59,7 @@ func FuzzCertificateFields(f *testing.F) {
 				t.Errorf("valid, but expired at %d", expiry)
 			case len(user) != 16 || len(key) != 32 || frame == "" || bike == "":
 				t.Errorf("valid with user %x, key %x, frame %q, bike %q", user, key, frame, bike)
-			case !signed && !s6FrameNumberRegexp.MatchString(frame):
+			case !signed:
 				t.Errorf("valid without VanMoof's signature, for %q", frame)
 			case res.ID != uint32(id) || res.FrameModule != frame || res.BikeModule != bike || res.Expires.Unix() != int64(expiry) ||
 				res.Role != uint8(role) || !bytes.Equal(res.UserID, user) || !bytes.Equal(res.PublicKey, key):
@@ -89,7 +89,7 @@ func FuzzRequestPaths(f *testing.F) {
 		createCertificate(id, "public", leakAppToken, false)
 		acceptBikeSharingInvitation(id, leakAuthToken, false)
 		declineBikeSharingInvitation(id, leakAuthToken, false)
-		getSharedVehicles(id, leakAppToken, false)
+		getRegistryVehicles(id, leakAppToken, false)
 
 		if id != "" && id != "." && id != ".." && len(requested) != 4 {
 			t.Errorf("%d requests for %q, want 4", len(requested), id)

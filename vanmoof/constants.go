@@ -69,10 +69,6 @@ var (
 // frameNumberRegexp matches SA5 and S6 frame numbers (frameNumberPattern)
 var frameNumberRegexp = regexp.MustCompile(frameNumberPattern)
 
-// s6FrameNumberRegexp matches S6 frame numbers (5 letters + 6 digits + 2 letters). Some
-// SA5 frame numbers match too, so it's only a fallback when the BLE profile isn't known.
-var s6FrameNumberRegexp = regexp.MustCompile(`^[A-Z]{5}\d{6}[A-Z]{2}$`)
-
 // anyFrameNumberRegexp loosely matches the frame number of any generation: older bikes
 // use other formats than SA5/S6 (e.g. 3 letters + 7 digits), so it only requires a
 // letter, then letters and digits.
