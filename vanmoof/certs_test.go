@@ -17,38 +17,6 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
-func TestIsS6Certificate(t *testing.T) {
-	s6Bike := Bike{FrameNumber: "AAAAA000000AA", BleProfile: "ELECTRIFIED_2025"}
-	sa5Bike := Bike{FrameNumber: "BBBBBB00000AA", BleProfile: "ELECTRIFIED_2022"}
-	// Some SA5 frame numbers have the S6 shape (5 letters + 6 digits)
-	sa5S6Shaped := Bike{FrameNumber: "AAAAA000001AA", BleProfile: "ELECTRIFIED_2022"}
-
-	tests := []struct {
-		name      string
-		r         certResult
-		requested *Bike
-		want      bool
-	}{
-		{"matched S6 bike", certResult{matchedBike: &s6Bike}, nil, true},
-		{"matched non-S6 bike, non-S6-shaped frame ID", certResult{matchedBike: &sa5Bike, frameID: []byte("BBBBBB00000AA")}, nil, false},
-		{"matched SA5 bike, S6-shaped frame ID", certResult{matchedBike: &sa5S6Shaped, frameID: []byte("AAAAA000001AA")}, nil, false},
-		{"requested S6 bike", certResult{frameID: []byte("AAAAA000000AA")}, &s6Bike, true},
-		{"requested SA5 bike, S6-shaped frame ID", certResult{frameID: []byte("AAAAA000001AA")}, &sa5S6Shaped, false},
-		{"-framenumber without a BLE profile, S6-shaped frame ID", certResult{frameID: []byte("AAAAA000000AA")}, &Bike{FrameNumber: "AAAAA000000AA"}, true},
-		{"no matched bike, S6-shaped frame ID", certResult{frameID: []byte("AAAAA000000AA")}, nil, true},
-		{"no matched bike, SA5-shaped frame ID", certResult{frameID: []byte("BBBBBB00000AA")}, nil, false},
-		{"no matched bike, empty frame ID", certResult{}, nil, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := isS6Certificate(tt.r, tt.requested); got != tt.want {
-				t.Errorf("isS6Certificate() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 // testCertFields returns the payload fields of a well-formed certificate for frame
 func testCertFields(frame string) map[string]any {
 	userID := make([]byte, 16)
@@ -151,10 +119,12 @@ func TestProcessCertificateVerdict(t *testing.T) {
 			"Certificate INVALID", []string{"✗ Bike frame BBBBBB00002AA not found in certificate"}},
 		{"warning on a valid certificate", testCert(t, ca, longLived), nil, "",
 			"Certificate valid: " + sa5, []string{"⚠ Certificate expiry is suspiciously far in the future"}},
-		{"S6 signature can't be verified", testCert(t, nil, testCertFields(s6)), &Bike{BikeID: 8, FrameNumber: s6, BleProfile: "ELECTRIFIED_2025"}, "",
-			"Certificate valid, but signature not verified: " + s6, []string{"Note: " + s6SignatureNote}},
-		{"S6-shaped frame offline, signature can't be verified", testCert(t, nil, testCertFields(s6)), nil, "",
-			"Certificate valid, but signature not verified: " + s6, []string{"Note: " + s6SignatureNote}},
+		{"signed S6 certificate", testCert(t, ca, testCertFields(s6)), &Bike{BikeID: 8, FrameNumber: s6, BleProfile: "ELECTRIFIED_2025"}, "",
+			"Certificate valid: " + s6, []string{"bike matched"}},
+		{"S6 with a bad signature", testCert(t, nil, testCertFields(s6)), &Bike{BikeID: 8, FrameNumber: s6, BleProfile: "ELECTRIFIED_2025"}, "",
+			"Certificate INVALID", []string{"✗ Signature INVALID"}},
+		{"S6-shaped frame offline with a bad signature", testCert(t, nil, testCertFields(s6)), nil, "",
+			"Certificate INVALID", []string{"✗ Signature INVALID"}},
 		{"SA5 with a bad signature", testCert(t, nil, testCertFields(sa5)), nil, "",
 			"Certificate INVALID", []string{"✗ Signature INVALID"}},
 		{"SA5 with an S6-shaped frame number and a bad signature", testCert(t, nil, testCertFields(sa5S6Shaped)), &Bike{BikeID: 7, FrameNumber: sa5S6Shaped, BleProfile: "ELECTRIFIED_2022"}, "",
@@ -435,7 +405,7 @@ func TestCAKeys(t *testing.T) {
 	knownCAKeys = append([]string{"not a key"}, knownCAKeys...)
 	var res CertificateResult
 	out := captureStdout(t, func() { res = checkCertificate(cert, Expect{}, true) })
-	if !res.Valid || !res.SignatureVerified || !strings.Contains(out, "✗ CA key 1: Invalid format") || !strings.Contains(out, "✓ Signature VALID with CA key 3") {
+	if !res.Valid || !res.SignatureVerified || !strings.Contains(out, "✗ CA key 1: Invalid format") || !strings.Contains(out, "✓ Signature VALID with CA key 4") {
 		t.Errorf("valid = %v, signature verified = %v:\n%s", res.Valid, res.SignatureVerified, out)
 	}
 
@@ -443,6 +413,24 @@ func TestCAKeys(t *testing.T) {
 	out = captureStdout(t, func() { res = checkCertificate(cert, Expect{}, true) })
 	if !res.Valid || res.SignatureVerified || !strings.Contains(out, "No VanMoof CA public keys available") {
 		t.Errorf("without CA keys: valid = %v, signature verified = %v:\n%s", res.Valid, res.SignatureVerified, out)
+	}
+	out = captureStdout(t, func() { res = checkCertificate(cert, Expect{}, false) })
+	if !res.Valid || res.SignatureVerified || !strings.HasPrefix(out, "Certificate valid, but signature not verified: ") {
+		t.Errorf("without CA keys, compact: valid = %v, signature verified = %v:\n%s", res.Valid, res.SignatureVerified, out)
+	}
+}
+
+// The known CA keys are Ed25519 public keys, the SA5's and the S6's
+func TestKnownCAKeys(t *testing.T) {
+	s6Key, _ := base64.StdEncoding.DecodeString("lO3bA9iJjtwL4qWIpF3FmDp7QA3dPoFArfCd0YYMcAc=")
+	want := []string{"29b1f31c07d1c63b124057ebe75a0bc0796259722e5dd9a9a9302ae2061184a0", hex.EncodeToString(s6Key)}
+	if !slices.Equal(knownCAKeys, want) {
+		t.Errorf("knownCAKeys = %q, want %q", knownCAKeys, want)
+	}
+	for _, k := range knownCAKeys {
+		if b, err := hex.DecodeString(k); err != nil || len(b) != ed25519.PublicKeySize {
+			t.Errorf("CA key %q isn't a 32-byte hex Ed25519 key: %v", k, err)
+		}
 	}
 }
 

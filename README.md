@@ -78,11 +78,12 @@ The first 64 bytes contain an Ed25519 signature that cryptographically signs the
 
 This signature is created by VanMoof's Certificate Authority (CA) and can be verified using the CA's public key to ensure the certificate is authentic and hasn't been tampered with.
 
-The CA signing public key (recovered from the bike's BLE certificate, and the same across all certificates) is:
+The CA signing public keys are:
 
-```
-29b1f31c07d1c63b124057ebe75a0bc0796259722e5dd9a9a9302ae2061184a0
-```
+| Bikes | Key (hex) | Key (base64) |
+|-------|-----------|--------------|
+| S5/A5 (SA5) and earlier, recovered from the bike's BLE certificate, the same across all certificates | `29b1f31c07d1c63b124057ebe75a0bc0796259722e5dd9a9a9302ae2061184a0` | `KbHzHAfRxjsSQFfr51oLwHliWXIuXdmpqTAq4gYRhKA=` |
+| S6, the key its module checks a certificate with before it lets the app log in and unlock | `94eddb03d8898edc0be2a588a45dc5983a7b400ddd3e8140adf09dd1860c7007` | `lO3bA9iJjtwL4qWIpF3FmDp7QA3dPoFArfCd0YYMcAc=` |
 
 Every parsed certificate's signature is verified against this key; a mismatch is
 flagged as an error (silent on success). Run with `-debug` for full verification detail.

@@ -87,9 +87,9 @@ func TestSession(t *testing.T) {
 			res.FrameModule != b.FrameNumber || res.AccessLevel() != "Owner" || !res.Expires.After(time.Now()) {
 			t.Errorf("%s: CheckCertificate = %+v", b.Model(), res)
 		}
-		// The fake signs SA5 certificates with a test key it trusts; no S6 key is known yet
-		if want := b.Model() == "SA5"; res.SignatureVerified != want {
-			t.Errorf("%s: SignatureVerified = %v, want %v", b.Model(), res.SignatureVerified, want)
+		// The fake signs the certificates with a test key it trusts
+		if !res.SignatureVerified {
+			t.Errorf("%s: SignatureVerified = false", b.Model())
 		}
 	}
 

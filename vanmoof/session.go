@@ -12,8 +12,9 @@ import (
 var ErrLoginRequired = errors.New("vanmoof: login required")
 
 // ErrSharedBikes is wrapped by the error Session.Bikes returns when it got the account's
-// own bikes, but couldn't look up the ones shared with it.
-var ErrSharedBikes = errors.New("vanmoof: couldn't look up the bikes shared with the account")
+// bikes from getCustomerData, but couldn't look them up in the vehicle registry, the only
+// place that lists its S6s (its own ones too) and the bikes shared with it.
+var ErrSharedBikes = errors.New("vanmoof: couldn't look up the account's bikes in the vehicle registry (its S6s and the bikes shared with it)")
 
 // Session is a logged-in VanMoof account. Its methods renew its tokens as needed, and it's
 // safe to use from several goroutines at once.
@@ -78,8 +79,10 @@ func (s *Session) UserID() (string, error) {
 	return data.Data.UUID, nil
 }
 
-// Bikes returns the account's bikes: its own, then the ones shared with it. If it can't
-// look up the shared ones, it returns its own along with an error wrapping ErrSharedBikes.
+// Bikes returns the account's bikes: those of getCustomerData, then those only the vehicle
+// registry lists, which are its S6s (getCustomerData leaves them out, even the account's
+// own) and the bikes shared with it. If it can't look up the registry, it returns those of
+// getCustomerData along with an error wrapping ErrSharedBikes.
 func (s *Session) Bikes() ([]Bike, error) {
 	data, err := s.customerData()
 	if err != nil {

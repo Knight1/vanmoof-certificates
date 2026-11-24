@@ -131,8 +131,10 @@ func TestRun(t *testing.T) {
 	pub, _, _ := ed25519.GenerateKey(nil)
 	otherPub, _, _ := ed25519.GenerateKey(nil)
 	pubKey, otherKey := base64.StdEncoding.EncodeToString(pub), base64.StdEncoding.EncodeToString(otherPub)
-	s6 := testCertificate(t, "AAAAA000001AA", pub)  // no S6 signing key is known, so it can't be verified
-	sa5 := testCertificate(t, "BBBBBB00001AA", pub) // a random signature isn't VanMoof's
+	// A random signature isn't VanMoof's, so these are never valid, but the other
+	// checks still run and say what they found
+	s6 := testCertificate(t, "AAAAA000001AA", pub)
+	sa5 := testCertificate(t, "BBBBBB00001AA", pub)
 	const email = "user@example.com"
 
 	tests := []struct {
@@ -148,10 +150,10 @@ func TestRun(t *testing.T) {
 		{"nothing saved yet", []string{"-show-saved", "-email", email}, 0, "Nothing saved"},
 
 		// Certificates, checked offline
-		{"S6 certificate", []string{"-cert", s6}, 0, "Certificate valid, but signature not verified"},
-		{"for the key", []string{"-cert", s6, "-pubkey", pubKey}, 0, "pubkey ok"},
-		{"for the frame number", []string{"-cert", s6, "-framenumber", "AAAAA000001AA"}, 0, "Certificate valid"},
-		{"spaces around it", []string{"-cert", " " + s6 + "\n"}, 0, "Certificate valid"},
+		{"S6 certificate with a wrong signature", []string{"-cert", s6}, 1, "Certificate INVALID: 1 error(s)"},
+		{"for the key", []string{"-debug", "-redact", "-cert", s6, "-pubkey", pubKey}, 1, "✓ Success: Public Key matches"},
+		{"for the frame number", []string{"-cert", s6, "-framenumber", "AAAAA000001AA"}, 1, "Certificate INVALID: 1 error(s)"},
+		{"spaces around it", []string{"-cert", " " + s6 + "\n"}, 1, "Certificate INVALID: 1 error(s)"},
 		{"for another key", []string{"-cert", s6, "-pubkey", otherKey}, 1, "Public key mismatch"},
 		{"for another frame number", []string{"-cert", s6, "-framenumber", "AAAAA000002AA"}, 1, "not found in certificate"},
 		{"SA5 certificate with a wrong signature", []string{"-cert", sa5}, 1, "Signature INVALID"},
@@ -243,6 +245,16 @@ func TestRunGenkeyFails(t *testing.T) {
 	defer func() { rand.Reader = random }()
 	if status, out := runTool(t, "-genkey"); status != 1 || !strings.Contains(out, "Error: failed to generate key pair: broken") {
 		t.Errorf("status %d:\n%s", status, out)
+	}
+}
+
+// -cert exits with 0 for a valid certificate and 1 for one that isn't
+func TestCheckStatus(t *testing.T) {
+	if got := checkStatus(true); got != 0 {
+		t.Errorf("checkStatus(true) = %d, want 0", got)
+	}
+	if got := checkStatus(false); got != exitFailure {
+		t.Errorf("checkStatus(false) = %d, want %d", got, exitFailure)
 	}
 }
 

@@ -347,16 +347,12 @@ the TLS certificates of VanMoof's servers (see [TLS Certificate Revocation](#tls
 ```
 
 The certificate's Ed25519 signature is always verified against VanMoof's known
-certificate signing (CA) key. In normal mode this is silent — a mismatch is
-reported as an error, a valid signature prints nothing. Debug mode additionally
-shows the full signature validation detail.
-
-No S6 signing key is known yet, so S6 certificates are reported as
-`Certificate valid, but signature not verified` instead. When requesting
-certificates, the bike's BLE profile tells an S6 apart; offline (`-cert`) only
-the frame number can, and some SA5 frame numbers look like S6 ones. Warnings,
-such as an expiry more than a year away or an unknown role, are listed under
-the result even when the certificate is valid.
+certificate signing (CA) keys, the SA5's and the S6's. In normal mode this is
+silent — a signature neither key verifies is reported as an error on every bike,
+the S6 included, and a valid signature prints nothing. Debug mode additionally
+shows the full signature validation detail. Warnings, such as an expiry more than
+a year away or an unknown role, are listed under the result even when the
+certificate is valid.
 
 
 ### TLS Certificate Revocation
@@ -687,8 +683,8 @@ func main() {
   `vanmoof.ErrSharedBikes`.
 - `CheckCertificate` checks the certificate's signature and expiry, and whatever you
   set in `vanmoof.Expect`: the public key, the bike, and the user (`s.UserID()`). `Valid`
-  is false if a check failed, and `Errors` says why. No S6 signing key is known yet, so
-  for an S6, `SignatureVerified` is false and `Notes` says so.
+  is false if a check failed, the signature included (VanMoof's keys for the SA5 and the
+  S6 are both known), and `Errors` says why.
 - `GenerateCertificate` goes the other way: it signs a certificate with a key of your own,
   for a bike whose firmware you've changed to trust that key rather than VanMoof's (see
   [Generate your own certificate](#generate-your-own-certificate-advanced)). A stock bike

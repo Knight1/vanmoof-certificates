@@ -84,7 +84,8 @@ type CustomerData struct {
 	raw json.RawMessage // the response as received, which the cache keeps
 }
 
-// Vehicle Registry API response types (for shared bikes on S5/S6)
+// Vehicle Registry API response types: the account's S6s (getCustomerData leaves them out)
+// and the bikes shared with it
 type VehicleAccess struct {
 	VehicleID  string `json:"vehicle_id"`
 	Role       string `json:"role"`
@@ -146,15 +147,13 @@ type certResult struct {
 	// Validation
 	errors   []string
 	warnings []string
-	notes    []string // informational only, shown but never makes a certificate invalid
 
 	// Match results
 	matchedBike       *Bike
 	bikeIDVerified    bool
 	pubKeyVerified    bool
 	userIDVerified    bool
-	signatureVerified bool // a known CA key verified the signature (never for S6 yet)
-	perBikeKey        bool // an S6 certificate, whose signing key isn't known yet
+	signatureVerified bool // a known CA key verified the signature
 }
 
 // Expect is what CheckCertificate checks a certificate against. Each field is optional:
@@ -168,12 +167,15 @@ type Expect struct {
 
 // CertificateResult is what CheckCertificate found out about a certificate
 type CertificateResult struct {
-	// Valid reports whether every check passed. For an S6 that can't include the
-	// signature yet, as no S6 signing key is known (see SignatureVerified).
-	Valid    bool
+	Valid    bool     // every check passed, the signature included
 	Errors   []string // why it isn't valid
 	Warnings []string // suspicious, but not invalid, e.g. an expiry far in the future
-	Notes    []string // for information, e.g. why the signature couldn't be verified
+	// Notes is always empty.
+	//
+	// Deprecated: it only ever said that an S6 certificate's signature couldn't be
+	// verified, and now that the S6 signing key is known, a signature that doesn't verify
+	// is in Errors on every bike.
+	Notes []string
 
 	SignatureVerified bool  // a known VanMoof key verified the signature
 	BikeVerified      bool  // it's for Expect.Bike

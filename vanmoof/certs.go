@@ -50,10 +50,7 @@ func checkCertificate(certStr string, expect Expect, debug bool) CertificateResu
 	// Output
 	if debug {
 		printVerbose(r, certData, expect)
-		validateCertificateSignature(r.signature, certData[64:], r.perBikeKey)
-		for _, n := range r.notes {
-			fmt.Printf("  Info: %s\n", printable(n))
-		}
+		validateCertificateSignature(r.signature, certData[64:])
 	} else {
 		printCompact(r)
 	}
@@ -84,19 +81,12 @@ func analyzeCertificate(certStr string, expect Expect) (certResult, []byte, erro
 	verifyPublicKey(&r, expect.PublicKey)
 	verifyUserID(&r, expect.UserID)
 
-	// Verify the certificate signature against known CA keys. A match is silent, a
-	// mismatch is an error, except on S6 where it only means the key isn't known yet.
-	r.perBikeKey = isS6Certificate(r, expect.Bike)
+	// Verify the certificate signature against known CA keys (the SA5's and the S6's). A
+	// match is silent, a mismatch is an error.
 	verified, hasKeys := verifyCertificateSignature(r.signature, certData[64:])
 	r.signatureVerified = verified
 	if hasKeys && !verified {
-		if r.perBikeKey {
-			// No S6 signing key is known yet, so a mismatch against the known CA keys
-			// says nothing about the certificate and is not an error.
-			r.notes = append(r.notes, s6SignatureNote)
-		} else {
-			r.errors = append(r.errors, "Signature INVALID: does not verify against any known VanMoof CA key")
-		}
+		r.errors = append(r.errors, "Signature INVALID: does not verify against any known VanMoof CA key")
 	}
 	return r, certData, nil
 }
@@ -111,7 +101,6 @@ func (r certResult) result(certData []byte) CertificateResult {
 		Valid:             len(r.errors) == 0,
 		Errors:            r.errors,
 		Warnings:          r.warnings,
-		Notes:             r.notes,
 		SignatureVerified: r.signatureVerified,
 		BikeVerified:      r.bikeIDVerified,
 		PublicKeyVerified: r.pubKeyVerified,
@@ -126,22 +115,6 @@ func (r certResult) result(certData []byte) CertificateResult {
 		PublicKey:         r.publicKey,
 		Signature:         certData[:64],
 		Payload:           certData[64:],
-	}
-}
-
-const s6SignatureNote = "Signature verification unavailable: no S6 certificate signing key is known yet"
-
-// isS6Certificate reports whether the certificate belongs to an S6. The BLE profile of
-// the bike it was requested for decides, or else that of the account bike it matches.
-// Without either (offline), the frame number shape decides, which some SA5s share.
-func isS6Certificate(r certResult, requestedBike *Bike) bool {
-	switch {
-	case requestedBike != nil && requestedBike.BleProfile != "":
-		return requestedBike.BleProfile == "ELECTRIFIED_2025"
-	case r.matchedBike != nil && r.matchedBike.BleProfile != "":
-		return r.matchedBike.BleProfile == "ELECTRIFIED_2025"
-	default:
-		return s6FrameNumberRegexp.MatchString(string(r.frameID))
 	}
 }
 
@@ -394,9 +367,6 @@ func printCompact(r certResult) {
 	// Warnings never make a certificate invalid, but are always shown
 	for _, w := range r.warnings {
 		fmt.Printf("  ⚠ %s\n", printable(w))
-	}
-	for _, n := range r.notes {
-		fmt.Printf("  Note: %s\n", printable(n))
 	}
 }
 

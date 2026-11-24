@@ -260,7 +260,13 @@ func run(args []string) int {
 		return 0
 	}
 
-	if !vanmoof.ProcessCertificate(*cert, *pubkey, *frameNumber, *debug) {
+	return checkStatus(vanmoof.ProcessCertificate(*cert, *pubkey, *frameNumber, *debug))
+}
+
+// checkStatus is the exit status of a check that passed (ok) or failed. A test can't
+// pass -cert one that does, as only VanMoof can sign it, so TestCheckStatus covers both.
+func checkStatus(ok bool) int {
+	if !ok {
 		return exitFailure
 	}
 	return 0

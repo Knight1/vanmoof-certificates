@@ -55,7 +55,7 @@ func TestShowKeysWarnsAboutFailedLookups(t *testing.T) {
 	for _, want := range []string{
 		"WARNING: Couldn't check for pending bike sharing invitations: HTTP 500",
 		"bikeMessage: couldn't check (HTTP 500",
-		"WARNING: Couldn't look up the bikes shared with you: HTTP 500",
+		"WARNING: Couldn't look up your bikes in VanMoof's vehicle registry, which lists the S6s and the bikes shared with you: HTTP 500",
 		"Certificate valid: " + leakSA5Frame,
 	} {
 		if !strings.Contains(out, want) {

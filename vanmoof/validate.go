@@ -116,6 +116,9 @@ var knownCAKeys = []string{
 	// BLE certificate signing key recovered from the bike; verifies the
 	// Ed25519 signature embedded in every certificate.
 	"29b1f31c07d1c63b124057ebe75a0bc0796259722e5dd9a9a9302ae2061184a0",
+	// The S6's: the key its module checks a certificate with before it lets the app log
+	// in and unlock.
+	"94eddb03d8898edc0be2a588a45dc5983a7b400ddd3e8140adf09dd1860c7007",
 }
 
 // verifyCertificateSignature reports whether the signature verifies against any
@@ -137,7 +140,7 @@ func verifyCertificateSignature(signature, payload []byte) (verified, hasKeys bo
 }
 
 // validateCertificateSignature prints detailed signature validation (debug mode)
-func validateCertificateSignature(signature, payload []byte, perBikeKey bool) {
+func validateCertificateSignature(signature, payload []byte) {
 	fmt.Println("\n[DEBUG] Signature Validation:")
 
 	if len(knownCAKeys) == 0 {
@@ -165,11 +168,7 @@ func validateCertificateSignature(signature, payload []byte, perBikeKey bool) {
 		}
 	}
 
-	if !validated && len(knownCAKeys) > 0 {
-		if perBikeKey {
-			fmt.Println("  Info: Signature verification unavailable for S6 (no signing key known yet)")
-			return
-		}
+	if !validated {
 		fmt.Println("  ✗ Signature validation failed with all known CA keys")
 	}
 }
